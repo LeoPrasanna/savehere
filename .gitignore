@@ -1,0 +1,50 @@
+# ── Secrets ────────────────────────────────────────────────
+.env
+
+# ── Python ─────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# ── Database (local dev only, never commit) ─────────────────
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Node / Expo ─────────────────────────────────────────────
+mobile/node_modules/
+mobile/.expo/
+mobile/dist/
+mobile/web-build/
+mobile/.env
+
+# ── Expo native build artefacts ─────────────────────────────
+mobile/ios/
+mobile/android/
+
+# ── OS ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Editor ──────────────────────────────────────────────────
+.vscode/
+.idea/
+
+# ── Logs ────────────────────────────────────────────────────
+*.log
+
+# ── yt-dlp temp downloads ───────────────────────────────────
+downloads/
+*.mp4
+*.mp3
+*.wav
+*.webm
