@@ -1,8 +1,48 @@
 import anthropic
 import json
+import re
 from app.config import settings
 
 client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+
+# Only send the most relevant saves to Claude, not the whole library — cuts input
+# tokens ~3-4x per ask vs. dumping 60 items into every prompt.
+RETRIEVE_TOP_N = 15
+
+_STOPWORDS = {
+    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "for", "with",
+    "my", "your", "what", "whats", "how", "did", "do", "does", "is", "are", "was",
+    "were", "i", "me", "we", "about", "that", "this", "these", "those", "it", "its",
+    "there", "have", "has", "had", "save", "saved", "saves", "reel", "reels",
+    "video", "videos", "post", "posts", "any", "some", "all", "from", "by", "at",
+    "as", "be", "can", "you", "show", "find", "get", "give", "tell", "which",
+}
+
+
+def _terms(text: str) -> set[str]:
+    """Lowercase content words (>=3 chars, no stopwords) for overlap scoring."""
+    return {w for w in re.findall(r"[a-z0-9]+", (text or "").lower())
+            if len(w) >= 3 and w not in _STOPWORDS}
+
+
+def _rank_relevant(question: str, reels: list[dict], top_n: int) -> list[dict]:
+    """Return the up-to-`top_n` reels most relevant to the question by term overlap
+    (title/tags weighted 2x). `reels` arrives newest-first; ties and the
+    no-match case fall back to most-recent so general questions still get context."""
+    if len(reels) <= top_n:
+        return reels
+    q = _terms(question)
+    if not q:
+        return reels[:top_n]
+    scored = []
+    for idx, r in enumerate(reels):
+        title_terms = _terms(r.get("title") or "") | _terms(" ".join(r.get("tags") or []))
+        body_terms = _terms(" ".join(r.get("summary") or []) + " " + (r.get("notes") or ""))
+        score = 2 * len(q & title_terms) + len(q & body_terms)
+        scored.append((score, -idx, r))          # tie-break: more recent first
+    scored.sort(key=lambda t: (t[0], t[1]), reverse=True)
+    top = [r for score, _, r in scored if score > 0][:top_n]
+    return top or reels[:top_n]                  # no overlap → recent fallback
 
 ASK_PROMPT = """You are the user's personal librarian for SaveHere, an app where they save short videos and posts that get AI summaries. Answer the user's question using ONLY the saved items listed below.
 
@@ -37,8 +77,9 @@ def ask_library(question: str, reels: list[dict]) -> dict:
             "source_ids": [],
         }
 
+    relevant = _rank_relevant(question, reels, RETRIEVE_TOP_N)
     lines = []
-    for r in reels[:60]:  # cap items for cost + token budget
+    for r in relevant:
         summ = " ".join(r.get("summary") or [])[:400]
         tags = ", ".join(r.get("tags") or [])
         notes = (r.get("notes") or "")[:200]

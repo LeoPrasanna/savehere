@@ -28,6 +28,8 @@ Items are ordered by dependency — complete top sections before bottom ones.
 ## Security & Cost Control
 
 - [~] **Rate limiting** — per-IP sliding-window limits on save/resummarize/ask/tasks/workout (`app/ratelimit.py`). `/api/ask` (the only uncapped AI feature) also has a **per-IP daily cap of 15/day** (`ASK_DAILY_LIMIT`) on top of the 15/min burst guard, to bound worst-case Claude spend. ⚠️ In-memory + per-process (interim): move the store to Redis for multiple instances; replace per-IP with a **per-user daily/monthly AI quota** once auth lands (also the paywall lever — free vs paid limits).
+- [x] **Ask-your-library cost reduction** — `librarian.ask_library` now retrieves only the top-15 most relevant saves (term-overlap scoring, title/tags weighted) instead of dumping up to 60 into every prompt — ~3–4x fewer input tokens per ask. With this, the 15/day cap has lots of headroom and could safely be raised to ~30/day. *(Next-level: embeddings-based retrieval for semantic matches.)*
+- [ ] **Claude cost cap (console)** — ⚠️ set a monthly spending limit in the Anthropic console. The only *hard* ceiling regardless of code, and the one protecting you today with no auth. **User action — not codeable.**
 - [ ] **API key protection** — once auth is added, all API routes should require a valid session token.
 - [ ] **Claude cost cap** — set a monthly spending limit in the Anthropic console dashboard.
 - [x] **Audio download guard** — `download_audio()` now sets `max_filesize=50MB` (+ 15s socket timeout) so it aborts before pulling an oversized file.
