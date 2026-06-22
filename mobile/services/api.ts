@@ -1,6 +1,8 @@
 import { Platform } from 'react-native';
 
-const BASE_URL = 'http://localhost:8000';
+// Local dev defaults to localhost; override for cloud dev (e.g. a Codespace's
+// forwarded backend URL) by setting EXPO_PUBLIC_API_URL before `expo start`.
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
 /**
  * Instagram/Facebook/LinkedIn CDN images block browser hotlinking (CORS), so on
