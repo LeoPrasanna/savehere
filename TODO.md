@@ -89,6 +89,22 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## Pricing & Monetization (launch — App Store Connect config, needs Apple Developer account)
+
+> All of this is **App Store Connect / RevenueCat configuration set at launch**, not app code — except the AI-cap pieces, which need the per-user quota (auth project). Apple owns IAP billing, so discounts must use Apple's native offers, not a custom coupon.
+
+- [ ] **Regional (PPP) pricing** — three storefront buckets, not 175 hand-tuned prices:
+  - **US / high-income:** ~$4.99/mo, ~$34.99/yr (margin lever)
+  - **EU:** ~€5.99/mo, ~€39.99/yr (price up vs US — displayed price is VAT-inclusive, ~20%)
+  - **India + PPP-low countries:** **₹99/mo**, **₹799–₹999/yr** (volume lever)
+- [ ] **India first-purchase promo** — Apple **Introductory Offer** (pay-as-you-go): **₹59/mo for the first 3 months, then ₹99/mo**, India storefront only, auto-renewing. Apple's required pre-renewal notice = the "ask to renew," handled automatically. Optionally also mint a custom **Offer Code `SAVEHEREFIRST`** for marketing/launch buzz (same ₹59×3 deal). ⚠️ Don't make it 3 months *free* (token cost + abuse) and don't use a non-renewing product (worse retention).
+- [ ] **Price ↔ AI-cap pairing rule** — `[Certain]` net revenue per user must stay ≥ their token cost. ₹99 is the lowest price safe at the current 15/day ask cap (even at Apple's 30%). To go lower (₹49–₹79) the India tier needs a **tighter AI cap** (~7–10/day) — requires the per-user, tier-aware quota (auth). Pre-auth the cap is global, so ₹99 is the floor today.
+- [ ] **Tiers** — Free (10-day trial + referrals → view-only, 20-reel, no AI), Monthly, Annual (push annual — lower churn, cash upfront). Lifetime: defer for v1, or only with a hard AI cap.
+- [ ] **RevenueCat** — manage IAP entitlements + per-territory pricing + promo experiments across iOS/Android.
+- [ ] **Apple Small Business Program** — enroll (<$1M/yr) → 15% commission instead of 30%. Materially improves every margin above.
+
+---
+
 ## Nice to Have (post-launch)
 
 - [ ] **Android version** — Expo build for Google Play. Share Intent equivalent for Android.
@@ -99,7 +115,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [ ] **GDPR / data deletion** — "Delete my account and all data" flow, required for EU users.
 - [ ] **Supabase Row Level Security** — enforce per-user data isolation at the database level, not just application level.
 - [ ] **CI/CD pipeline** — GitHub Actions: run Python tests on push, EAS build on merge to main.
-- [~] **Unit tests** — `backend/tests/` (pytest, 23 tests): `normalize_url`, `detect_platform`, `_parse_vtt`, `_weak_title`, `_to_response` duration/null coercion, the per-IP rate limiter, and task source disclaimers. Run with `python -m pytest tests/ -q` from `backend/`. TODO: mock-based test for `summarizer.summarize` + a CI step.
+- [~] **Unit tests** — `backend/tests/` (pytest, 27 tests): `normalize_url`, `detect_platform`, `_parse_vtt`, `_weak_title`, `_to_response` duration/null coercion, the per-IP rate limiter, and task source disclaimers. Run with `python -m pytest tests/ -q` from `backend/`. TODO: mock-based test for `summarizer.summarize` + a CI step.
 
 ---
 
