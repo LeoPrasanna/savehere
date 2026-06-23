@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 
 # Cap how many caption languages we'll try downloading so a video with dozens of
 # auto-translated tracks can't stall extraction.
-_MAX_CAPTION_TRIES = 6
-_CAPTION_TIMEOUT = 8
+_MAX_CAPTION_TRIES = 3
+_CAPTION_TIMEOUT = 5
 
 _BROWSER_HEADERS = {
     "User-Agent": (
@@ -21,6 +21,15 @@ _BROWSER_HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/125.0.0.0 Safari/537.36"
     ),
+    "Accept-Language": "en-US,en;q=0.9",
+}
+
+# Link-preview crawler UA. Instagram/Facebook only serve the public og: caption
+# (the text shown when a link unfurls) to recognized preview bots — a normal browser
+# UA from a server IP gets the login wall instead. This is the ungated "link-preview
+# surface": it works without auth and carries the full caption text.
+_PREVIEW_HEADERS = {
+    "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
     "Accept-Language": "en-US,en;q=0.9",
 }
 
@@ -143,11 +152,22 @@ def _get_captions(info: dict) -> str:
 
 
 def _og(html: str, prop: str) -> str:
-    # DOTALL so multi-line content (e.g. LinkedIn post text with newlines) is captured.
-    m = re.search(rf'<meta[^>]+property=["\']og:{prop}["\'][^>]+content=["\'](.*?)["\']', html, re.IGNORECASE | re.DOTALL)
-    if not m:
-        m = re.search(rf'<meta[^>]+content=["\'](.*?)["\'][^>]+property=["\']og:{prop}["\']', html, re.IGNORECASE | re.DOTALL)
-    return unescape(m.group(1).strip()) if m else ''
+    """Pull an Open Graph value. Scans individual <meta> tags (each naturally
+    bounded by '>') and reads content from the matching one. Avoids the
+    catastrophic regex backtracking the old whole-document DOTALL pattern hit on
+    huge minified pages — Instagram ships ~600 KB of inline script with no clean
+    <head>, which made the old pattern hang for tens of seconds."""
+    target = f"og:{prop}".lower()
+    for m in re.finditer(r'<meta\s[^>]*>', html, re.IGNORECASE):
+        tag = m.group(0)
+        if target not in tag.lower():
+            continue
+        # DOTALL is safe here: it runs on one small <meta> tag, not the whole page —
+        # and it's required because captions (e.g. Instagram recipes) span newlines.
+        cm = re.search(r'content=["\'](.*?)["\']', tag, re.IGNORECASE | re.DOTALL)
+        if cm:
+            return unescape(cm.group(1).strip())
+    return ''
 
 
 def _extract_jsonld(html: str) -> dict:
@@ -168,12 +188,45 @@ def _extract_jsonld(html: str) -> dict:
     return {}
 
 
+# og:/JSON-LD link-preview metadata lives in <head>; cap how much HTML we regex
+# over so a huge page (e.g. YouTube's ~1 MB watch page) can't make the DOTALL
+# patterns crawl for tens of seconds and blow the extraction timeout.
+_MAX_PAGE_PARSE_BYTES = 600_000
+
+
+def _youtube_oembed(url: str) -> dict:
+    """YouTube's public oEmbed endpoint: title / author / thumbnail. It is NOT
+    behind the player-API bot-block, so it still answers from datacenter IPs when
+    full extraction is refused — our free graceful-degradation path for YouTube."""
+    try:
+        resp = httpx.get(
+            "https://www.youtube.com/oembed",
+            params={"url": url, "format": "json"},
+            headers=_BROWSER_HEADERS,
+            timeout=8,
+            follow_redirects=True,
+        )
+        if resp.status_code == 200:
+            d = resp.json()
+            return {
+                "title": (d.get("title") or "").strip(),
+                "uploader": (d.get("author_name") or "").strip(),
+                "image": (d.get("thumbnail_url") or "").strip(),
+            }
+    except Exception:
+        pass
+    return {}
+
+
 def _extract_from_page(url: str) -> dict:
     """Fetch text from a page via JSON-LD (full body) then Open Graph meta tags.
     Best-effort — returns empty fields on failure."""
     try:
-        resp = httpx.get(url, headers=_BROWSER_HEADERS, timeout=15, follow_redirects=True)
-        page = resp.text
+        # Bounded client: a login-walled page (e.g. Instagram) can otherwise send us
+        # down a slow redirect chain and hang the whole save. Cap redirects + timeout.
+        with httpx.Client(follow_redirects=True, max_redirects=3, timeout=8.0, headers=_PREVIEW_HEADERS) as client:
+            resp = client.get(url)
+        page = resp.text[:_MAX_PAGE_PARSE_BYTES]
     except Exception:
         return {}
 
@@ -187,8 +240,15 @@ def _extract_from_page(url: str) -> dict:
         m = re.search(r'<title[^>]*>(.*?)</title>', page, re.IGNORECASE | re.DOTALL)
         title = unescape(m.group(1).strip()) if m else ''
 
+    # og:title can be the entire caption (Instagram dumps the whole recipe in it).
+    # Keep just the first line, capped, so the card title stays short and readable.
+    clean_title = re.sub(r'\s*\|\s*LinkedIn\s*$', '', title).strip()
+    clean_title = clean_title.split('\n', 1)[0].strip()
+    if len(clean_title) > 90:
+        clean_title = clean_title[:90].rsplit(' ', 1)[0] + '…'
+
     return {
-        "title": re.sub(r'\s*\|\s*LinkedIn\s*$', '', title).strip(),
+        "title": clean_title,
         "description": description,
         "image": image,
     }
@@ -289,7 +349,37 @@ def extract_info(url: str) -> dict:
     if last_err:
         logger.error(f"[EXTRACT] all yt-dlp attempts failed for {url}: {type(last_err).__name__}: {last_err}")
 
-    # yt-dlp failed (login-walled, text post, unsupported) — fall back to page meta tags
+    # yt-dlp failed. Graceful degradation depends on the platform:
+    #
+    # YouTube's watch page is huge and gated ("prove you're not a bot" on datacenter
+    # IPs). Don't regex-parse it — use the lightweight public oEmbed endpoint, which
+    # still answers from datacenter IPs and gives a clean title + thumbnail. We lose
+    # the transcript (the gated part), but the save degrades to a real bookmark
+    # instead of timing out or failing.
+    if platform == "youtube":
+        meta = _youtube_oembed(url)
+        title = meta.get("title") or ""
+        thumb = meta.get("image") or ""
+        return {
+            "title": title or "YouTube Short",
+            "caption": "",
+            "transcript": "",
+            "best_text": "",
+            "thumbnail_url": thumb,
+            "duration": 0,
+            "platform": platform,
+            "uploader": meta.get("uploader") or "",
+            "needs_audio": False,
+            # True when even oEmbed gave nothing — i.e. fully blocked / private.
+            "blocked": not (title or thumb),
+            "login_required": not (title or thumb),
+            # Cache the bookmark-grade result so re-saving is instant.
+            "extracted": bool(title or thumb),
+        }
+
+    # Other platforms (LinkedIn full text via JSON-LD, IG/FB og: tags) — fall back to
+    # public page meta tags. This is the ungated "link-preview" surface, so a plain
+    # HTML GET usually succeeds even when video/stream extraction would be blocked.
     meta = _extract_from_page(url)
     title = meta.get("title") or ""
     description = meta.get("description") or ""

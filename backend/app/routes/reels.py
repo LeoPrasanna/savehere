@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import uuid
 import re
@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
-from app.database import get_db, ReelDB, ExtractionCacheDB
+from app.database import get_db, SessionLocal, ReelDB, ExtractionCacheDB
 from app.models.reel import ReelSaveRequest, ReelNotesRequest, ReelCategoryRequest, ReelResponse, ReelListResponse
 from app.services import extractor, transcriber, summarizer
 from app.ratelimit import rate_limit
@@ -24,7 +24,8 @@ ALLOWED_CATEGORIES = {
 # yt-dlp thread can't be killed, so the real protection is keeping extraction
 # fast/bounded (see extractor.py); this just widens the safety margin.
 _executor = ThreadPoolExecutor(max_workers=8)
-EXTRACT_TIMEOUT = 50      # hard ceiling for a single extraction (seconds)
+EXTRACT_TIMEOUT = 20      # hard ceiling for a single extraction (seconds) — keep the
+                          # save snappy; a slower platform degrades to a link-only save.
 CACHE_TTL_DAYS = 14       # re-extract if the cached entry is older than this
 
 # Throttle cache pruning so we don't scan/delete on every save.
@@ -35,7 +36,7 @@ router = APIRouter(prefix="/api/reels", tags=["reels"])
 
 
 @router.post("/save", response_model=ReelResponse, dependencies=[Depends(rate_limit(20, 60, "save"))])
-def save_reel(body: ReelSaveRequest, db: Session = Depends(get_db)):
+def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     _prune_cache_if_due(db)
     canonical_url = extractor.normalize_url(body.url)
 
@@ -83,51 +84,34 @@ def save_reel(body: ReelSaveRequest, db: Session = Depends(get_db)):
             detail=f"This video is {mins} minutes long. SaveHere is for short-form content under 10 minutes (Reels, Shorts, TikToks)."
         )
 
-    text = info["best_text"]
-
-    # fall back to audio transcription only if captions and description both missing
-    if info["needs_audio"]:
-        audio_path = extractor.download_audio(body.url)
-        if audio_path:
-            transcribed = transcriber.transcribe(audio_path)
-            if transcribed:
-                text = transcribed
-
-    # Skip AI entirely if there's nothing meaningful to summarize
-    # (visual-only reels with on-screen text, no speech, no description)
-    if len((text or "").strip()) < 50:
-        logger.warning(f"[SAVE] No extractable text for {canonical_url} — saving without summary")
-        ai = {"summary": [], "tags": [], "category": "other"}
-    else:
-        ai = summarizer.summarize(
-            platform=info["platform"],
-            title=info["title"],
-            text=text,
-        )
-
-    # Use the AI-generated title only when the extracted one is weak (keeps good
-    # YouTube/creator titles intact, fixes LinkedIn "Day352:-" style headlines).
-    final_title = info["title"]
-    if _weak_title(final_title) and ai.get("title"):
-        final_title = ai["title"]
+    # Persist the card immediately — NO AI call on the request path. The summary
+    # (and the slow audio-transcription fallback) run in a background task so the
+    # save returns as soon as metadata is extracted and the card appears instantly.
+    raw_text = (info.get("best_text") or "").strip()
+    should_summarize = len(raw_text) >= 50 or bool(info.get("needs_audio"))
 
     reel = ReelDB(
         id=str(uuid.uuid4()),
         url=canonical_url,
         platform=info["platform"],
-        title=final_title,
+        title=info["title"],
         thumbnail_url=info["thumbnail_url"],
         uploader=info["uploader"],
         duration=info["duration"],
-        summary=ai["summary"],
-        tags=ai["tags"],
-        category=ai["category"],
-        raw_text=text,
+        summary=[],
+        tags=[],
+        category="other",
+        raw_text=raw_text,
+        summary_status="pending" if should_summarize else "skipped",
         created_at=datetime.utcnow(),
     )
     db.add(reel)
     db.commit()
     db.refresh(reel)
+
+    if should_summarize:
+        background_tasks.add_task(_summarize_reel, reel.id)
+
     return _to_response(reel)
 
 
@@ -203,6 +187,22 @@ def resummarize_reel(reel_id: str, db: Session = Depends(get_db)):
     reel.summarize_count = (reel.summarize_count or 0) + 1
     db.commit()
     db.refresh(reel)
+    return _to_response(reel)
+
+
+@router.post("/{reel_id}/summarize", response_model=ReelResponse, dependencies=[Depends(rate_limit(10, 60, "summarize"))])
+def summarize_now(reel_id: str, db: Session = Depends(get_db)):
+    """Run (or retry) the background summary synchronously for one reel. Used by the
+    detail screen to retry a 'failed'/'pending' summary or to summarize on demand.
+    A reel already summarized is returned untouched (use resummarize to redo it)."""
+    reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
+    if not reel:
+        raise HTTPException(status_code=404, detail="Reel not found")
+    if reel.summary_status == "ready" and reel.summary:
+        return _to_response(reel)
+
+    _summarize_reel(reel.id)        # own session; commits the result
+    db.refresh(reel)                # pull the freshly-committed row into this session
     return _to_response(reel)
 
 
@@ -343,9 +343,67 @@ def _to_response(reel: ReelDB) -> ReelResponse:
         summary=reel.summary or [],
         tags=reel.tags or [],
         category=reel.category,
+        summary_status=getattr(reel, "summary_status", None) or "ready",
         notes=reel.notes,
         summarize_count=reel.summarize_count or 0,
         tasks_count=reel.tasks_count or 0,
         workout_count=reel.workout_count or 0,
         created_at=reel.created_at,
     )
+
+
+def _summarize_reel(reel_id: str) -> None:
+    """Background worker: turn a saved reel's raw_text (or audio) into a summary,
+    tags and category. Runs off the request path so saving feels instant. Opens
+    its own DB session (the request's session is already closed). Fail-safe: any
+    error leaves the reel in 'failed' so the UI can offer a retry."""
+    db = SessionLocal()
+    try:
+        reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
+        if not reel:
+            return
+
+        text = (reel.raw_text or "").strip()
+
+        # Audio transcription fallback — the slow path, now off the request.
+        if len(text) < 50:
+            try:
+                audio_path = extractor.download_audio(reel.url)
+                if audio_path:
+                    transcribed = (transcriber.transcribe(audio_path) or "").strip()
+                    if transcribed:
+                        text = transcribed
+                        reel.raw_text = text
+            except Exception as e:
+                logger.warning(f"[SUMMARIZE] audio fallback failed for {reel_id}: {e}")
+
+        if len(text) < 50:
+            reel.summary, reel.tags = [], []
+            reel.summary_status = "skipped"
+            db.commit()
+            logger.info(f"[SUMMARIZE] {reel_id} skipped — no extractable text")
+            return
+
+        ai = summarizer.summarize(platform=reel.platform, title=reel.title or "", text=text)
+        reel.summary = ai["summary"]
+        reel.tags = ai["tags"]
+        if ai.get("category"):
+            reel.category = ai["category"]
+        # Replace a weak extracted title with the AI one (LinkedIn "Day352:-" etc.).
+        if _weak_title(reel.title) and ai.get("title"):
+            reel.title = ai["title"]
+        reel.summary_status = "ready" if ai["summary"] else "skipped"
+        db.commit()
+        logger.info(f"[SUMMARIZE] {reel_id} done — status={reel.summary_status}")
+    except Exception as e:
+        logger.error(f"[SUMMARIZE] failed for {reel_id}: {type(e).__name__}: {e}")
+        try:
+            db.rollback()
+            reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
+            if reel:
+                reel.summary_status = "failed"
+                db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()

@@ -42,6 +42,11 @@ SUMMARY RULES — read carefully:
   · Vague summaries like "celebrity maintains fitness through diet" — say WHAT the diet is
 - After writing your bullets, review each one. Delete any bullet that would make sense on ANY video about this topic — it must be specific to THIS content.
 
+UNITS RULE — make measurements universal (US + metric):
+- Whenever a bullet states a measurement (temperature, weight, volume, length/size), show BOTH units: keep the one from the content, then add the equivalent in parentheses — e.g. "375°F (190°C)", "1 lb (450 g)", "1 cup (240 ml)", "9 in (23 cm)".
+- Round to clean numbers (190°C, not 190.56°C). Convert REAL measurements only — never times (min/hr), counts, ratios, money or percentages.
+- This is faithful (same quantity, other unit), not invention — never change the original amount.
+
 LOW CONTENT RULE:
 - If the text is only hashtags, a title, or generic phrases with no real information, set "low_content": true and return "summary": [].
 - Do NOT invent or guess specific facts that are not present in the text.

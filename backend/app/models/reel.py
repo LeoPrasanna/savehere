@@ -26,6 +26,8 @@ class ReelResponse(BaseModel):
     summary: list[str]
     tags: list[str]
     category: Optional[str]
+    # pending | ready | skipped | failed — drives the "Summarizing…" UI state.
+    summary_status: str = "ready"
     notes: Optional[str]
     summarize_count: int
     tasks_count: int = 0
