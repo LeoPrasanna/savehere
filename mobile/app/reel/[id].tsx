@@ -243,24 +243,29 @@ export default function ReelDetailScreen() {
             <Icon name="sparkles" size={15} color={colors.accent} />
             <Text style={styles.cardTitle}>Summary</Text>
           </View>
-          <Pressable
-            style={[styles.pill, (limitReached || isSummarizing) && styles.pillDisabled]}
-            onPress={handleResummarize}
-            disabled={limitReached || resummarizing || isSummarizing}
-          >
-            {resummarizing ? (
-              <ActivityIndicator size="small" color={colors.accent} />
-            ) : (
-              <Ionicons
-                name={limitReached ? 'lock-closed' : 'refresh'}
-                size={13}
-                color={limitReached ? colors.textTertiary : colors.accent}
-              />
-            )}
-            <Text style={[styles.pillText, limitReached && styles.pillTextDisabled]}>
-              {resummarizing ? 'Re-summarizing…' : limitReached ? 'Limit reached' : `Re-summarize (${RESUMMARIZE_LIMIT - reel.summarize_count} left)`}
-            </Text>
-          </Pressable>
+          {/* Only offer Re-summarize when there's no summary yet — once it's
+              generated, the header stays clean (it can still be regenerated only
+              when empty, e.g. after pasting the post text into Notes). */}
+          {reel.summary.length === 0 && !isSummarizing && (
+            <Pressable
+              style={[styles.pill, limitReached && styles.pillDisabled]}
+              onPress={handleResummarize}
+              disabled={limitReached || resummarizing}
+            >
+              {resummarizing ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <Ionicons
+                  name={limitReached ? 'lock-closed' : 'refresh'}
+                  size={13}
+                  color={limitReached ? colors.textTertiary : colors.accent}
+                />
+              )}
+              <Text style={[styles.pillText, limitReached && styles.pillTextDisabled]}>
+                {resummarizing ? 'Re-summarizing…' : limitReached ? 'Limit reached' : `Re-summarize (${RESUMMARIZE_LIMIT - reel.summarize_count} left)`}
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         {isSummarizing ? (
