@@ -26,6 +26,9 @@ class ReelDB(Base):
     summary = Column(JSON, nullable=True)
     tags = Column(JSON, nullable=True)
     category = Column(String, nullable=True)
+    # pending = card saved, AI summary running in background; ready = summarized;
+    # skipped = nothing readable to summarize; failed = summary errored (retryable).
+    summary_status = Column(String, nullable=False, default="ready")
     raw_text = Column(Text, nullable=True)
     notes = Column(Text, nullable=True)
     summarize_count = Column(Integer, nullable=False, default=0)
@@ -106,6 +109,7 @@ def create_tables():
             "ALTER TABLE reels ADD COLUMN summarize_count INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE reels ADD COLUMN tasks_count INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE reels ADD COLUMN workout_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE reels ADD COLUMN summary_status TEXT NOT NULL DEFAULT 'ready'",
             "ALTER TABLE tasks ADD COLUMN kind TEXT DEFAULT 'task'",
             "ALTER TABLE tasks ADD COLUMN source TEXT DEFAULT 'content'",
         ]:

@@ -27,6 +27,9 @@ export interface Reel {
   summary: string[];
   tags: string[];
   category: string | null;
+  // pending = summary generating in background; ready = done; skipped = nothing
+  // readable; failed = errored (retryable). Drives the "Summarizing…" UI.
+  summary_status?: 'pending' | 'ready' | 'skipped' | 'failed';
   notes: string | null;
   summarize_count: number;
   tasks_count: number;
@@ -129,6 +132,10 @@ export const api = {
 
   resummarize: (id: string) =>
     request<Reel>(`/api/reels/${id}/resummarize`, { method: 'POST' }),
+
+  // Run/retry the first summary (for a reel still pending or failed).
+  summarizeReel: (id: string) =>
+    request<Reel>(`/api/reels/${id}/summarize`, { method: 'POST' }),
 
   updateNotes: (id: string, notes: string) =>
     request<Reel>(`/api/reels/${id}/notes`, {

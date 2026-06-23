@@ -76,8 +76,23 @@ mobile/    Expo SDK 56 + expo-router + React Native (dev on web).
 - Recommended **Supabase** (auth + Postgres in one; $0 free tier through early launch, ~$25/mo Pro for always-on at launch). Clerk is the runner-up (better auth DX, but auth-only → second vendor).
 - Plan: `users` table, `user_id` FK on reels/tasks/workouts, JWT-verify dependency, per-user query filtering + ownership checks, per-user AI quota (replaces interim per-IP cap). Keep SQLite for local dev, Postgres for prod.
 
+### Extraction & bot-detection (datacenter IP) — the prod risk
+- **Symptom (2026-06-23):** saving a YouTube Short from the Codespace fails with `[youtube] …: Sign in to confirm you're not a bot`. yt-dlp is current (2026.06.09) — **not** staleness. `[Certain]`
+- **Root cause:** YouTube (and IG/TikTok) bot-block requests from **datacenter IP ranges**. Codespaces, **Railway, Render, Fly.io all run on datacenter IPs**, so deploying does NOT fix this — usually **worse** (those ranges are more abused/flagged than GitHub's). It's about **IP reputation + missing PO token/cookies**, not dev-vs-prod. `[Likely]`
+- **Decision — layered "extraction gateway", fragile bits isolated behind one swappable `ExtractorProvider`, with graceful degradation:**
+  1. **Cache** (exists) — never re-hit the platform.
+  2. **Client-side metadata** — app/share-ext grabs oEmbed + OpenGraph (title/desc/thumb) from the *user's* residential/mobile IP. Free, clean distributed IPs, enough for many summaries. No transcript.
+  3. **Server yt-dlp behind a residential/mobile proxy** (+ cookies + PO-token plugin), ONLY when a transcript is wanted. Proxy/vendor swappable via env. **The real prod fix.**
+  4. **Managed-API fallback** — Apify (we already carry `APIFY_API_KEY`), a transcript API, or YouTube Data API v3 (metadata only) — when self-host extraction fails.
+  5. **Async + link-only-now / backfill-later** — never block the request on this path; retry off the request path.
+- **Cost:** residential proxies are usage-priced (permanent line item; `[Guessing]` ~$tens/mo early) — fold into the per-user economics rule.
+- **Bug found same day:** when yt-dlp is blocked, `_extract_from_page`'s DOTALL regex over YouTube's ~1 MB HTML effectively hangs to the 50s `EXTRACT_TIMEOUT` instead of failing fast. Skip/bound the page-parse for YouTube + degrade gracefully. Violates quality-bar #1.
+- **Key win (2026-06-23): the ungated link-preview surface needs a crawler UA.** Instagram/Facebook serve the public `og:` caption (the text that unfurls in iMessage/Slack) **only to recognized preview bots** — a normal browser UA from a server IP gets the login wall. Fetching `_extract_from_page` with UA `facebookexternalhit/1.1` returns the **full caption** (e.g. a whole recipe) even from a datacenter IP, no auth/proxy. So IG/FB **captions are readable** for free; only the video/transcript stays gated. yt-dlp still fails on IG (that's the player API) — the caption comes from the page meta. Implemented in `extractor._PREVIEW_HEADERS`. (Two parser bugs fixed alongside: `_og` catastrophic backtracking on 600 KB minified HTML → scan per-`<meta>`; and missing `DOTALL` dropped multi-line captions.)
+- **Async save (2026-06-23):** `/save` now persists the card with `summary_status='pending'` and returns in ~2 s; a FastAPI BackgroundTask runs Claude (and the slow audio fallback) off the request path, flipping to `ready`/`skipped`/`failed`. Detail screen polls; `/api/reels/{id}/summarize` retries. `EXTRACT_TIMEOUT` cut 50→20 s. **Run uvicorn WITHOUT `--reload`** — the reloader's child process dodges `pkill -f uvicorn`, leaving a zombie holding port 8000 (the recurring "Can't reach the server").
+
 ## 5. Known gotchas / constraints
 - **Windows dev**; line endings show LF→CRLF warnings (harmless).
+- **YouTube/IG bot-block on datacenter IPs** — extraction fails from the Codespace **and will fail on Railway/Render/Fly** (all datacenter IPs). Needs a residential proxy / managed API in prod — see §4 "Extraction & bot-detection". Biggest prod reliability risk for the core feature.
 - Rate limiter is **in-memory + per-process** — fine for one instance; needs Redis for multiple.
 - DB is **SQLite** (single file) — not for multi-user prod; migrate to Postgres with auth.
 - Mobile dev is on **web**; native device testing needs EAS/Mac (deferred).

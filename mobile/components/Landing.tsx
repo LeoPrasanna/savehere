@@ -8,6 +8,7 @@ import { api, Reel } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { AuroraBackground } from './AuroraBackground';
+import { ProfilePanel } from './ProfilePanel';
 import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
 import { FEATURES, Feature } from '../constants/features';
 
@@ -15,7 +16,8 @@ import { FEATURES, Feature } from '../constants/features';
 const USER_NAME = 'Prasanna';
 const TIER = 'Free';
 // Surface "Ask your library" prominently once there's enough saved to answer from.
-const ASK_MIN_REELS = 10;
+// Low bar: retrieval works on whatever's saved, and hiding it hurts discoverability.
+const ASK_MIN_REELS = 3;
 
 export function Landing({ onEnter }: { onEnter: () => void }) {
   const router = useRouter();
@@ -23,6 +25,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Feature | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     api.listReels().then(d => setReels(d.items)).catch(() => {}).finally(() => setLoading(false));
@@ -31,6 +34,8 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const total = reels.length;
   const categories = new Set(reels.map(r => r.category).filter(Boolean)).size;
   const platforms = new Set(reels.map(r => r.platform).filter(Boolean)).size;
+  // When the Ask card is shown here, drop it from the menu so it isn't duplicated.
+  const askCardVisible = !loading && total >= ASK_MIN_REELS;
 
   return (
     <View style={styles.screen}>
@@ -39,9 +44,14 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.lg }]}
         showsVerticalScrollIndicator={false}
       >
-        <MotiView from={{ opacity: 0, translateY: -10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 450 }}>
-          <Text style={styles.hi}>Hi, {USER_NAME} 👋</Text>
-          <Text style={styles.welcome}>Welcome to SaveHere</Text>
+        <MotiView from={{ opacity: 0, translateY: -10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 450 }} style={styles.headerRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.hi}>Hi, {USER_NAME} 👋</Text>
+            <Text style={styles.welcome}>Welcome to SaveHere</Text>
+          </View>
+          <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)} scaleTo={0.9}>
+            <Icon name="menu" size={22} color={colors.textPrimary} />
+          </Pressable>
         </MotiView>
 
         <View style={styles.tierCard}>
@@ -81,7 +91,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         </MotiView>
 
         {/* Highlighted once the library is big enough to answer from — not buried in the menu */}
-        {!loading && total >= ASK_MIN_REELS && (
+        {askCardVisible && (
           <MotiView from={{ opacity: 0, translateY: 12 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', delay: 220, duration: 450 }} style={styles.askWrap}>
             <Pressable onPress={() => router.push('/ask')} scaleTo={0.97}>
               <LinearGradient colors={gradients.cool} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.askCard}>
@@ -97,6 +107,14 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
             </Pressable>
           </MotiView>
         )}
+
+        {/* Primary entry into the real library (☰ menu + grid) — right under Ask */}
+        <Pressable style={styles.ctaWrap} onPress={onEnter} scaleTo={0.97}>
+          <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cta}>
+            <Icon name="bookmark" size={18} color="#FFF" />
+            <Text style={styles.ctaText}>Open my library</Text>
+          </LinearGradient>
+        </Pressable>
 
         <View style={styles.upsell}>
           <Icon name="sparkles" size={16} color={colors.accentLight} />
@@ -119,13 +137,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
             </Pressable>
           ))}
         </View>
-
-        <Pressable style={styles.ctaWrap} onPress={onEnter} scaleTo={0.97}>
-          <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cta}>
-            <Icon name="bookmark" size={18} color="#FFF" />
-            <Text style={styles.ctaText}>Open my library</Text>
-          </LinearGradient>
-        </Pressable>
 
         <View style={{ flex: 1, minHeight: spacing.lg }} />
 
@@ -160,6 +171,13 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           )}
         </Pressable>
       </Modal>
+
+      <ProfilePanel
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        reels={reels}
+        showAsk={!askCardVisible}
+      />
     </View>
   );
 }
@@ -168,6 +186,12 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { flexGrow: 1, paddingHorizontal: spacing.lg, gap: spacing.lg },
 
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
+  menuBtn: {
+    width: 44, height: 44, borderRadius: radius.full,
+    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
   hi: { color: colors.textPrimary, fontSize: font.display, fontWeight: '900', letterSpacing: -1 },
   welcome: { color: colors.textSecondary, fontSize: font.lg, fontWeight: '600', marginTop: spacing.xs },
 

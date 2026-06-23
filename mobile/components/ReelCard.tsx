@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { View, Text, Image, StyleSheet, Platform, Animated, Easing } from 'react-native';
+import { View, Text, Image, StyleSheet, Platform, Animated, Easing, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -52,6 +52,7 @@ export function ReelCard({ reel, index = 0, onDelete }: ReelCardProps) {
   const platform = platformMeta[reel.platform] ?? platformMeta.unknown;
   const cat = categoryFor(reel.category);
   const firstBullet = reel.summary[0] ?? '';
+  const isPending = reel.summary_status === 'pending';
 
   return (
     <Animated.View style={[styles.wrap, {
@@ -91,11 +92,16 @@ export function ReelCard({ reel, index = 0, onDelete }: ReelCardProps) {
             {reel.title || 'Untitled'}
           </Text>
 
-          {firstBullet.length > 0 && (
+          {isPending ? (
+            <View style={styles.summarizingRow}>
+              <ActivityIndicator size="small" color={colors.accent} />
+              <Text style={styles.summarizingText}>Summarizing…</Text>
+            </View>
+          ) : firstBullet.length > 0 ? (
             <Text style={styles.bullet} numberOfLines={3}>
               {firstBullet.length > 130 ? firstBullet.slice(0, 130) + '…' : firstBullet}
             </Text>
-          )}
+          ) : null}
 
           {reel.tags.length > 0 && (
             <View style={styles.tags}>
@@ -174,6 +180,8 @@ const styles = StyleSheet.create({
   },
   title: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '700', lineHeight: 18 },
   bullet: { color: colors.textSecondary, fontSize: 11, lineHeight: 16 },
+  summarizingRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  summarizingText: { color: colors.accent, fontSize: 11, fontWeight: '600' },
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 2 },
   tag: {
     backgroundColor: colors.tagBg,

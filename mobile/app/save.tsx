@@ -14,14 +14,12 @@ import { BorderBeam } from '../components/BorderBeam';
 import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
 
 const STEPS = [
-  { icon: 'link', text: 'Checking URL & fetching video info…' },
-  { icon: 'document-text', text: 'Extracting captions & transcript…' },
-  { icon: 'sparkles', text: 'Generating AI summary with Claude…' },
-  { icon: 'hourglass', text: 'Taking a bit longer than usual…' },
-  { icon: 'time', text: 'Almost done, hang tight…' },
+  { icon: 'link', text: 'Checking the link…' },
+  { icon: 'cloud-download', text: 'Fetching title & thumbnail…' },
+  { icon: 'sparkles', text: 'Creating your card…' },
 ] as const;
 
-const STEP_DELAYS = [0, 4000, 11000, 22000, 38000];
+const STEP_DELAYS = [0, 1500, 4000];
 const N = STEPS.length;
 const NODE = 30;   // station diameter
 const BOT = 44;    // bot box size
@@ -31,7 +29,7 @@ const SAVE_NOTES = [
   'Public Reels, Shorts, TikToks & LinkedIn posts work best.',
   'Private or login-only content (and most Facebook reels) can’t be read — you can still save the link and add your own notes.',
   'Summaries are AI-made, so a small detail might slip — easy to edit anytime.',
-  'Your first save takes a few seconds while we fetch and summarize.',
+  'Your card appears in seconds — the AI summary finishes on its own right after.',
 ];
 
 function parseError(e: any): string {

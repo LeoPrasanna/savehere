@@ -14,9 +14,12 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   reels: Reel[];
+  // Hide the "Ask your library" row when the host screen already surfaces it
+  // (the Landing shows it as a card) so the entry point isn't duplicated.
+  showAsk?: boolean;
 }
 
-export function ProfilePanel({ visible, onClose, reels }: Props) {
+export function ProfilePanel({ visible, onClose, reels, showAsk = true }: Props) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -104,7 +107,7 @@ export function ProfilePanel({ visible, onClose, reels }: Props) {
             {/* Explore (working) */}
             <Text style={styles.sectionLabel}>EXPLORE</Text>
             <View style={styles.menu}>
-              <NavRow icon="ask" label="Ask your library" path="/ask" />
+              {showAsk && <NavRow icon="ask" label="Ask your library" path="/ask" />}
               <NavRow icon="rediscover" label="Rediscover saves" path="/rediscover" />
               <NavRow icon="sparkles" label="What you can do" path="/help" />
             </View>

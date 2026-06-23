@@ -23,6 +23,7 @@ export default function ReelDetailScreen() {
   const [notes, setNotes] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [resummarizing, setResummarizing] = useState(false);
+  const [summarizing, setSummarizing] = useState(false);
   const [taskList, setTaskList] = useState<TaskListResponse | null>(null);
   const [generatingTasks, setGeneratingTasks] = useState(false);
   const [hasWorkout, setHasWorkout] = useState(false);
@@ -43,6 +44,21 @@ export default function ReelDetailScreen() {
     api.getTasks(id).then(setTaskList).catch(() => {});
     api.getWorkout(id).then((plan) => setHasWorkout(plan.exercises.length > 0)).catch(() => {});
   }, [id]);
+
+  // The summary is generated in the background after save, so poll until it lands.
+  useEffect(() => {
+    if (reel?.summary_status !== 'pending') return;
+    let tries = 0;
+    const timer = setInterval(async () => {
+      tries++;
+      try {
+        const fresh = await api.getReel(id);
+        if (fresh.summary_status !== 'pending') { setReel(fresh); clearInterval(timer); }
+      } catch {}
+      if (tries >= 24) clearInterval(timer);   // ~60s safety cap
+    }, 2500);
+    return () => clearInterval(timer);
+  }, [reel?.summary_status, id]);
 
   const notify = (msg: string) => {
     if (Platform.OS === 'web') window.alert(msg);
@@ -68,6 +84,21 @@ export default function ReelDetailScreen() {
       notify(msg);
     } finally {
       setResummarizing(false);
+    }
+  };
+
+  // Run/retry the first summary (pending stuck or failed).
+  const handleSummarizeNow = async () => {
+    setSummarizing(true);
+    try {
+      const updated = await api.summarizeReel(id);
+      setReel(updated);
+    } catch (e: any) {
+      let msg = 'Summarize failed.';
+      try { msg = JSON.parse(e.message)?.detail ?? e.message; } catch {}
+      notify(msg);
+    } finally {
+      setSummarizing(false);
     }
   };
 
@@ -154,6 +185,7 @@ export default function ReelDetailScreen() {
   const platform = platformMeta[reel.platform] ?? platformMeta.unknown;
   const cat = categoryFor(reel.category);
   const limitReached = reel.summarize_count >= RESUMMARIZE_LIMIT;
+  const isSummarizing = reel.summary_status === 'pending' || summarizing;
   const isCooking = (reel.category || '').toLowerCase() === 'cooking';
   const loginWalled = reel.platform === 'linkedin' || reel.platform === 'facebook';
   const TASKS_LIMIT = 1;   // tasks/steps are AI-generated once; then edited by hand
@@ -211,27 +243,55 @@ export default function ReelDetailScreen() {
             <Icon name="sparkles" size={15} color={colors.accent} />
             <Text style={styles.cardTitle}>Summary</Text>
           </View>
-          <Pressable
-            style={[styles.pill, limitReached && styles.pillDisabled]}
-            onPress={handleResummarize}
-            disabled={limitReached || resummarizing}
-          >
-            {resummarizing ? (
-              <ActivityIndicator size="small" color={colors.accent} />
-            ) : (
-              <Ionicons
-                name={limitReached ? 'lock-closed' : 'refresh'}
-                size={13}
-                color={limitReached ? colors.textTertiary : colors.accent}
-              />
-            )}
-            <Text style={[styles.pillText, limitReached && styles.pillTextDisabled]}>
-              {resummarizing ? 'Re-summarizing…' : limitReached ? 'Limit reached' : `Re-summarize (${RESUMMARIZE_LIMIT - reel.summarize_count} left)`}
-            </Text>
-          </Pressable>
+          {/* Only offer Re-summarize when there's no summary yet — once it's
+              generated, the header stays clean (it can still be regenerated only
+              when empty, e.g. after pasting the post text into Notes). */}
+          {reel.summary.length === 0 && !isSummarizing && (
+            <Pressable
+              style={[styles.pill, limitReached && styles.pillDisabled]}
+              onPress={handleResummarize}
+              disabled={limitReached || resummarizing}
+            >
+              {resummarizing ? (
+                <ActivityIndicator size="small" color={colors.accent} />
+              ) : (
+                <Ionicons
+                  name={limitReached ? 'lock-closed' : 'refresh'}
+                  size={13}
+                  color={limitReached ? colors.textTertiary : colors.accent}
+                />
+              )}
+              <Text style={[styles.pillText, limitReached && styles.pillTextDisabled]}>
+                {resummarizing ? 'Re-summarizing…' : limitReached ? 'Limit reached' : `Re-summarize (${RESUMMARIZE_LIMIT - reel.summarize_count} left)`}
+              </Text>
+            </Pressable>
+          )}
         </View>
 
-        {reel.summary.length === 0 ? (
+        {isSummarizing ? (
+          <View style={styles.emptySummary}>
+            <ActivityIndicator color={colors.accent} style={{ marginBottom: spacing.xs }} />
+            <Text style={styles.emptyTitle}>Summarizing…</Text>
+            <Text style={styles.emptyHint}>Reading the content and writing your summary. This card is already saved — feel free to leave; it'll be ready when you come back.</Text>
+          </View>
+        ) : reel.summary.length > 0 ? (
+          reel.summary.map((point, i) => (
+            <View key={i} style={styles.bulletRow}>
+              <View style={styles.bulletDot} />
+              <Text style={styles.bulletText}>{point}</Text>
+            </View>
+          ))
+        ) : reel.summary_status === 'failed' ? (
+          <View style={styles.emptySummary}>
+            <Icon name="alert-circle" size={28} color={colors.danger} style={{ marginBottom: spacing.xs }} />
+            <Text style={styles.emptyTitle}>Summary didn't finish</Text>
+            <Text style={styles.emptyHint}>Something interrupted the AI summary. Your card is saved — tap to try again.</Text>
+            <Pressable style={[styles.pill, { marginTop: spacing.sm }]} onPress={handleSummarizeNow}>
+              <Ionicons name="refresh" size={13} color={colors.accent} />
+              <Text style={styles.pillText}>Try again</Text>
+            </Pressable>
+          </View>
+        ) : (
           <View style={styles.emptySummary}>
             <Icon name={loginWalled ? 'lock' : 'eye'} size={28} color={colors.textSecondary} style={{ marginBottom: spacing.xs }} />
             <Text style={styles.emptyTitle}>
@@ -245,13 +305,6 @@ export default function ReelDetailScreen() {
                 : 'This reel uses on-screen text or visuals with no speech or description — we can\'t extract that yet. Paste the text in Notes and tap Re-summarize.'}
             </Text>
           </View>
-        ) : (
-          reel.summary.map((point, i) => (
-            <View key={i} style={styles.bulletRow}>
-              <View style={styles.bulletDot} />
-              <Text style={styles.bulletText}>{point}</Text>
-            </View>
-          ))
         )}
       </View>
 

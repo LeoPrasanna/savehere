@@ -70,6 +70,7 @@ RULES:
 - TASKS: 3-8 high-level action items.
 - Every item starts with an action verb and is SPECIFIC to THIS content, not generic.
 - Be FAITHFUL to the content — use only what's stated; never invent specifics (numbers, settings, names).
+- UNITS: when a step states a measurement (temperature, weight, volume, length/size), show BOTH units — keep the one stated, add the equivalent in parentheses, e.g. "375°F (190°C)", "9 in (23 cm)". Round cleanly. Convert real measurements only — never times, counts, ratios, money or %. Same quantity, other unit — never change the original amount.
 - estimated_minutes: honest time estimate (5-120 minutes).
 - If nothing actionable can be extracted, return {{"kind": "tasks", "tasks": []}}
 - Respond ONLY with the JSON object"""
@@ -95,6 +96,7 @@ EMOJI per step: 🛒 gather  🔪 prep/chop  🥣 mix/combine  🔥 cook/heat  �
 
 RULES:
 - Be FAITHFUL to the content. Use only ingredients, quantities, times and temperatures stated in the text. NEVER invent specifics — a wrong amount or temperature ruins the dish.
+- UNITS: show every measurement in BOTH units — keep the one stated, add the equivalent in parentheses: temperatures "375°F (190°C)", weights "1 lb (450 g)" / "8 oz (225 g)", volumes "1 cup (240 ml)" / "2 tbsp (30 ml)" / "1 tsp (5 ml)", sizes "9 in (23 cm)". Round cleanly. Do NOT convert times or servings. Same quantity in another unit — never change the original amount.
 - If the video is vague, keep steps at the level of detail actually described. Fewer accurate steps beat many fabricated ones.
 - Each step = ONE action, one concise sentence, starting with a verb (Dice, Heat, Add, Stir, Simmer, Flip, Season, Plate...).
 - 4 to 15 steps depending on recipe complexity.
@@ -124,6 +126,7 @@ RULES:
 - These are GENERAL steps for a common version of the dish (we could not read the actual video) — keep them standard and reasonable, not invented exotic specifics.
 - FIRST step gathers the typical ingredients with reasonable common quantities.
 - THEN ordered prep -> cook -> finish steps. 5 to 15 steps, each one verb-first sentence.
+- UNITS: show every measurement in BOTH units — e.g. "375°F (190°C)", "1 cup (240 ml)", "1 lb (450 g)". Round cleanly; don't convert times or servings.
 - If you are not confident which dish it is, return needs_input:true with empty tasks. Do NOT guess a random unrelated dish.
 - Respond ONLY with the JSON object"""
 
