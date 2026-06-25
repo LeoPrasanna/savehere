@@ -8,7 +8,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 ## Blockers (app does not work on a real phone without these)
 
 - [ ] **iOS Share Extension** — allows sharing URLs directly from Instagram/YouTube/TikTok into SaveHere. Requires Mac + Xcode + `expo-share-extension`. This is the core feature.
-- [ ] **Deploy backend** — move off `localhost:8000` to Railway, Render, or Fly.io so real devices can reach the API.
+- [~] **Deploy backend** — move off `localhost:8000` to Railway, Render, or Fly.io so real devices can reach the API. **Repo is deploy-ready** (`render.yaml`, env-driven CORS/DATABASE_URL, `$PORT` start, `/health` check) — see [`docs/DEPLOY.md`](docs/DEPLOY.md). Remaining = owner action: connect repo on Render, set `ANTHROPIC_API_KEY`, deploy. Caveats in DEPLOY.md (free-tier cold starts; ephemeral SQLite → Postgres w/ auth; datacenter-IP extraction still needs a proxy).
 - [ ] **Switch API URL in mobile** — `mobile/services/api.ts` `BASE_URL` must point to the deployed backend, not localhost.
 - [ ] **User authentication** — currently all saves share one global database. Every user must have their own data. Use Supabase Auth (email, Google, Apple Sign-In).
 - [ ] **Apple Developer account** — $99/year, required to test on real iPhone and submit to App Store.

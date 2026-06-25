@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, Image, ScrollView, StyleSheet,
   ActivityIndicator, Alert, Platform, TextInput, Linking, Modal,
@@ -20,6 +20,7 @@ export default function ReelDetailScreen() {
   const navigation = useNavigation();
   const [reel, setReel] = useState<Reel | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [notes, setNotes] = useState('');
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [resummarizing, setResummarizing] = useState(false);
@@ -34,13 +35,20 @@ export default function ReelDetailScreen() {
 
   const RESUMMARIZE_LIMIT = 3;
 
-  useEffect(() => {
-    api.getReel(id).then(data => {
-      setReel(data);
-      setNotes(data.notes ?? '');
-      navigation.setOptions({ title: '' });
-    }).finally(() => setLoading(false));
+  // Load the reel; any failure (offline, server down) is caught and shown as a
+  // retryable message instead of bubbling up as an uncaught "Failed to fetch".
+  const loadReel = useCallback(() => {
+    setLoading(true);
+    setError('');
+    api.getReel(id)
+      .then(data => { setReel(data); setNotes(data.notes ?? ''); })
+      .catch(() => setError("Couldn't load this reel. Check your connection or that the server is running, then retry."))
+      .finally(() => setLoading(false));
+  }, [id]);
 
+  useEffect(() => {
+    loadReel();
+    navigation.setOptions({ title: '' });
     api.getTasks(id).then(setTaskList).catch(() => {});
     api.getWorkout(id).then((plan) => setHasWorkout(plan.exercises.length > 0)).catch(() => {});
   }, [id]);
@@ -177,6 +185,16 @@ export default function ReelDetailScreen() {
 
   if (loading) return (
     <View style={styles.center}><ActivityIndicator color={colors.accent} size="large" /></View>
+  );
+  if (error) return (
+    <View style={[styles.center, { padding: spacing.xl }]}>
+      <Icon name="alert-circle" size={32} color={colors.danger} style={{ marginBottom: spacing.sm }} />
+      <Text style={[styles.notFound, { textAlign: 'center' }]}>{error}</Text>
+      <Pressable style={[styles.pill, { marginTop: spacing.md }]} onPress={loadReel}>
+        <Ionicons name="refresh" size={14} color={colors.accent} />
+        <Text style={styles.pillText}>Retry</Text>
+      </Pressable>
+    </View>
   );
   if (!reel) return (
     <View style={styles.center}><Text style={styles.notFound}>Reel not found.</Text></View>
