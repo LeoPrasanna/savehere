@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Modal } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
@@ -27,9 +27,13 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const [selected, setSelected] = useState<Feature | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  useEffect(() => {
-    api.listReels().then(d => setReels(d.items)).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+  // Refetch whenever the Landing regains focus (e.g. returning after a save) so the
+  // counts stay current — a plain useEffect([]) only runs once per mount.
+  useFocusEffect(
+    useCallback(() => {
+      api.listReels().then(d => setReels(d.items)).catch(() => {}).finally(() => setLoading(false));
+    }, [])
+  );
 
   const total = reels.length;
   const categories = new Set(reels.map(r => r.category).filter(Boolean)).size;
