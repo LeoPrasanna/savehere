@@ -10,6 +10,11 @@ class Settings:
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
     ENV: str = os.getenv("ENV", "development")
-    DATABASE_URL: str = "sqlite:///./savehere.db"
+    # Comma-separated browser origins allowed in production (the deployed web app's
+    # URL). "*" allows any origin — acceptable while there's no cookie-based auth.
+    ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "*")
+    # Driver-agnostic. Defaults to local SQLite; set DATABASE_URL to a Postgres URL
+    # in production (lands with auth). SQLAlchemy picks the driver from the scheme.
+    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./savehere.db")
 
 settings = Settings()

@@ -18,19 +18,22 @@ logging.basicConfig(
 
 app = FastAPI(title="SaveHere API", version="1.0.0")
 
-# In development allow all localhost origins regardless of port
-CORS_ORIGINS = (
-    ["*"]
-    if settings.ENV == "development"
-    else [
-        "https://savehere.app",
-    ]
-)
+# Dev: allow any origin (any localhost port / Codespace tunnel). Production: read
+# the allowlist from ALLOWED_ORIGINS (comma-separated). Defaults to "*" so a fresh
+# deploy works before the web app's final domain is known — lock it down later.
+if settings.ENV == "development":
+    CORS_ORIGINS = ["*"]
+else:
+    CORS_ORIGINS = [o.strip() for o in settings.ALLOWED_ORIGINS.split(",") if o.strip()] or ["*"]
+
+# allow_credentials must be False when origins is "*" (CORS spec). We don't use
+# cookie auth yet, so this is safe; revisit when auth lands.
+_allow_credentials = "*" not in CORS_ORIGINS
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
-    allow_credentials=settings.ENV != "development",
+    allow_credentials=_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -1,0 +1,30 @@
+# Render Blueprint — deploys the SaveHere FastAPI backend.
+# Render → New → Blueprint → connect this repo; Render reads this file.
+# Set ANTHROPIC_API_KEY (and any optional keys) in the dashboard — they are NOT
+# stored here. See docs/DEPLOY.md for the full walkthrough and caveats.
+services:
+  - type: web
+    name: savehere-api
+    runtime: python
+    rootDir: backend
+    plan: free                      # free = stable URL but cold-starts after ~15m idle
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.4"
+      - key: ENV
+        value: production
+      # The deployed web app's origin(s), comma-separated. "*" works for a first
+      # deploy; tighten to the real domain once the web app is hosted.
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      # Secrets — set these in the Render dashboard (sync:false = not in git).
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY        # optional (Whisper transcription)
+        sync: false
+      - key: APIFY_API_KEY         # optional (LinkedIn scraper)
+        sync: false
