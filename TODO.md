@@ -83,7 +83,11 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ## Backend — Polish
 
+<<<<<<< HEAD
 - [x] **Pagination on list endpoint** — `GET /api/reels` now accepts `?limit=N&offset=N`; server also has `GET /api/reels/search?q=` for full-library search.
+=======
+- [x] **Pagination on list endpoint** — `GET /api/reels` accepts `?limit=&offset=` and returns the full `total` + the page. (Tag filter still filters in Python then slices.)
+>>>>>>> 2e59129 (docs(todo): mark pagination/offline done; log server-side-search limitation)
 - [x] **Structured logging** — `logging` configured in `main.py`; extraction/save/cache paths log with levels. *(TODO: add per-request IDs.)*
 - [ ] **Error monitoring** — integrate Sentry (`sentry-sdk[fastapi]`) for automatic exception capture.
 - [x] **Background summary (instant save)** — `POST /save` returns as soon as metadata is extracted; the Claude summary runs in a FastAPI `BackgroundTask` (`summary_status`: pending→ready/skipped/failed). **Durability:** orphaned `pending` summaries (in-process task lost on restart/cold-start) are re-enqueued on startup (`recover_pending_summaries`, capped at 25); the detail screen polls and offers a manual retry if it stalls past ~60s.
