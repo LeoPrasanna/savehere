@@ -41,7 +41,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 > The save pipeline is core functionality. These guard its success rate in production.
 
 - [ ] **Bot-detection on datacenter IPs (deploy decision for YouTube/IG)** — saving a YouTube Short fails with "Sign in to confirm you're not a bot" from the Codespace; **Railway/Render/Fly are datacenter IPs too, so deploy does NOT fix this — usually worse.** Fix is architectural: a layered extraction gateway behind one swappable `ExtractorProvider` — (1) cache, (2) client-side oEmbed/OG metadata from the user's IP, (3) server yt-dlp **behind a residential/mobile proxy** (+ cookies/PO-token) for transcripts, (4) managed-API fallback (Apify / transcript API / YouTube Data API v3), (5) async + link-only-now/backfill-later. Residential proxy is the real prod fix (usage-priced — fold into per-user economics). See `docs/CONTEXT.md` §4 "Extraction & bot-detection". **Decide before deploy.**
-- [ ] **Fast-fail the page fallback (bug)** — when yt-dlp is bot-blocked, `_extract_from_page`'s DOTALL regex over YouTube's ~1 MB HTML hangs to the 50s `EXTRACT_TIMEOUT` instead of erroring in ~5s. Skip/bound the heavy page-parse for YouTube and degrade gracefully (link-only save). Violates quality-bar #1 (graceful, fast failure).
+- [x] **Fast-fail the page fallback (bug)** — fixed: YouTube degrades via oEmbed (title/thumb) instead of regex-parsing the watch page; `_og` rewritten to scan per-`<meta>` (no catastrophic backtracking on 600 KB pages); page fetch bounded (preview UA, max_redirects=3, 8 s); `EXTRACT_TIMEOUT` cut 50→20 s. Bonus: Instagram/FB **captions** now read via the `facebookexternalhit` UA (the ungated link-preview surface).
 
 - [ ] **yt-dlp auto-update in production** — schedule `pip install -U yt-dlp` (monthly cron, or a rebuild/redeploy step). YouTube changes regularly break older yt-dlp; this is the single biggest ongoing factor in save success rate. **Do not ship without an update mechanism.**
 - [x] **Extraction self-test health check** — `GET /health/extract` reports the installed yt-dlp version; `?live=1` runs a real extraction against a known Short and returns `probe_ok` + latency. ⚠️ Still needs wiring to uptime monitoring / alerting in prod.
@@ -57,8 +57,8 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [ ] **Share Extension (iOS)** — same as blocker above; listed here for implementation tracking.
 - [x] **Library auto-refresh while summarizing** — the home grid polls every 4s while any card is `pending` so background summaries appear without a manual reload (pull-to-refresh also available).
 - [ ] **Deep linking** — when Share Extension saves a reel, open the detail screen directly (`savehere://reel/{id}`).
-- [ ] **Pagination / infinite scroll** — `GET /api/reels` returns all records. Add `limit`/`offset` and FlatList `onEndReached` for large libraries.
-- [ ] **Offline banner** — detect no network and show a non-blocking banner instead of silently failing.
+- [x] **Pagination / infinite scroll** — `GET /api/reels` supports `limit`/`offset`; mobile uses `onEndReached` for infinite scroll. Server-side search via `GET /api/reels/search` with 400ms debounce replaces client-side filter.
+- [x] **Offline banner** — `NetInfo` detects no network and shows a non-blocking banner instead of silently failing.
 - [ ] **Pull-to-refresh visual polish** — current refresh spinner is functional but unstyled.
 - [ ] **Empty state illustrations** — replace emoji placeholders with proper SVG artwork.
 - [ ] **Haptic feedback** — on save success, delete confirm, re-summarize complete.
@@ -83,7 +83,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ## Backend — Polish
 
-- [ ] **Pagination on list endpoint** — add `?limit=20&offset=0` query params to `GET /api/reels`.
+- [x] **Pagination on list endpoint** — `GET /api/reels` now accepts `?limit=N&offset=N`; server also has `GET /api/reels/search?q=` for full-library search.
 - [x] **Structured logging** — `logging` configured in `main.py`; extraction/save/cache paths log with levels. *(TODO: add per-request IDs.)*
 - [ ] **Error monitoring** — integrate Sentry (`sentry-sdk[fastapi]`) for automatic exception capture.
 - [x] **Background summary (instant save)** — `POST /save` returns as soon as metadata is extracted; the Claude summary runs in a FastAPI `BackgroundTask` (`summary_status`: pending→ready/skipped/failed). **Durability:** orphaned `pending` summaries (in-process task lost on restart/cold-start) are re-enqueued on startup (`recover_pending_summaries`, capped at 25); the detail screen polls and offers a manual retry if it stalls past ~60s.

@@ -23,6 +23,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [reels, setReels] = useState<Reel[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Feature | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -31,11 +32,10 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   // counts stay current — a plain useEffect([]) only runs once per mount.
   useFocusEffect(
     useCallback(() => {
-      api.listReels().then(d => setReels(d.items)).catch(() => {}).finally(() => setLoading(false));
+      api.listReels().then(d => { setReels(d.items); setTotal(d.total); }).catch(() => {}).finally(() => setLoading(false));
     }, [])
   );
 
-  const total = reels.length;
   const categories = new Set(reels.map(r => r.category).filter(Boolean)).size;
   const platforms = new Set(reels.map(r => r.platform).filter(Boolean)).size;
   // When the Ask card is shown here, drop it from the menu so it isn't duplicated.

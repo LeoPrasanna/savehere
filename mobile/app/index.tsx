@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, StyleSheet, ActivityIndicator,
-  RefreshControl, TextInput, useWindowDimensions,
+  RefreshControl, TextInput, useWindowDimensions, Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,6 +18,7 @@ import { Landing } from '../components/Landing';
 import { colors, spacing, font, radius, gradients, shadow, categoryMeta, CATEGORY_OPTIONS } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
+const PAGE = 24;   // library grid page size for infinite scroll
 
 // Persists across screen remounts within a session (resets on app cold start),
 // so the landing gate shows on launch but not every time you return home.
@@ -29,9 +30,12 @@ export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const numColumns = width < 600 ? 2 : width < 1024 ? 3 : 4;
   const [reels, setReels] = useState<Reel[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [offline, setOffline] = useState(false);
   const [activeCategory, setActiveCategory] = useState('all');
   const [search, setSearch] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -40,9 +44,13 @@ export default function HomeScreen() {
   const load = useCallback(async (category = activeCategory) => {
     try {
       setError('');
-      const filters = category !== 'all' ? { category } : undefined;
-      const data = await api.listReels(filters);
+      const data = await api.listReels({
+        category: category !== 'all' ? category : undefined,
+        limit: PAGE,
+        offset: 0,
+      });
       setReels(data.items);
+      setTotal(data.total);
     } catch (e: any) {
       setError('Could not connect to backend. Make sure the server is running on port 8000.');
     } finally {
@@ -50,6 +58,39 @@ export default function HomeScreen() {
       setRefreshing(false);
     }
   }, [activeCategory]);
+
+  // Append the next page when the grid nears its end (infinite scroll).
+  const loadMore = useCallback(async () => {
+    if (loadingMore || reels.length >= total) return;
+    setLoadingMore(true);
+    try {
+      const data = await api.listReels({
+        category: activeCategory !== 'all' ? activeCategory : undefined,
+        limit: PAGE,
+        offset: reels.length,
+      });
+      setReels(prev => [...prev, ...data.items]);
+      setTotal(data.total);
+    } catch {
+      // transient failure — keep what's loaded rather than blanking the grid
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, reels.length, total, activeCategory]);
+
+  // Web: reflect the browser's online/offline state in a non-blocking banner.
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+    setOffline(!window.navigator.onLine);
+    const goOnline = () => setOffline(false);
+    const goOffline = () => setOffline(true);
+    window.addEventListener('online', goOnline);
+    window.addEventListener('offline', goOffline);
+    return () => {
+      window.removeEventListener('online', goOnline);
+      window.removeEventListener('offline', goOffline);
+    };
+  }, []);
 
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
 
@@ -123,7 +164,7 @@ export default function HomeScreen() {
             <View>
               <Text style={styles.brand}>SaveHere</Text>
               <Text style={styles.brandSub}>
-                {reels.length > 0 ? `${reels.length} saved` : 'Your second brain for reels'}
+                {total > 0 ? `${total} saved` : 'Your second brain for reels'}
               </Text>
             </View>
           </Pressable>
@@ -187,13 +228,16 @@ export default function HomeScreen() {
       {/* ── Content ─────────────────────────────────── */}
       {loading ? (
         <ActivityIndicator color={colors.accent} style={styles.loader} size="large" />
-      ) : error ? (
+      ) : error && reels.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyIconWrap}>
             <CloudOff size={40} color={colors.danger} />
           </View>
           <Text style={styles.emptyTitle}>Can't reach the server</Text>
           <Text style={styles.emptyText}>{error}</Text>
+          <Pressable style={styles.retryBtn} onPress={() => { setLoading(true); load(); }}>
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
         </View>
       ) : filtered.length === 0 ? (
         <View style={styles.empty}>
@@ -208,6 +252,15 @@ export default function HomeScreen() {
           </Text>
         </View>
       ) : (
+        <>
+        {(offline || error) && (
+          <Pressable style={styles.banner} onPress={() => { setLoading(true); load(); }}>
+            <Icon name="alert-circle" size={14} color="#FFF" />
+            <Text style={styles.bannerText}>
+              {offline ? "You're offline — changes may not save." : "Couldn't refresh — tap to retry."}
+            </Text>
+          </Pressable>
+        )}
         <FlatList
           data={gridData}
           keyExtractor={(r: any) => r.id}
@@ -220,16 +273,21 @@ export default function HomeScreen() {
               : <ReelCard
                   reel={item}
                   index={index}
-                  onDelete={id => setReels(prev => prev.filter(r => r.id !== id))}
+                  onDelete={id => { setReels(prev => prev.filter(r => r.id !== id)); setTotal(t => Math.max(0, t - 1)); }}
                 />
           )}
           style={styles.grid}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.6}
           ListFooterComponent={
-            <Text style={styles.disclaimer}>
-              Summaries are generated by AI analysis and may be wrong or have gaps — you're free to edit them and add your own notes. All saved content belongs to its original creators.
-            </Text>
+            <>
+              {loadingMore && <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.md }} />}
+              <Text style={styles.disclaimer}>
+                Summaries are generated by AI analysis and may be wrong or have gaps — you're free to edit them and add your own notes. All saved content belongs to its original creators.
+              </Text>
+            </>
           }
           refreshControl={
             <RefreshControl
@@ -239,6 +297,7 @@ export default function HomeScreen() {
             />
           }
         />
+        </>
       )}
 
       {/* ── FAB ─────────────────────────────────────── */}
@@ -255,13 +314,24 @@ export default function HomeScreen() {
         </Pressable>
       </MotiView>
 
-      <ProfilePanel visible={menuOpen} onClose={() => setMenuOpen(false)} reels={reels} />
+      <ProfilePanel visible={menuOpen} onClose={() => setMenuOpen(false)} reels={reels} total={total} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+
+  banner: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: colors.danger, paddingVertical: 8, paddingHorizontal: spacing.md,
+  },
+  bannerText: { color: '#FFF', fontSize: font.xs, fontWeight: '700' },
+  retryBtn: {
+    marginTop: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm,
+    borderRadius: radius.full, borderWidth: 1, borderColor: colors.accent,
+  },
+  retryText: { color: colors.accent, fontSize: font.sm, fontWeight: '700' },
 
   header: {
     paddingHorizontal: spacing.md,

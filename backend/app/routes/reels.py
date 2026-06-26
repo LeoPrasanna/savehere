@@ -123,21 +123,34 @@ def list_reels(
     tag: str = None,
     category: str = None,
     platform: str = None,
+    limit: int = 1000,
+    offset: int = 0,
     db: Session = Depends(get_db)
 ):
-    query = db.query(ReelDB)
+    """`total` is the full count for the active filter; `items` is the requested
+    page. Clients paginate with limit/offset and stop when offset+len >= total.
+    Default limit is high so callers that just want counts (Landing) still work."""
+    limit = max(1, min(limit, 1000))
+    offset = max(0, offset)
 
+    query = db.query(ReelDB)
     if platform:
         query = query.filter(ReelDB.platform == platform)
     if category:
         query = query.filter(ReelDB.category == category)
 
-    reels = query.order_by(ReelDB.created_at.desc()).all()
-
     if tag:
-        reels = [r for r in reels if r.tags and tag.lower() in [t.lower() for t in r.tags]]
+        # tags is a JSON array — SQLite can't index into it, so filter in Python
+        # over the full set, then slice the page.
+        rows = query.order_by(ReelDB.created_at.desc()).all()
+        matched = [r for r in rows if r.tags and tag.lower() in [t.lower() for t in r.tags]]
+        total = len(matched)
+        page = matched[offset:offset + limit]
+    else:
+        total = query.count()
+        page = query.order_by(ReelDB.created_at.desc()).offset(offset).limit(limit).all()
 
-    return ReelListResponse(total=len(reels), items=[_to_response(r) for r in reels])
+    return ReelListResponse(total=total, items=[_to_response(r) for r in page])
 
 
 @router.get("/{reel_id}", response_model=ReelResponse)
