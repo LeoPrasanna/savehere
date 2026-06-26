@@ -20,7 +20,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [ ] **Migrate SQLite → Supabase Postgres** — SQLite is a local file, not suitable for production with multiple users.
 - [ ] **3-environment config** — `dev` (localhost), `test` (LAN/staging), `prod` (deployed). Control via `ENV` variable and corresponding `BASE_URL` in mobile.
 - [ ] **HTTPS on backend** — Apple requires all network calls use HTTPS. Railway and Render provide this automatically.
-- [ ] **CORS lock down** — change `allow_origins=["*"]` to your actual frontend domains for production.
+- [x] **CORS lock down** — `main.py` already reads `ALLOWED_ORIGINS` env var; `"*"` in dev, locked list in prod. Set `ALLOWED_ORIGINS=https://yourapp.com` when deploying.
 - [x] **Backend health check endpoint** — `GET /health` returns `{"status": "ok"}`. *(Enhanced extraction self-test tracked under Extraction Reliability & Scale.)*
 
 ---
@@ -57,12 +57,13 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [ ] **Share Extension (iOS)** — same as blocker above; listed here for implementation tracking.
 - [x] **Library auto-refresh while summarizing** — the home grid polls every 4s while any card is `pending` so background summaries appear without a manual reload (pull-to-refresh also available).
 - [ ] **Deep linking** — when Share Extension saves a reel, open the detail screen directly (`savehere://reel/{id}`).
-- [x] **Pagination / infinite scroll** — `GET /api/reels` supports `limit`/`offset`; mobile uses `onEndReached` for infinite scroll. Server-side search via `GET /api/reels/search` with 400ms debounce replaces client-side filter.
-- [x] **Offline banner** — `NetInfo` detects no network and shows a non-blocking banner instead of silently failing.
-- [ ] **Pull-to-refresh visual polish** — current refresh spinner is functional but unstyled.
-- [ ] **Empty state illustrations** — replace emoji placeholders with proper SVG artwork.
+- [x] **Pagination / infinite scroll** — `/api/reels` takes `limit`/`offset` + returns full `total`; library grid loads 24/page via FlatList `onEndReached`. Counts (header, Landing, ProfilePanel) use `total`.
+- [x] **Server-side search** — `GET /api/reels/search?q=` searches title+tags+summary+notes across the full library. Library screen debounces 400ms and swaps to server results; infinite scroll disabled during search.
+- [x] **Offline banner** — non-blocking banner on the library when offline (web `online`/`offline` events) or when a refresh fails (tap to retry); Retry button on the cold "can't reach server" screen.
+- [x] **Pull-to-refresh visual polish** — `RefreshControl` now uses accent colors, card background, and "Refreshing…" title (iOS + Android).
+- [x] **Empty state illustrations** — already using lucide vector icons (Sparkles, CloudOff); emoji placeholders were already replaced. Search empty state shows the query string.
 - [ ] **Haptic feedback** — on save success, delete confirm, re-summarize complete.
-- [ ] **iPad layout** — grid is responsive (4 columns on wide screens) but detail screen needs max-width container.
+- [x] **iPad layout** — detail screen content container capped at `maxWidth: 720` and centered.
 
 ---
 
@@ -83,17 +84,13 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ## Backend — Polish
 
-<<<<<<< HEAD
 - [x] **Pagination on list endpoint** — `GET /api/reels` now accepts `?limit=N&offset=N`; server also has `GET /api/reels/search?q=` for full-library search.
-=======
-- [x] **Pagination on list endpoint** — `GET /api/reels` accepts `?limit=&offset=` and returns the full `total` + the page. (Tag filter still filters in Python then slices.)
->>>>>>> 2e59129 (docs(todo): mark pagination/offline done; log server-side-search limitation)
 - [x] **Structured logging** — `logging` configured in `main.py`; extraction/save/cache paths log with levels. *(TODO: add per-request IDs.)*
 - [ ] **Error monitoring** — integrate Sentry (`sentry-sdk[fastapi]`) for automatic exception capture.
 - [x] **Background summary (instant save)** — `POST /save` returns as soon as metadata is extracted; the Claude summary runs in a FastAPI `BackgroundTask` (`summary_status`: pending→ready/skipped/failed). **Durability:** orphaned `pending` summaries (in-process task lost on restart/cold-start) are re-enqueued on startup (`recover_pending_summaries`, capped at 25); the detail screen polls and offers a manual retry if it stalls past ~60s.
 - [ ] **Whisper local fallback** — for audio-only content with no captions, add local `openai-whisper` library as a free alternative to the OpenAI Whisper API.
-- [ ] **Apify LinkedIn integration** — use `APIFY_API_KEY` to call the Apify LinkedIn Post Scraper, bypassing the login wall.
-- [ ] **Alembic migrations** — replace the current `ALTER TABLE` try/except hack in `database.py` with proper Alembic migration files.
+- [x] **Apify LinkedIn integration — NOT NEEDED (removed).** Tested `pratikdani~linkedin-posts-scraper`: it runs sync for 60+ s (would block the save path) and costs ~$0.025/post. Verified the existing free `facebookexternalhit` page scrape already returns the **full** LinkedIn post body (~2.5k chars) via JSON-LD with grounded summaries — so Apify added cost + latency for zero benefit. Reverted to page-scrape-only for all platforms.
+- [ ] **Alembic migrations** — replace the `ALTER TABLE` try/except hack in `database.py`. Deferred until Postgres migration (auth project) — premature for SQLite dev.
 
 ---
 

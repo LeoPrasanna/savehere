@@ -134,6 +134,9 @@ export const api = {
 
   getReel: (id: string) => request<Reel>(`/api/reels/${id}`),
 
+  searchReels: (q: string, limit = 24, offset = 0) =>
+    request<ReelListResponse>(`/api/reels/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
+
   resummarize: (id: string) =>
     request<Reel>(`/api/reels/${id}/resummarize`, { method: 'POST' }),
 

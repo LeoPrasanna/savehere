@@ -38,6 +38,8 @@ export default function HomeScreen() {
   const [offline, setOffline] = useState(false);
   const [activeCategory, setActiveCategory] = useState('all');
   const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<Reel[] | null>(null);
+  const [searching, setSearching] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [entered, setEntered] = useState(enteredSession);
 
@@ -92,6 +94,24 @@ export default function HomeScreen() {
     };
   }, []);
 
+  // Server-side search: debounce 400 ms, replaces the paginated list while active.
+  useEffect(() => {
+    const q = search.trim();
+    if (!q) { setSearchResults(null); setSearching(false); return; }
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      try {
+        const data = await api.searchReels(q);
+        setSearchResults(data.items);
+      } catch {
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
 
   // Summaries are generated in the background after save, so silently re-poll the
@@ -110,21 +130,14 @@ export default function HomeScreen() {
     load(cat);
   };
 
-  const q = search.trim().toLowerCase();
-  const filtered = q
-    ? reels.filter(r =>
-        (r.title || '').toLowerCase().includes(q) ||
-        r.tags.some(t => t.toLowerCase().includes(q)) ||
-        (r.summary || []).some(s => s.toLowerCase().includes(q)) ||
-        (r.notes || '').toLowerCase().includes(q)
-      )
-    : reels;
+  const inSearchMode = search.trim().length > 0;
+  const displayList = inSearchMode ? (searchResults ?? []) : reels;
 
   // Pad the final row with invisible spacers so cards keep a uniform width.
-  const fillers = filtered.length % numColumns === 0 ? 0 : numColumns - (filtered.length % numColumns);
+  const fillers = displayList.length % numColumns === 0 ? 0 : numColumns - (displayList.length % numColumns);
   const gridData: any[] = fillers
-    ? [...filtered, ...Array.from({ length: fillers }, (_, i) => ({ id: `__ghost_${i}`, __ghost: true }))]
-    : filtered;
+    ? [...displayList, ...Array.from({ length: fillers }, (_, i) => ({ id: `__ghost_${i}`, __ghost: true }))]
+    : displayList;
 
   // Entry gate: show the landing summary first; "Open my library" reveals the grid.
   if (!entered) {
@@ -239,16 +252,18 @@ export default function HomeScreen() {
             <Text style={styles.retryText}>Retry</Text>
           </Pressable>
         </View>
-      ) : filtered.length === 0 ? (
+      ) : searching ? (
+        <ActivityIndicator color={colors.accent} style={styles.loader} size="large" />
+      ) : displayList.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyIconWrap}>
             <Sparkles size={40} color={colors.accent} />
           </View>
           <Text style={styles.emptyTitle}>
-            {search ? 'No matches' : 'Nothing saved yet'}
+            {inSearchMode ? 'No matches' : 'Nothing saved yet'}
           </Text>
           <Text style={styles.emptyText}>
-            {search ? 'Try a different search.' : 'Tap the + button to save your first reel.'}
+            {inSearchMode ? `No results for "${search.trim()}".` : 'Tap the + button to save your first reel.'}
           </Text>
         </View>
       ) : (
@@ -279,7 +294,7 @@ export default function HomeScreen() {
           style={styles.grid}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          onEndReached={loadMore}
+          onEndReached={inSearchMode ? undefined : loadMore}
           onEndReachedThreshold={0.6}
           ListFooterComponent={
             <>
@@ -294,6 +309,10 @@ export default function HomeScreen() {
               refreshing={refreshing}
               onRefresh={() => { setRefreshing(true); load(); }}
               tintColor={colors.accent}
+              colors={[colors.accent, colors.accentLight]}
+              progressBackgroundColor={colors.card}
+              title="Refreshing…"
+              titleColor={colors.textSecondary}
             />
           }
         />

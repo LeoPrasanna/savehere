@@ -27,6 +27,7 @@ export default function ReelDetailScreen() {
   const [summarizing, setSummarizing] = useState(false);
   const [taskList, setTaskList] = useState<TaskListResponse | null>(null);
   const [generatingTasks, setGeneratingTasks] = useState(false);
+  const [taskError, setTaskError] = useState('');
   const [hasWorkout, setHasWorkout] = useState(false);
   const [generatingWorkout, setGeneratingWorkout] = useState(false);
   const [categoryModal, setCategoryModal] = useState(false);
@@ -129,6 +130,7 @@ export default function ReelDetailScreen() {
 
   const handleGenerateTasks = async () => {
     setGeneratingTasks(true);
+    setTaskError('');
     try {
       // Make sure any just-typed note is persisted before we generate, so the
       // cooking fallback can infer from the user's intent.
@@ -137,9 +139,11 @@ export default function ReelDetailScreen() {
       setTaskList(result);
       setReel(prev => prev ? { ...prev, tasks_count: (prev.tasks_count ?? 0) + 1 } : prev);
     } catch (e: any) {
-      let msg = 'Could not extract tasks.';
-      try { msg = JSON.parse(e.message)?.detail ?? e.message; } catch {}
-      notify(msg);
+      let msg = isCooking
+        ? "Couldn't read a recipe from this content. Try adding the dish name in Notes and tapping again."
+        : "Couldn't extract steps from this content.";
+      try { const detail = JSON.parse(e.message)?.detail; if (detail) msg = detail; } catch {}
+      setTaskError(msg);
     } finally {
       setGeneratingTasks(false);
     }
@@ -417,6 +421,12 @@ export default function ReelDetailScreen() {
           {showTasksAction && (
             <Text style={styles.actionHint}>Generated once with AI — after that you can add, edit, or delete by hand.</Text>
           )}
+          {taskError ? (
+            <View style={styles.inlineError}>
+              <Icon name="alert-circle" size={14} color={colors.danger} />
+              <Text style={styles.inlineErrorText}>{taskError}</Text>
+            </View>
+          ) : null}
         </View>
       )}
 
@@ -500,7 +510,7 @@ export default function ReelDetailScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1, backgroundColor: 'transparent' },
-  content: { padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.md },
+  content: { padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.md, maxWidth: 720, width: '100%', alignSelf: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   notFound: { color: colors.textSecondary, fontSize: font.md },
 
@@ -607,6 +617,12 @@ const styles = StyleSheet.create({
   },
   actionBtnText: { color: '#FFF', fontSize: font.sm, fontWeight: '800' },
   actionHint: { color: colors.textTertiary, fontSize: font.xs, lineHeight: 16 },
+  inlineError: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs,
+    backgroundColor: colors.danger + '18', borderRadius: radius.sm,
+    padding: spacing.sm, marginTop: spacing.xs,
+  },
+  inlineErrorText: { color: colors.danger, fontSize: font.xs, lineHeight: 16, flex: 1 },
 
   urlRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,

@@ -25,6 +25,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const [reels, setReels] = useState<Reel[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState(false);
   const [selected, setSelected] = useState<Feature | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -32,7 +33,11 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   // counts stay current — a plain useEffect([]) only runs once per mount.
   useFocusEffect(
     useCallback(() => {
-      api.listReels().then(d => { setReels(d.items); setTotal(d.total); }).catch(() => {}).finally(() => setLoading(false));
+      setFetchError(false);
+      api.listReels()
+        .then(d => { setReels(d.items); setTotal(d.total); })
+        .catch(() => setFetchError(true))
+        .finally(() => setLoading(false));
     }, [])
   );
 
@@ -72,11 +77,15 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         <MotiView from={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', delay: 150, damping: 13 }} style={styles.heroStat}>
           {loading
             ? <ActivityIndicator color={colors.accent} size="large" />
-            : <Text style={styles.heroNum}>{total}</Text>}
+            : fetchError
+              ? <Text style={styles.heroNum}>–</Text>
+              : <Text style={styles.heroNum}>{total}</Text>}
           <Text style={styles.heroLabel}>reels saved so far</Text>
-          {!loading && total > 0 && (
-            <Text style={styles.subStat}>across {categories} categories · {platforms} platforms</Text>
-          )}
+          {fetchError
+            ? <Text style={styles.subStat}>Can't reach server</Text>
+            : !loading && total > 0
+              ? <Text style={styles.subStat}>across {categories} categories · {platforms} platforms</Text>
+              : null}
         </MotiView>
 
         {/* Prominent, gently pulsing add button */}

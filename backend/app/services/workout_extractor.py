@@ -197,6 +197,10 @@ def extract_tasks(platform: str, title: str, text: str, category: str, notes: st
     result = _parse_model_json(msg.content[0].text, {"tasks": []})
     if not isinstance(result.get("tasks"), list):
         result["tasks"] = []
+    # Caption said "recipe in comments" or similar — no actual steps extracted.
+    # Fall through to title-based inference so the user still gets something useful.
+    if is_cooking and not result.get("tasks"):
+        return _infer_recipe(title=title or "", notes=notes or "")
     # Normalize kind: cooking is always step-by-step; otherwise trust the model.
     if is_cooking:
         result["kind"] = "steps"
