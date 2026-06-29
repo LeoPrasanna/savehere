@@ -1,0 +1,31 @@
+# Monthly redeploy to pull the latest yt-dlp (the build command force-upgrades it).
+# YouTube regularly breaks older yt-dlp; this keeps the deployed backend current
+# without a code change. Triggers a Render deploy via a deploy hook.
+#
+# SETUP (one-time, owner action):
+#   1. Render dashboard → savehere-api → Settings → Deploy Hook → copy the URL.
+#   2. GitHub repo → Settings → Secrets and variables → Actions → New repository
+#      secret named RENDER_DEPLOY_HOOK_URL, paste the URL.
+# Until that secret exists the job no-ops (it won't fail the Actions tab).
+name: Refresh yt-dlp (monthly redeploy)
+
+on:
+  schedule:
+    - cron: "0 6 1 * *" # 06:00 UTC on the 1st of every month
+  workflow_dispatch: {} # allow a manual run from the Actions tab
+
+jobs:
+  redeploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "RENDER_DEPLOY_HOOK_URL not set — skipping. See this file's header for setup."
+            exit 0
+          fi
+          echo "Triggering Render redeploy to refresh yt-dlp…"
+          curl -fsS -X POST "$HOOK"
+          echo "Done."

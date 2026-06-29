@@ -9,6 +9,8 @@ class Settings:
     APIFY_API_KEY: str = os.getenv("APIFY_API_KEY", "")
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     SUPABASE_ANON_KEY: str = os.getenv("SUPABASE_ANON_KEY", "")
+    # Optional. Set to a Sentry DSN to enable error monitoring; empty = disabled.
+    SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
     ENV: str = os.getenv("ENV", "development")
     # Comma-separated browser origins allowed in production (the deployed web app's
     # URL). "*" allows any origin — acceptable while there's no cookie-based auth.

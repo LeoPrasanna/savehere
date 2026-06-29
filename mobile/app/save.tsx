@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import { Icon } from '../components/Icon';
 import { api } from '../services/api';
+import * as haptics from '../services/haptics';
 import { Pressable } from '../components/Pressable';
 import { AuroraBackground } from '../components/AuroraBackground';
 import { BorderBeam } from '../components/BorderBeam';
@@ -134,9 +135,11 @@ export default function SaveScreen() {
     try {
       const reel = await api.saveReel(trimmed);
       clearStepTimers();
+      haptics.success();
       router.replace(`/reel/${reel.id}`);
     } catch (e: any) {
       clearStepTimers();
+      haptics.error();
       setError(parseError(e));
       setLoading(false);
       setStepIdx(0);

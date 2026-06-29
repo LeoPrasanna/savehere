@@ -43,7 +43,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [ ] **Bot-detection on datacenter IPs (deploy decision for YouTube/IG)** — saving a YouTube Short fails with "Sign in to confirm you're not a bot" from the Codespace; **Railway/Render/Fly are datacenter IPs too, so deploy does NOT fix this — usually worse.** Fix is architectural: a layered extraction gateway behind one swappable `ExtractorProvider` — (1) cache, (2) client-side oEmbed/OG metadata from the user's IP, (3) server yt-dlp **behind a residential/mobile proxy** (+ cookies/PO-token) for transcripts, (4) managed-API fallback (Apify / transcript API / YouTube Data API v3), (5) async + link-only-now/backfill-later. Residential proxy is the real prod fix (usage-priced — fold into per-user economics). See `docs/CONTEXT.md` §4 "Extraction & bot-detection". **Decide before deploy.**
 - [x] **Fast-fail the page fallback (bug)** — fixed: YouTube degrades via oEmbed (title/thumb) instead of regex-parsing the watch page; `_og` rewritten to scan per-`<meta>` (no catastrophic backtracking on 600 KB pages); page fetch bounded (preview UA, max_redirects=3, 8 s); `EXTRACT_TIMEOUT` cut 50→20 s. Bonus: Instagram/FB **captions** now read via the `facebookexternalhit` UA (the ungated link-preview surface).
 
-- [ ] **yt-dlp auto-update in production** — schedule `pip install -U yt-dlp` (monthly cron, or a rebuild/redeploy step). YouTube changes regularly break older yt-dlp; this is the single biggest ongoing factor in save success rate. **Do not ship without an update mechanism.**
+- [x] **yt-dlp auto-update in production** — `render.yaml` build now force-upgrades yt-dlp every deploy (`pip install -U --no-cache-dir yt-dlp`), and `.github/workflows/refresh-ytdlp.yml` triggers a monthly Render redeploy (cron, free) to pull the latest without a code push. ⚠️ Owner action: add the `RENDER_DEPLOY_HOOK_URL` GitHub secret (from Render → Settings → Deploy Hook) to arm the monthly job; until then it no-ops.
 - [x] **Extraction self-test health check** — `GET /health/extract` reports the installed yt-dlp version; `?live=1` runs a real extraction against a known Short and returns `probe_ok` + latency. ⚠️ Still needs wiring to uptime monitoring / alerting in prod.
 - [ ] **Caption 429 mitigation at scale** — a single server IP gets rate-limited on YouTube's `timedtext` endpoint under load (saves still succeed via description fallback, but transcripts drop). Decide before scaling: rotating/residential proxies, YouTube Data API v3 for captions, or accept description-only summaries.
 - [x] **Extraction cache eviction** — `save_reel` now prunes `extraction_cache` rows older than the 14-day TTL, throttled to once/hour and fail-open (`_prune_cache_if_due`).
@@ -62,7 +62,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [x] **Offline banner** — non-blocking banner on the library when offline (web `online`/`offline` events) or when a refresh fails (tap to retry); Retry button on the cold "can't reach server" screen.
 - [x] **Pull-to-refresh visual polish** — `RefreshControl` now uses accent colors, card background, and "Refreshing…" title (iOS + Android).
 - [x] **Empty state illustrations** — already using lucide vector icons (Sparkles, CloudOff); emoji placeholders were already replaced. Search empty state shows the query string.
-- [ ] **Haptic feedback** — on save success, delete confirm, re-summarize complete.
+- [x] **Haptic feedback** — `services/haptics.ts` (web-safe wrapper; native-only, errors swallowed) wired to: save success/failure (`save.tsx`), re-summarize success/failure + delete-confirm warning (`reel/[id].tsx`), and card-delete tap (`ReelCard.tsx`). Web export verified clean.
 - [x] **iPad layout** — detail screen content container capped at `maxWidth: 720` and centered.
 
 ---
@@ -86,7 +86,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 - [x] **Pagination on list endpoint** — `GET /api/reels` now accepts `?limit=N&offset=N`; server also has `GET /api/reels/search?q=` for full-library search.
 - [x] **Structured logging** — `logging` configured in `main.py`; extraction/save/cache paths log with levels. *(TODO: add per-request IDs.)*
-- [ ] **Error monitoring** — integrate Sentry (`sentry-sdk[fastapi]`) for automatic exception capture.
+- [x] **Error monitoring** — Sentry (`sentry-sdk[fastapi]`) wired in `main.py`, guarded by `SENTRY_DSN` (no DSN = no-op, so local/CI untouched). 10% trace sampling, `send_default_pii=False`. ⚠️ Owner action: create a Sentry project, set `SENTRY_DSN` in the Render dashboard to arm it.
 - [x] **Background summary (instant save)** — `POST /save` returns as soon as metadata is extracted; the Claude summary runs in a FastAPI `BackgroundTask` (`summary_status`: pending→ready/skipped/failed). **Durability:** orphaned `pending` summaries (in-process task lost on restart/cold-start) are re-enqueued on startup (`recover_pending_summaries`, capped at 25); the detail screen polls and offers a manual retry if it stalls past ~60s.
 - [ ] **Whisper local fallback** — for audio-only content with no captions, add local `openai-whisper` library as a free alternative to the OpenAI Whisper API.
 - [x] **Apify LinkedIn integration — NOT NEEDED (removed).** Tested `pratikdani~linkedin-posts-scraper`: it runs sync for 60+ s (would block the save path) and costs ~$0.025/post. Verified the existing free `facebookexternalhit` page scrape already returns the **full** LinkedIn post body (~2.5k chars) via JSON-LD with grounded summaries — so Apify added cost + latency for zero benefit. Reverted to page-scrape-only for all platforms.
@@ -119,8 +119,8 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [ ] **Analytics** — PostHog or Mixpanel (free tier) to understand which features are used.
 - [ ] **GDPR / data deletion** — "Delete my account and all data" flow, required for EU users.
 - [ ] **Supabase Row Level Security** — enforce per-user data isolation at the database level, not just application level.
-- [ ] **CI/CD pipeline** — GitHub Actions: run Python tests on push, EAS build on merge to main.
-- [~] **Unit tests** — `backend/tests/` (pytest, 27 tests): `normalize_url`, `detect_platform`, `_parse_vtt`, `_weak_title`, `_to_response` duration/null coercion, the per-IP rate limiter, and task source disclaimers. Run with `python -m pytest tests/ -q` from `backend/`. TODO: mock-based test for `summarizer.summarize` + a CI step.
+- [~] **CI/CD pipeline** — GitHub Actions: backend pytest runs on push/PR (`.github/workflows/ci.yml`). TODO: EAS build on merge to main.
+- [~] **Unit tests** — `backend/tests/` (pytest, 46 tests): `normalize_url`, `detect_platform`, `_parse_vtt`, `_og` (+ backtracking-hang regression guard), `_extract_jsonld`, `_weak_title`, `_to_response` coercion, the per-IP rate limiter, task source disclaimers, and DB-backed list/pagination/search endpoint tests (in-memory SQLite + TestClient). Run with `python -m pytest tests/ -q` from `backend/`. **CI:** `.github/workflows/ci.yml` runs the suite on every push/PR touching `backend/`. TODO: mock-based test for `summarizer.summarize`.
 
 ---
 

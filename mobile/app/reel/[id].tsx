@@ -8,6 +8,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from '../../components/Icon';
 import { api, Reel, Task, TaskListResponse, thumbUrl } from '../../services/api';
+import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
 import { goHome } from '../../components/HomeButton';
 import { TaskList } from '../../components/TaskList';
@@ -92,7 +93,9 @@ export default function ReelDetailScreen() {
     try {
       const updated = await api.resummarize(id);
       setReel(updated);
+      haptics.success();
     } catch (e: any) {
+      haptics.error();
       let msg = 'Re-summarize failed.';
       try { msg = JSON.parse(e.message)?.detail ?? e.message; } catch {}
       notify(msg);
@@ -183,6 +186,7 @@ export default function ReelDetailScreen() {
 
   const handleDelete = async () => {
     const doDelete = async () => { await api.deleteReel(id); goHome(); };
+    haptics.warning();
     if (Platform.OS === 'web') {
       if (window.confirm('Remove this saved reel?')) doDelete();
     } else {

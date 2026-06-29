@@ -8,7 +8,10 @@ services:
     runtime: python
     rootDir: backend
     plan: free                      # free = stable URL but cold-starts after ~15m idle
-    buildCommand: pip install -r requirements.txt
+    # Force-upgrade yt-dlp on every build — YouTube changes regularly break older
+    # versions, and this is the single biggest factor in save success rate. The
+    # pinned floor in requirements.txt gets bumped to latest here, ignoring cache.
+    buildCommand: pip install -r requirements.txt && pip install -U --no-cache-dir yt-dlp
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     autoDeploy: true
@@ -27,4 +30,6 @@ services:
       - key: OPENAI_API_KEY        # optional (Whisper transcription)
         sync: false
       - key: APIFY_API_KEY         # optional (LinkedIn scraper)
+        sync: false
+      - key: SENTRY_DSN            # optional (error monitoring; empty = disabled)
         sync: false
