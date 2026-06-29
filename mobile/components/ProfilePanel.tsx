@@ -17,9 +17,11 @@ interface Props {
   // Hide the "Ask your library" row when the host screen already surfaces it
   // (the Landing shows it as a card) so the entry point isn't duplicated.
   showAsk?: boolean;
+  // Full library count (reels may be a paginated subset on the library screen).
+  total?: number;
 }
 
-export function ProfilePanel({ visible, onClose, reels, showAsk = true }: Props) {
+export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: totalProp }: Props) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -27,7 +29,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true }: Props)
 
   const go = (path: string) => { onClose(); router.push(path as any); };
 
-  const total = reels.length;
+  const total = totalProp ?? reels.length;
   const categories = new Set(reels.map(r => r.category).filter(Boolean)).size;
   const platforms = new Set(reels.map(r => r.platform).filter(Boolean)).size;
 

@@ -377,9 +377,9 @@ def extract_info(url: str) -> dict:
             "extracted": bool(title or thumb),
         }
 
-    # Other platforms (LinkedIn full text via JSON-LD, IG/FB og: tags) — fall back to
-    # public page meta tags. This is the ungated "link-preview" surface, so a plain
-    # HTML GET usually succeeds even when video/stream extraction would be blocked.
+    # All platforms fall back to public page meta. The facebookexternalhit UA serves
+    # the ungated link-preview surface — for LinkedIn this returns the FULL post body
+    # via JSON-LD (~2.5k chars in practice), so no paid scraper is needed.
     meta = _extract_from_page(url)
     title = meta.get("title") or ""
     description = meta.get("description") or ""

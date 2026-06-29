@@ -1,4 +1,4 @@
-# SaveHere — Context & Decisions (handoff)
+ — Context & Decisions (handoff)
 
 > Read this + [`TODO.md`](../TODO.md) at the start of any session. This captures
 > *why* things are the way they are — decisions and reasoning that aren't obvious
@@ -48,15 +48,46 @@ mobile/    Expo SDK 56 + expo-router + React Native (dev on web).
 
 ## 3. Current state — what works
 
-- Save pipeline (yt-dlp + caption/description fallback + extraction cache), Haiku summaries + tags + category.
+- **Save pipeline**: yt-dlp + caption/description fallback + extraction cache. Card persists instantly in ~2 s; AI summary runs async in a BackgroundTask (`summary_status`: `pending → ready/skipped/failed`). Detail screen polls every 2.5 s.
+- **Library**: paginated (24/page, infinite scroll via FlatList `onEndReached`), full `total` count, offline banner (web `online`/`offline` events + error state retry).
 - Per-reel **AI caps**: tasks generated **once** then manual add/edit/delete; workout ×3; resummarize ×3.
 - **Ask your library** — retrieval-based (only top-15 relevant saves sent to Claude).
-- Search (title+tags+summary+notes), Rediscover, Help/"what you can do", landing page, profile/hamburger.
+- **AI outputs show dual units**: °F/°C, lb/g, cup/ml across all 4 prompts (summary, tasks/recipe, workout).
+- Search (title+tags+summary+notes; client-side over loaded pages only), Rediscover, Help, landing page.
+- Landing: hamburger (☰) opens profile panel; "Ask your library" card shown prominently once ≥3 reels saved; card hidden from panel when shown on landing; "Open my library" below the Ask card.
+- Re-summarize button hidden when summary already exists (shown only when summary is empty).
 - Editable category, auto-saved notes, link-only bookmarks for login-walled platforms (FB/LinkedIn).
 - Per-IP rate limiting incl. daily cap on `/api/ask`; audio download size guard; cache eviction; `/health/extract` self-test.
 - 27 pytest tests; `npm run typecheck` and `npx expo export --platform web` both pass.
 
 **Not built yet:** auth, per-user data (everything shares one DB), deployment, payments, iOS share extension.
+
+### Pending fix (recipe extraction — highest priority)
+
+**Bug:** "Could not extract actionable tasks from this content" when tapping "Get Recipe" on a cooking reel that has a summary but where the caption says "recipe in pinned comment" (no actual steps).
+
+**Root cause** in `backend/app/services/workout_extractor.py`, `extract_tasks()`:
+```python
+# The existing guard only calls _infer_recipe when content is SHORT:
+if is_cooking and not has_content:          # ← only when caption < 50 chars
+    return _infer_recipe(title=title, notes=notes)
+
+# Normal path uses RECIPE_PROMPT — but caption has no steps so returns tasks: []
+result = _parse_model_json(msg.content[0].text, {"tasks": []})
+# No fallback → returns empty tasks → route raises HTTPException → alert shown
+```
+
+**Fix needed** (one-liner after the `_parse_model_json` call, ~line 207):
+```python
+result = _parse_model_json(msg.content[0].text, {"tasks": []})
+if not isinstance(result.get("tasks"), list):
+    result["tasks"] = []
+# NEW: cooking prompt returned nothing → fall through to title-based inference
+if is_cooking and not result.get("tasks"):
+    return _infer_recipe(title=title or "", notes=notes or "")
+```
+
+Also improve the mobile error UX in `mobile/app/reel/[id].tsx` `handleGenerateTasks()` — replace the bare `window.alert()` with an inline error state in the card area with a friendly message.
 
 ## 4. Key decisions (the "why")
 
@@ -100,10 +131,12 @@ mobile/    Expo SDK 56 + expo-router + React Native (dev on web).
 - Audio transcription needs **ffmpeg** installed (optional path).
 
 ## 6. Next steps (recommended order)
+0. **Fix recipe extraction fallback** — `workout_extractor.py` `extract_tasks()` + mobile error UX (see §3 "Pending fix"). One-file backend change + one-function mobile change.
 1. **Set the Anthropic console monthly budget cap** (owner action — the only hard cost ceiling today).
 2. **Auth + per-user data** (Supabase): users table, `user_id` everywhere, per-user filtering, per-user AI quota. *Largest pure-code unlock; enables tiers/referrals/quota.*
-3. **Deploy backend** (Railway/Render) + point `EXPO_PUBLIC_API_URL` at it + lock CORS + Postgres.
+3. **Deploy backend** (Railway/Render) + point `EXPO_PUBLIC_API_URL` at it + lock CORS + Postgres. Repo is deploy-ready (`render.yaml`, env-driven CORS/DATABASE_URL, `$PORT` start, `/health` check) — owner action: connect repo, set `ANTHROPIC_API_KEY`.
 4. **iOS share extension** (needs Mac/EAS) — the core capture gesture.
-5. Pricing/IAP config in App Store Connect (intro offer, offer code, regional prices) — at launch.
+5. **Server-side search** — `GET /api/reels/search?q=` (title+tags+summary+notes) for full-library queries vs current client-side-over-loaded-page approach.
+6. Pricing/IAP config in App Store Connect (intro offer, offer code, regional prices) — at launch.
 
 See [`TODO.md`](../TODO.md) for the full, categorized checklist.

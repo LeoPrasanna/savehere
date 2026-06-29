@@ -121,14 +121,21 @@ export const api = {
       body: JSON.stringify({ url }),
     }),
 
-  listReels: (filters?: { tag?: string; category?: string; platform?: string }) => {
+  listReels: (filters?: { tag?: string; category?: string; platform?: string; limit?: number; offset?: number }) => {
     const params = new URLSearchParams(
-      Object.fromEntries(Object.entries(filters || {}).filter(([, v]) => v))
+      Object.fromEntries(
+        Object.entries(filters || {})
+          .filter(([, v]) => v !== undefined && v !== '' && v !== null)
+          .map(([k, v]) => [k, String(v)])
+      )
     );
     return request<ReelListResponse>(`/api/reels?${params}`);
   },
 
   getReel: (id: string) => request<Reel>(`/api/reels/${id}`),
+
+  searchReels: (q: string, limit = 24, offset = 0) =>
+    request<ReelListResponse>(`/api/reels/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
 
   resummarize: (id: string) =>
     request<Reel>(`/api/reels/${id}/resummarize`, { method: 'POST' }),

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import or_, func, cast, String
 import uuid
 import re
 import time
@@ -57,10 +58,12 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks, db: Sess
             future = _executor.submit(extractor.extract_info, canonical_url)
             info = future.result(timeout=EXTRACT_TIMEOUT)
         except FuturesTimeout:
-            logger.error(f"[SAVE] Timed out extracting: {canonical_url}")
+            _platform = extractor.detect_platform(canonical_url)
+            logger.error(f"[SAVE] timeout platform={_platform} url={canonical_url}")
             raise HTTPException(status_code=422, detail="Extraction timed out. The platform may be slow or the URL is not accessible. Try again.")
         except Exception as e:
-            logger.error(f"[SAVE] Extraction failed for {canonical_url}: {type(e).__name__}: {e}")
+            _platform = extractor.detect_platform(canonical_url)
+            logger.error(f"[SAVE] failed platform={_platform} url={canonical_url}: {type(e).__name__}: {e}")
             raise HTTPException(status_code=422, detail=f"Could not extract content from URL: {str(e)}")
 
         if info.get("extracted"):
@@ -112,6 +115,7 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks, db: Sess
     db.commit()
     db.refresh(reel)
 
+    logger.info(f"[SAVE] success platform={reel.platform} id={reel.id}")
     if should_summarize:
         background_tasks.add_task(_summarize_reel, reel.id)
 
@@ -123,21 +127,56 @@ def list_reels(
     tag: str = None,
     category: str = None,
     platform: str = None,
+    limit: int = 1000,
+    offset: int = 0,
     db: Session = Depends(get_db)
 ):
-    query = db.query(ReelDB)
+    """`total` is the full count for the active filter; `items` is the requested
+    page. Clients paginate with limit/offset and stop when offset+len >= total.
+    Default limit is high so callers that just want counts (Landing) still work."""
+    limit = max(1, min(limit, 1000))
+    offset = max(0, offset)
 
+    query = db.query(ReelDB)
     if platform:
         query = query.filter(ReelDB.platform == platform)
     if category:
         query = query.filter(ReelDB.category == category)
 
-    reels = query.order_by(ReelDB.created_at.desc()).all()
-
     if tag:
-        reels = [r for r in reels if r.tags and tag.lower() in [t.lower() for t in r.tags]]
+        # tags is a JSON array — SQLite can't index into it, so filter in Python
+        # over the full set, then slice the page.
+        rows = query.order_by(ReelDB.created_at.desc()).all()
+        matched = [r for r in rows if r.tags and tag.lower() in [t.lower() for t in r.tags]]
+        total = len(matched)
+        page = matched[offset:offset + limit]
+    else:
+        total = query.count()
+        page = query.order_by(ReelDB.created_at.desc()).offset(offset).limit(limit).all()
 
-    return ReelListResponse(total=len(reels), items=[_to_response(r) for r in reels])
+    return ReelListResponse(total=total, items=[_to_response(r) for r in page])
+
+
+@router.get("/search", response_model=ReelListResponse)
+def search_reels(q: str = "", limit: int = 24, offset: int = 0, db: Session = Depends(get_db)):
+    """Full-library search across title, notes, summary, and tags."""
+    q = q.strip()
+    if not q:
+        return ReelListResponse(total=0, items=[])
+    limit = max(1, min(limit, 100))
+    offset = max(0, offset)
+    term = f"%{q.lower()}%"
+    query = db.query(ReelDB).filter(
+        or_(
+            func.lower(ReelDB.title).like(term),
+            func.lower(ReelDB.notes).like(term),
+            func.lower(cast(ReelDB.summary, String)).like(term),
+            func.lower(cast(ReelDB.tags, String)).like(term),
+        )
+    ).order_by(ReelDB.created_at.desc())
+    total = query.count()
+    page = query.offset(offset).limit(limit).all()
+    return ReelListResponse(total=total, items=[_to_response(r) for r in page])
 
 
 @router.get("/{reel_id}", response_model=ReelResponse)
