@@ -5,6 +5,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from './Icon';
 import { Reel, api } from '../services/api';
+import * as haptics from '../services/haptics';
 import { Pressable } from './Pressable';
 import { colors, spacing, radius, font, shadow, gradients, platformMeta, categoryFor } from '../constants/theme';
 
@@ -45,6 +46,7 @@ export function ReelCard({ reel, index = 0, onDelete }: ReelCardProps) {
   const handleDelete = async () => {
     const confirmed = Platform.OS === 'web' ? window.confirm('Remove this saved reel?') : true;
     if (!confirmed) return;
+    haptics.tap();
     destroyAndRemove();                        // animate out immediately
     api.deleteReel(reel.id).catch(() => {});   // delete on the backend in the background
   };

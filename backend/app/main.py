@@ -16,6 +16,20 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 
+# Error monitoring — only active when SENTRY_DSN is set (prod). No DSN = no-op, so
+# local/CI run untouched. Captures unhandled exceptions across all routes.
+if settings.SENTRY_DSN:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENV,
+        # Sample 10% of requests for performance tracing — enough signal, low overhead.
+        traces_sample_rate=0.1,
+        # Don't attach request bodies; saved URLs/notes can be personal.
+        send_default_pii=False,
+    )
+    logging.getLogger(__name__).info("[SENTRY] error monitoring enabled")
+
 app = FastAPI(title="SaveHere API", version="1.0.0")
 
 # Dev: allow any origin (any localhost port / Codespace tunnel). Production: read

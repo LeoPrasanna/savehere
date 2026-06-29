@@ -34,6 +34,57 @@ class TestDetectPlatform:
         assert extractor.detect_platform("https://example.com/x") == "unknown"
 
 
+class TestOg:
+    def test_reads_og_property(self):
+        html = '<meta property="og:title" content="Hello World">'
+        assert extractor._og(html, "title") == "Hello World"
+
+    def test_unescapes_entities(self):
+        html = '<meta property="og:description" content="Tom &amp; Jerry &lt;3">'
+        assert extractor._og(html, "description") == "Tom & Jerry <3"
+
+    def test_multiline_content_is_preserved(self):
+        # Instagram recipe captions span newlines inside one <meta> tag.
+        html = '<meta property="og:description" content="Step 1\nStep 2">'
+        assert extractor._og(html, "description") == "Step 1\nStep 2"
+
+    def test_missing_property_returns_empty(self):
+        assert extractor._og('<meta property="og:title" content="x">', "image") == ""
+
+    def test_does_not_hang_on_huge_minified_page(self):
+        # Regression guard: the old whole-document DOTALL pattern backtracked for
+        # tens of seconds on ~600 KB of inline script with no clean <head>.
+        import time
+        html = '<script>' + ("var x=1;" * 80_000) + '</script>' \
+               '<meta property="og:title" content="Found">'
+        start = time.monotonic()
+        assert extractor._og(html, "title") == "Found"
+        assert time.monotonic() - start < 1.0
+
+
+class TestExtractJsonld:
+    def test_pulls_article_body(self):
+        html = (
+            '<script type="application/ld+json">'
+            '{"articleBody": "Full LinkedIn post text", "headline": "Title"}'
+            '</script>'
+        )
+        result = extractor._extract_jsonld(html)
+        assert result["articleBody"] == "Full LinkedIn post text"
+        assert result["headline"] == "Title"
+
+    def test_handles_list_of_blocks(self):
+        html = (
+            '<script type="application/ld+json">'
+            '[{"@type": "WebPage"}, {"text": "Body via text field"}]'
+            '</script>'
+        )
+        assert extractor._extract_jsonld(html)["articleBody"] == "Body via text field"
+
+    def test_invalid_json_is_skipped(self):
+        assert extractor._extract_jsonld('<script type="application/ld+json">{bad}</script>') == {}
+
+
 class TestParseVtt:
     def test_dedupes_strips_tags_and_metadata(self):
         vtt = (
