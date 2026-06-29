@@ -53,6 +53,16 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
 
+  // Summaries are generated in the background after save, so silently re-poll the
+  // list while any card is still "pending" — they flip to the real summary without
+  // a manual pull-to-refresh. Stops as soon as nothing is pending.
+  const hasPending = reels.some(r => r.summary_status === 'pending');
+  useEffect(() => {
+    if (!entered || !hasPending) return;
+    const t = setInterval(() => { load(); }, 4000);
+    return () => clearInterval(t);
+  }, [entered, hasPending, load]);
+
   const onCategoryChange = (cat: string) => {
     setActiveCategory(cat);
     setLoading(true);

@@ -55,6 +55,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 ## Mobile — Features
 
 - [ ] **Share Extension (iOS)** — same as blocker above; listed here for implementation tracking.
+- [x] **Library auto-refresh while summarizing** — the home grid polls every 4s while any card is `pending` so background summaries appear without a manual reload (pull-to-refresh also available).
 - [ ] **Deep linking** — when Share Extension saves a reel, open the detail screen directly (`savehere://reel/{id}`).
 - [ ] **Pagination / infinite scroll** — `GET /api/reels` returns all records. Add `limit`/`offset` and FlatList `onEndReached` for large libraries.
 - [ ] **Offline banner** — detect no network and show a non-blocking banner instead of silently failing.
@@ -85,7 +86,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [ ] **Pagination on list endpoint** — add `?limit=20&offset=0` query params to `GET /api/reels`.
 - [x] **Structured logging** — `logging` configured in `main.py`; extraction/save/cache paths log with levels. *(TODO: add per-request IDs.)*
 - [ ] **Error monitoring** — integrate Sentry (`sentry-sdk[fastapi]`) for automatic exception capture.
-- [ ] **Background task for extraction** — `POST /save` currently blocks the HTTP request for 5–15 seconds. Move extraction + summarization to a background worker (Celery or FastAPI `BackgroundTasks`) and poll for completion.
+- [x] **Background summary (instant save)** — `POST /save` returns as soon as metadata is extracted; the Claude summary runs in a FastAPI `BackgroundTask` (`summary_status`: pending→ready/skipped/failed). **Durability:** orphaned `pending` summaries (in-process task lost on restart/cold-start) are re-enqueued on startup (`recover_pending_summaries`, capped at 25); the detail screen polls and offers a manual retry if it stalls past ~60s.
 - [ ] **Whisper local fallback** — for audio-only content with no captions, add local `openai-whisper` library as a free alternative to the OpenAI Whisper API.
 - [ ] **Apify LinkedIn integration** — use `APIFY_API_KEY` to call the Apify LinkedIn Post Scraper, bypassing the login wall.
 - [ ] **Alembic migrations** — replace the current `ALTER TABLE` try/except hack in `database.py` with proper Alembic migration files.

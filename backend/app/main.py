@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import create_tables
-from app.routes.reels import router as reels_router
+from app.routes.reels import router as reels_router, recover_pending_summaries
 from app.routes.workout import router as workout_router
 from app.routes.ask import router as ask_router
 
@@ -46,6 +46,9 @@ app.include_router(ask_router)
 @app.on_event("startup")
 def startup():
     create_tables()
+    # Heal summaries orphaned by a previous process death (instant-save runs the
+    # summary in an in-process background task that doesn't survive a restart).
+    recover_pending_summaries()
 
 
 @app.get("/health")

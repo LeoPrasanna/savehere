@@ -32,6 +32,9 @@ CACHE_TTL_DAYS = 14       # re-extract if the cached entry is older than this
 _PRUNE_INTERVAL = 3600    # seconds between prune attempts
 _last_prune = 0.0
 
+# Max orphaned summaries to re-enqueue on startup (see recover_pending_summaries).
+PENDING_RECOVERY_LIMIT = 25
+
 router = APIRouter(prefix="/api/reels", tags=["reels"])
 
 
@@ -407,3 +410,31 @@ def _summarize_reel(reel_id: str) -> None:
             pass
     finally:
         db.close()
+
+
+def recover_pending_summaries() -> None:
+    """Re-enqueue summaries left in 'pending' by a previous process that died
+    mid-task. FastAPI BackgroundTasks run in-process, so a restart/crash/cold-start
+    (common on free hosting) orphans any in-flight summary — without this it would
+    be stuck 'Summarizing…' forever. Called once on startup. Bounded so a backlog
+    can't trigger a cost spike; anything beyond the cap is left for manual retry."""
+    db = SessionLocal()
+    try:
+        rows = (
+            db.query(ReelDB.id)
+            .filter(ReelDB.summary_status == "pending")
+            .order_by(ReelDB.created_at.desc())
+            .limit(PENDING_RECOVERY_LIMIT)
+            .all()
+        )
+        ids = [r[0] for r in rows]
+    except Exception as e:
+        logger.warning(f"[RECOVER] could not query pending summaries: {e}")
+        return
+    finally:
+        db.close()
+
+    for rid in ids:
+        _executor.submit(_summarize_reel, rid)
+    if ids:
+        logger.info(f"[RECOVER] re-enqueued {len(ids)} orphaned pending summary task(s)")

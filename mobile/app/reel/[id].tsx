@@ -54,16 +54,21 @@ export default function ReelDetailScreen() {
   }, [id]);
 
   // The summary is generated in the background after save, so poll until it lands.
+  // If polling gives up while still pending (server was down longer than the cap),
+  // mark it "stalled" so the UI offers a manual retry instead of an endless spinner.
+  // (The backend also re-enqueues orphaned pending summaries on restart.)
+  const [pendingStalled, setPendingStalled] = useState(false);
   useEffect(() => {
     if (reel?.summary_status !== 'pending') return;
+    setPendingStalled(false);
     let tries = 0;
     const timer = setInterval(async () => {
       tries++;
       try {
         const fresh = await api.getReel(id);
-        if (fresh.summary_status !== 'pending') { setReel(fresh); clearInterval(timer); }
+        if (fresh.summary_status !== 'pending') { setReel(fresh); clearInterval(timer); return; }
       } catch {}
-      if (tries >= 24) clearInterval(timer);   // ~60s safety cap
+      if (tries >= 24) { clearInterval(timer); setPendingStalled(true); }   // ~60s cap
     }, 2500);
     return () => clearInterval(timer);
   }, [reel?.summary_status, id]);
@@ -97,6 +102,7 @@ export default function ReelDetailScreen() {
 
   // Run/retry the first summary (pending stuck or failed).
   const handleSummarizeNow = async () => {
+    setPendingStalled(false);
     setSummarizing(true);
     try {
       const updated = await api.summarizeReel(id);
@@ -203,7 +209,7 @@ export default function ReelDetailScreen() {
   const platform = platformMeta[reel.platform] ?? platformMeta.unknown;
   const cat = categoryFor(reel.category);
   const limitReached = reel.summarize_count >= RESUMMARIZE_LIMIT;
-  const isSummarizing = reel.summary_status === 'pending' || summarizing;
+  const isSummarizing = (reel.summary_status === 'pending' && !pendingStalled) || summarizing;
   const isCooking = (reel.category || '').toLowerCase() === 'cooking';
   const loginWalled = reel.platform === 'linkedin' || reel.platform === 'facebook';
   const TASKS_LIMIT = 1;   // tasks/steps are AI-generated once; then edited by hand
@@ -299,14 +305,18 @@ export default function ReelDetailScreen() {
               <Text style={styles.bulletText}>{point}</Text>
             </View>
           ))
-        ) : reel.summary_status === 'failed' ? (
+        ) : (reel.summary_status === 'failed' || pendingStalled) ? (
           <View style={styles.emptySummary}>
             <Icon name="alert-circle" size={28} color={colors.danger} style={{ marginBottom: spacing.xs }} />
-            <Text style={styles.emptyTitle}>Summary didn't finish</Text>
-            <Text style={styles.emptyHint}>Something interrupted the AI summary. Your card is saved — tap to try again.</Text>
-            <Pressable style={[styles.pill, { marginTop: spacing.sm }]} onPress={handleSummarizeNow}>
-              <Ionicons name="refresh" size={13} color={colors.accent} />
-              <Text style={styles.pillText}>Try again</Text>
+            <Text style={styles.emptyTitle}>{pendingStalled ? 'Still summarizing…' : "Summary didn't finish"}</Text>
+            <Text style={styles.emptyHint}>
+              {pendingStalled
+                ? 'This is taking longer than usual. Your card is saved — tap to run the summary now.'
+                : 'Something interrupted the AI summary. Your card is saved — tap to try again.'}
+            </Text>
+            <Pressable style={[styles.pill, { marginTop: spacing.sm }]} onPress={handleSummarizeNow} disabled={summarizing}>
+              {summarizing ? <ActivityIndicator size="small" color={colors.accent} /> : <Ionicons name="refresh" size={13} color={colors.accent} />}
+              <Text style={styles.pillText}>{summarizing ? 'Summarizing…' : 'Try again'}</Text>
             </Pressable>
           </View>
         ) : (
