@@ -1,20 +1,20 @@
 import { useState, useEffect, useRef } from 'react';
 import {
-  View, Text, StyleSheet, Modal, Dimensions, Animated, Platform,
+  View, Text, StyleSheet, Modal, Dimensions, Animated, Platform, useWindowDimensions,
 } from 'react-native';
 import { MotiView } from 'moti';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  Sparkles, Brain, Dumbbell, ChefHat, BookOpen, Zap, ArrowRight, ChevronRight,
+  Sparkles, Brain, Dumbbell, ChefHat, BookOpen, Zap, ArrowRight, X,
 } from 'lucide-react-native';
 import { Pressable } from './Pressable';
 import { GlassCard } from './GlassCard';
-import { HolographicShimmer } from './HolographicShimmer';
 import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
 
 const ONBOARDING_KEY = '@savehere:onboarding:v1';
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+const { width: SCREEN_W } = Dimensions.get('window');
 
 interface OnboardingStep {
   title: string;
@@ -86,12 +86,19 @@ export function OnboardingModal() {
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState(0);
   const [checked, setChecked] = useState(false);
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const cardWidth = Math.min(width - spacing.lg * 2, 400);
   const progress = useRef(new Animated.Value(0)).current;
   const slideX = useRef(new Animated.Value(0)).current;
+  const fadeIn = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     AsyncStorage.getItem(ONBOARDING_KEY).then((val) => {
-      if (!val) setVisible(true);
+      if (!val) {
+        setVisible(true);
+        Animated.timing(fadeIn, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+      }
       setChecked(true);
     });
   }, []);
@@ -125,173 +132,172 @@ export function OnboardingModal() {
   };
 
   const finish = () => {
-    AsyncStorage.setItem(ONBOARDING_KEY, 'completed');
-    setVisible(false);
+    Animated.timing(fadeIn, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+      AsyncStorage.setItem(ONBOARDING_KEY, 'completed');
+      setVisible(false);
+    });
   };
 
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
   const isFirst = step === 0;
+  const topSafe = insets.top + spacing.md;
 
   if (!checked) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" statusBarTranslucent>
-      <View style={styles.overlay}>
-        <LinearGradient
-          colors={['rgba(11,10,15,0.95)', 'rgba(20,16,36,0.97)']}
-          style={StyleSheet.absoluteFill}
-        />
-
-        {/* Animated background blobs */}
-        <MotiView
-          from={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 0.6, scale: 1.2 }}
-          transition={{ type: 'timing', duration: 8000, loop: true, repeatReverse: true }}
-          style={[styles.bgBlob, { backgroundColor: current.accent, top: '10%', left: '10%' }]}
-        />
-        <MotiView
-          from={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 0.4, scale: 1.3 }}
-          transition={{ type: 'timing', duration: 10000, loop: true, repeatReverse: true, delay: 2000 }}
-          style={[styles.bgBlob, { backgroundColor: colors.accent, bottom: '15%', right: '5%' }]}
-        />
-
-        {/* Progress bar */}
-        <View style={styles.progressWrap}>
-          <View style={styles.progressTrack}>
-            <Animated.View
-              style={[
-                styles.progressFill,
-                { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
-              ]}
-            >
-              <LinearGradient
-                colors={gradients.hologram}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={StyleSheet.absoluteFill}
-              />
-            </Animated.View>
-          </View>
-          <Text style={styles.progressText}>
-            {step + 1} / {STEPS.length}
-          </Text>
+    <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: fadeIn }]}>
+        {/* Dark solid overlay to dim the app behind */}
+        <View style={styles.backdrop} pointerEvents="none">
+          <LinearGradient
+            colors={['rgba(11,10,15,0.92)', 'rgba(11,10,15,0.96)', 'rgba(11,10,15,0.92)']}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 0, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
         </View>
 
-        {/* Skip */}
-        {!isLast && (
-          <Pressable style={styles.skipBtn} onPress={finish} scaleTo={0.95}>
-            <Text style={styles.skipText}>Skip</Text>
-          </Pressable>
-        )}
-
-        {/* Card */}
-        <Animated.View style={{ transform: [{ translateX: slideX }] }}>
-          <GlassCard tint="none" intensity="high" style={styles.card}>
-            <HolographicShimmer
-              width={SCREEN_W - spacing.lg * 2}
-              height={420}
-              color="rgba(255,255,255,0.05)"
-              duration={4000}
-              delay={step * 600}
-            />
-
-            {/* Icon circle */}
-            <MotiView
-              from={{ opacity: 0, scale: 0.5 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: 'spring', damping: 12, stiffness: 150 }}
-              style={styles.iconWrap}
-            >
-              <LinearGradient
-                colors={current.gradient}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={styles.iconGrad}
-              >
-                {current.icon}
-              </LinearGradient>
-              {/* Orbit ring */}
-              <MotiView
-                from={{ rotate: '0deg' }}
-                animate={{ rotate: '360deg' }}
-                transition={{ type: 'timing', duration: 8000, loop: true }}
-                style={[styles.orbitRing, { borderColor: current.accent + '40' }]}
-              />
-            </MotiView>
-
-            {/* Text */}
-            <MotiView
-              from={{ opacity: 0, translateY: 12 }}
-              animate={{ opacity: 1, translateY: 0 }}
-              transition={{ type: 'timing', duration: 400, delay: 150 }}
-              style={styles.textBlock}
-            >
-              <Text style={styles.title}>{current.title}</Text>
-              <Text style={styles.subtitle}>{current.subtitle}</Text>
-              <Text style={styles.description}>{current.description}</Text>
-            </MotiView>
-
-            {/* Dots */}
-            <View style={styles.dotsRow}>
-              {STEPS.map((_, i) => (
-                <View
-                  key={i}
+        <View style={[styles.overlay, { paddingTop: topSafe, paddingBottom: insets.bottom + spacing.lg }]}>
+          {/* Top bar: Progress + Skip */}
+          <View style={[styles.topBar, { paddingHorizontal: spacing.lg }]}>
+            <View style={styles.progressWrap}>
+              <View style={styles.progressTrack}>
+                <Animated.View
                   style={[
-                    styles.dot,
-                    i === step && { backgroundColor: current.accent, width: 24 },
-                    i < step && { backgroundColor: colors.textSecondary },
+                    styles.progressFill,
+                    { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
                   ]}
-                />
-              ))}
+                >
+                  <LinearGradient
+                    colors={gradients.hologram}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                </Animated.View>
+              </View>
+              <Text style={styles.progressText}>
+                {step + 1} / {STEPS.length}
+              </Text>
             </View>
 
-            {/* CTA */}
-            <Pressable onPress={goNext} scaleTo={0.97} style={styles.ctaWrap}>
-              <LinearGradient
-                colors={isLast ? gradients.success : current.gradient}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                style={styles.cta}
-              >
-                <Text style={styles.ctaText}>{isLast ? 'Get Started' : 'Next'}</Text>
-                <ArrowRight size={18} color="#FFF" />
-              </LinearGradient>
-            </Pressable>
-
-            {isFirst && (
-              <Text style={styles.terms}>
-                By continuing, you agree to our Terms and Privacy Policy.
-              </Text>
+            {!isLast && (
+              <Pressable style={styles.skipBtn} onPress={finish} scaleTo={0.95}>
+                <X size={18} color={colors.textSecondary} />
+                <Text style={styles.skipText}>Skip</Text>
+              </Pressable>
             )}
-          </GlassCard>
-        </Animated.View>
-      </View>
+          </View>
+
+          {/* Card */}
+          <View style={styles.cardContainer}>
+            <Animated.View style={{ transform: [{ translateX: slideX }], width: cardWidth }}>
+              <GlassCard tint="none" intensity="high" style={styles.card}>
+                {/* Animated accent glow behind icon */}
+                <MotiView
+                  from={{ opacity: 0.3, scale: 0.8 }}
+                  animate={{ opacity: 0.6, scale: 1.2 }}
+                  transition={{ type: 'timing', duration: 3000, loop: true, repeatReverse: true }}
+                  style={[
+                    styles.iconGlow,
+                    { backgroundColor: current.accent },
+                  ]}
+                />
+
+                {/* Icon circle */}
+                <MotiView
+                  from={{ opacity: 0, scale: 0.5 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ type: 'spring', damping: 12, stiffness: 150 }}
+                  style={styles.iconWrap}
+                >
+                  <LinearGradient
+                    colors={current.gradient}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                    style={styles.iconGrad}
+                  >
+                    {current.icon}
+                  </LinearGradient>
+                  {/* Orbit ring */}
+                  <MotiView
+                    from={{ rotate: '0deg' }}
+                    animate={{ rotate: '360deg' }}
+                    transition={{ type: 'timing', duration: 8000, loop: true }}
+                    style={[styles.orbitRing, { borderColor: current.accent + '40' }]}
+                  />
+                </MotiView>
+
+                {/* Text */}
+                <MotiView
+                  from={{ opacity: 0, translateY: 12 }}
+                  animate={{ opacity: 1, translateY: 0 }}
+                  transition={{ type: 'timing', duration: 400, delay: 150 }}
+                  style={styles.textBlock}
+                >
+                  <Text style={styles.title}>{current.title}</Text>
+                  <Text style={styles.subtitle}>{current.subtitle}</Text>
+                  <Text style={styles.description}>{current.description}</Text>
+                </MotiView>
+
+                {/* Dots */}
+                <View style={styles.dotsRow}>
+                  {STEPS.map((_, i) => (
+                    <View
+                      key={i}
+                      style={[
+                        styles.dot,
+                        i === step && { backgroundColor: current.accent, width: 24 },
+                        i < step && { backgroundColor: colors.textSecondary },
+                      ]}
+                    />
+                  ))}
+                </View>
+
+                {/* CTA */}
+                <Pressable onPress={goNext} scaleTo={0.97} style={styles.ctaWrap}>
+                  <LinearGradient
+                    colors={isLast ? gradients.success : current.gradient}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={styles.cta}
+                  >
+                    <Text style={styles.ctaText}>{isLast ? 'Get Started' : 'Next'}</Text>
+                    <ArrowRight size={18} color="#FFF" />
+                  </LinearGradient>
+                </Pressable>
+
+                {isFirst && (
+                  <Text style={styles.terms}>
+                    By continuing, you agree to our Terms and Privacy Policy.
+                  </Text>
+                )}
+              </GlassCard>
+            </Animated.View>
+          </View>
+        </View>
+      </Animated.View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  backdrop: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
+  },
   overlay: {
     flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: spacing.lg,
+    zIndex: 2,
   },
-  bgBlob: {
-    position: 'absolute',
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    opacity: 0.3,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 40 },
-      default: { elevation: 0 },
-    }),
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   progressWrap: {
-    position: 'absolute',
-    top: 60,
-    left: spacing.lg,
-    right: spacing.lg,
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
@@ -316,22 +322,41 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   skipBtn: {
-    position: 'absolute',
-    top: 52,
-    right: spacing.lg,
-    padding: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: radius.md,
+    backgroundColor: 'rgba(255,255,255,0.08)',
   },
   skipText: {
     color: colors.textSecondary,
     fontSize: font.sm,
     fontWeight: '700',
   },
+  cardContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+  },
   card: {
-    width: SCREEN_W - spacing.lg * 2,
-    maxWidth: 400,
     padding: spacing.lg,
     alignItems: 'center',
     gap: spacing.md,
+  },
+  iconGlow: {
+    position: 'absolute',
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    opacity: 0.3,
+    top: 24,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 40 },
+      default: { elevation: 0 },
+    }),
   },
   iconWrap: {
     width: 96,
@@ -390,6 +415,7 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.border,
+    transitionProperty: 'width',
   },
   ctaWrap: {
     width: '100%',
