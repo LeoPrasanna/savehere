@@ -31,6 +31,7 @@ const SAVE_NOTES = [
   'Private or login-only content (and most Facebook reels) can’t be read — you can still save the link and add your own notes.',
   'Summaries are AI-made, so a small detail might slip — easy to edit anytime.',
   'Your card appears in seconds — the AI summary finishes on its own right after.',
+  'We save the link and an AI summary for your personal reference — the content stays its creator’s.',
 ];
 
 function parseError(e: any): string {

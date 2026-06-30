@@ -160,7 +160,12 @@ def _og(html: str, prop: str) -> str:
     target = f"og:{prop}".lower()
     for m in re.finditer(r'<meta\s[^>]*>', html, re.IGNORECASE):
         tag = m.group(0)
-        if target not in tag.lower():
+        # Match the property/name attribute EXACTLY. A loose substring check let
+        # sub-properties masquerade as the base one — e.g. Facebook's
+        # 'og:image:alt' (caption text) was returned for 'og:image', so the
+        # thumbnail ended up being the title string instead of the image URL.
+        pm = re.search(r'(?:property|name)\s*=\s*["\']([^"\']+)["\']', tag, re.IGNORECASE)
+        if not pm or pm.group(1).strip().lower() != target:
             continue
         # DOTALL is safe here: it runs on one small <meta> tag, not the whole page —
         # and it's required because captions (e.g. Instagram recipes) span newlines.
@@ -243,6 +248,12 @@ def _extract_from_page(url: str) -> dict:
     # og:title can be the entire caption (Instagram dumps the whole recipe in it).
     # Keep just the first line, capped, so the card title stays short and readable.
     clean_title = re.sub(r'\s*\|\s*LinkedIn\s*$', '', title).strip()
+    # Facebook prefixes a reel's og:title with engagement counts, e.g.
+    # "205K views · 800 reactions | Real title" — strip that noise.
+    clean_title = re.sub(
+        r'^[\d.,kmb]+\s+(?:views?|reactions?|likes?|comments?|shares?)\b.*?\|\s*',
+        '', clean_title, flags=re.IGNORECASE,
+    )
     clean_title = clean_title.split('\n', 1)[0].strip()
     if len(clean_title) > 90:
         clean_title = clean_title[:90].rsplit(' ', 1)[0] + '…'
@@ -332,19 +343,27 @@ def extract_info(url: str) -> dict:
         transcript = _get_captions(ydl_info)
         best_text = transcript or description
         thumb = _pick_thumbnail(ydl_info, platform)
-        return {
-            "title": title,
-            "caption": description,
-            "transcript": transcript,
-            "best_text": best_text,
-            "thumbnail_url": thumb,
-            "duration": int(ydl_info.get("duration") or 0),
-            "platform": platform,
-            "uploader": ydl_info.get("uploader") or "",
-            "needs_audio": not best_text or len(best_text.strip()) < 40,
-            # Only "extracted" (cacheable / not junk) if we actually got something.
-            "extracted": bool((best_text or "").strip()) or bool(thumb),
-        }
+        # yt-dlp with process=False can return a truthy but EMPTY shell for gated
+        # platforms — notably Facebook reels yield a dict with no title, thumbnail
+        # or text. Trusting it here short-circuits the public-og: fallback below,
+        # which DOES read the title/thumbnail/caption via the crawler UA. So only
+        # take this path when yt-dlp actually produced something; otherwise fall
+        # through to the page-meta / oEmbed fallbacks.
+        if title or thumb or best_text.strip():
+            return {
+                "title": title,
+                "caption": description,
+                "transcript": transcript,
+                "best_text": best_text,
+                "thumbnail_url": thumb,
+                "duration": int(ydl_info.get("duration") or 0),
+                "platform": platform,
+                "uploader": ydl_info.get("uploader") or "",
+                "needs_audio": not best_text or len(best_text.strip()) < 40,
+                # Only "extracted" (cacheable / not junk) if we actually got something.
+                "extracted": bool((best_text or "").strip()) or bool(thumb),
+            }
+        logger.info(f"[EXTRACT] yt-dlp returned an empty shell for {url} — using page-meta fallback")
 
     if last_err:
         logger.error(f"[EXTRACT] all yt-dlp attempts failed for {url}: {type(last_err).__name__}: {last_err}")

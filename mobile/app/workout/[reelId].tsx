@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, WorkoutExercise, WorkoutPlan } from '../../services/api';
 import { Pressable } from '../../components/Pressable';
 import { AuroraBackground } from '../../components/AuroraBackground';
+import { Disclaimer } from '../../components/Disclaimer';
 import { colors, spacing, font, radius, gradients, shadow } from '../../constants/theme';
 
 const MUSCLE_ICON: Record<string, string> = {
@@ -139,6 +140,8 @@ export default function WorkoutPlanScreen() {
             </View>
           );
         })}
+
+        <Disclaimer variant="fitness" style={{ marginTop: spacing.xs }} />
       </ScrollView>
 
       {/* Start button */}

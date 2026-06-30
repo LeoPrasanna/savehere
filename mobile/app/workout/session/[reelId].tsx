@@ -10,6 +10,7 @@ import { api, WorkoutExercise, WorkoutPlan } from '../../../services/api';
 import { Pressable } from '../../../components/Pressable';
 import { FloatingHomeButton, goHome } from '../../../components/HomeButton';
 import { AuroraBackground } from '../../../components/AuroraBackground';
+import { Disclaimer } from '../../../components/Disclaimer';
 import { colors, spacing, font, radius, gradients, shadow } from '../../../constants/theme';
 
 type Phase = 'loading' | 'ready' | 'exercise' | 'rest' | 'complete';
@@ -164,7 +165,8 @@ export default function WorkoutSessionScreen() {
           ))}
         </ScrollView>
 
-        <View style={{ paddingBottom: insets.bottom + spacing.md }}>
+        <View style={{ paddingBottom: insets.bottom + spacing.md, gap: spacing.sm }}>
+          <Disclaimer variant="fitness" />
           <GradientButton icon="play" label="Begin Workout" gradient={gradients.primary} onPress={() => setPhase('exercise')} />
         </View>
       </View>

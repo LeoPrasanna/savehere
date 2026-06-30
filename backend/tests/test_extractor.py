@@ -51,6 +51,21 @@ class TestOg:
     def test_missing_property_returns_empty(self):
         assert extractor._og('<meta property="og:title" content="x">', "image") == ""
 
+    def test_sub_property_does_not_masquerade(self):
+        # Regression: 'og:image:alt' (caption text) must NOT be returned for
+        # 'og:image'. Facebook emits the alt tag, and the old substring match
+        # returned it — so the thumbnail became the title string, not the image URL.
+        html = (
+            '<meta property="og:image:alt" content="A caption describing it">'
+            '<meta property="og:image" content="https://cdn.example/pic.jpg">'
+        )
+        assert extractor._og(html, "image") == "https://cdn.example/pic.jpg"
+
+    def test_matches_when_content_precedes_property(self):
+        # Attribute order within the tag must not matter.
+        html = '<meta content="https://cdn.example/x.jpg" property="og:image">'
+        assert extractor._og(html, "image") == "https://cdn.example/x.jpg"
+
     def test_does_not_hang_on_huge_minified_page(self):
         # Regression guard: the old whole-document DOTALL pattern backtracked for
         # tens of seconds on ~600 KB of inline script with no clean <head>.

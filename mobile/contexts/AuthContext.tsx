@@ -16,6 +16,8 @@ interface AuthState {
   email: string | null;
   profile: Profile;          // from Supabase user_metadata
   displayName: string;       // what to address them by: nickname > first name > email
+  celebrate: boolean;        // one-shot: play the welcome confetti over the whole app
+  triggerCelebrate: () => void;
   updateProfile: (fields: Profile) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
@@ -33,6 +35,8 @@ const AuthContext = createContext<AuthState>({
   email: null,
   profile: {},
   displayName: 'there',
+  celebrate: false,
+  triggerCelebrate: () => {},
   updateProfile: async () => ({ error: null }),
   signOut: async () => {},
 });
@@ -40,6 +44,15 @@ const AuthContext = createContext<AuthState>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [celebrate, setCelebrate] = useState(false);
+
+  // Fired on successful sign-in. Lives here (not in LoginScreen) because the auth
+  // gate unmounts LoginScreen the instant a session exists — so the confetti must
+  // be owned above the gate to survive the login→app transition.
+  const triggerCelebrate = () => {
+    setCelebrate(true);
+    setTimeout(() => setCelebrate(false), 2400);
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -83,7 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, loading, email, profile, displayName, updateProfile, signOut }}
+      value={{ session, loading, email, profile, displayName, celebrate, triggerCelebrate, updateProfile, signOut }}
     >
       {children}
     </AuthContext.Provider>
