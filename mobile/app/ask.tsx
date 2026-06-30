@@ -9,6 +9,7 @@ import { api, AskResponse } from '../services/api';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { AuroraBackground } from '../components/AuroraBackground';
+import { Disclaimer } from '../components/Disclaimer';
 import { colors, spacing, font, radius, gradients, categoryFor } from '../constants/theme';
 
 const SUGGESTIONS = [
@@ -102,6 +103,8 @@ export default function AskScreen() {
                 </View>
                 <Text style={styles.answerText}>{result.answer}</Text>
               </View>
+
+              <Disclaimer variant="ai" />
 
               {result.sources.length > 0 && (
                 <>

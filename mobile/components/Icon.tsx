@@ -7,7 +7,7 @@ import {
   ChefHat, Cpu, Flame, GraduationCap, Clapperboard, Shirt, Plane, Briefcase,
   Newspaper, HeartPulse, Wallet, Globe, ShoppingCart, CookingPot, Soup, Timer,
   BookOpen, Code, PenLine, Search, Phone, Target, Brain, Wrench, Palette, Leaf,
-  PartyPopper, Eye, Scissors,
+  PartyPopper, Eye, EyeOff, Scissors, Mail, KeyRound,
   Menu, UserRound, Settings, Bell, Download, LogIn, ChevronRight, Bookmark, Layers, Shield,
   MessageCircle, Compass, ArrowLeft, Send,
 } from 'lucide-react-native';
@@ -23,7 +23,8 @@ const MAP: Record<string, any> = {
   link: Link2, 'document-text': FileText, hourglass: Hourglass, time: Clock,
   'time-outline': Clock, home: House, 'arrow-forward': ArrowRight, remove: Minus,
   add: Plus, repeat: Repeat, 'lock-closed': Lock, refresh: RefreshCw,
-  restaurant: UtensilsCrossed, lock: Lock, eye: Eye, celebrate: PartyPopper,
+  restaurant: UtensilsCrossed, lock: Lock, eye: Eye, 'eye-off': EyeOff,
+  mail: Mail, key: KeyRound, celebrate: PartyPopper,
   menu: Menu, user: UserRound, settings: Settings, bell: Bell, download: Download,
   login: LogIn, 'chevron-right': ChevronRight, bookmark: Bookmark, layers: Layers, shield: Shield,
   ask: MessageCircle, rediscover: Compass, back: ArrowLeft, send: Send,

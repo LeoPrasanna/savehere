@@ -4,6 +4,7 @@ import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { HeaderHomeButton } from '../components/HomeButton';
 import { LoginScreen } from '../components/LoginScreen';
+import { Confetti } from '../components/Confetti';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { colors, font } from '../constants/theme';
 
@@ -37,15 +38,23 @@ function AppStack() {
 // screen when signed out, the app once a session exists. LoginScreen doesn't
 // navigate — AuthProvider's listener flips this gate on sign-in/out.
 function Gate() {
-  const { session, loading } = useAuth();
-  if (loading) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator color={colors.accent} size="large" />
-      </View>
-    );
-  }
-  return session ? <AppStack /> : <LoginScreen />;
+  const { session, loading, celebrate } = useAuth();
+  return (
+    <>
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.accent} size="large" />
+        </View>
+      ) : session ? (
+        <AppStack />
+      ) : (
+        <LoginScreen />
+      )}
+      {/* Welcome confetti — overlaid above the gate so it keeps playing as the app
+          mounts after sign-in. */}
+      {celebrate && <Confetti />}
+    </>
+  );
 }
 
 export default function RootLayout() {

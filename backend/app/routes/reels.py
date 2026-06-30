@@ -223,7 +223,12 @@ def resummarize_reel(reel_id: str, user: AuthUser = Depends(get_current_user), d
             detail=f"Re-summarize limit of {RESUMMARIZE_LIMIT} reached for this reel."
         )
 
-    source_text = reel.raw_text or reel.notes
+    # Combine the extracted text with the user's notes so notes they deliberately
+    # add always shape the re-summary — raw_text alone used to shadow them entirely,
+    # so adding notes to a reel that already had some caption did nothing.
+    source_text = "\n\n".join(
+        p.strip() for p in (reel.raw_text, reel.notes) if p and p.strip()
+    )
     if not source_text:
         raise HTTPException(
             status_code=422,

@@ -12,6 +12,7 @@ import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
 import { goHome } from '../../components/HomeButton';
 import { TaskList } from '../../components/TaskList';
+import { Disclaimer } from '../../components/Disclaimer';
 import { AuroraBackground } from '../../components/AuroraBackground';
 import { colors, spacing, font, radius, gradients, shadow, platformMeta, categoryFor, categoryMeta, CATEGORY_OPTIONS } from '../../constants/theme';
 
@@ -91,6 +92,10 @@ export default function ReelDetailScreen() {
     if (!reel || reel.summarize_count >= RESUMMARIZE_LIMIT) return;
     setResummarizing(true);
     try {
+      // Flush any just-typed note first — the 1s auto-save debounce may not have
+      // fired yet, so without this the latest notes wouldn't reach the re-summary.
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (notes.trim()) { try { await api.updateNotes(id, notes); } catch {} }
       const updated = await api.resummarize(id);
       setReel(updated);
       haptics.success();
@@ -307,12 +312,15 @@ export default function ReelDetailScreen() {
             <Text style={styles.emptyHint}>Reading the content and writing your summary. This card is already saved — feel free to leave; it'll be ready when you come back.</Text>
           </View>
         ) : reel.summary.length > 0 ? (
-          reel.summary.map((point, i) => (
-            <View key={i} style={styles.bulletRow}>
-              <View style={styles.bulletDot} />
-              <Text style={styles.bulletText}>{point}</Text>
-            </View>
-          ))
+          <>
+            {reel.summary.map((point, i) => (
+              <View key={i} style={styles.bulletRow}>
+                <View style={styles.bulletDot} />
+                <Text style={styles.bulletText}>{point}</Text>
+              </View>
+            ))}
+            <Disclaimer variant="ai" style={{ marginTop: spacing.sm }} />
+          </>
         ) : (reel.summary_status === 'failed' || pendingStalled) ? (
           <View style={styles.emptySummary}>
             <Icon name="alert-circle" size={28} color={colors.danger} style={{ marginBottom: spacing.xs }} />
@@ -447,6 +455,7 @@ export default function ReelDetailScreen() {
               <Text style={styles.disclaimerText}>{taskList.note}</Text>
             </View>
           ) : null}
+          {isCooking && <Disclaimer variant="recipe" style={{ marginTop: spacing.sm }} />}
           <View style={{ marginTop: spacing.sm }}>
             <TaskList
               tasks={taskList.tasks}
