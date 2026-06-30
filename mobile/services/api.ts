@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { getAccessToken } from './supabase';
 
 // Local dev defaults to localhost; override for cloud dev (e.g. a Codespace's
 // forwarded backend URL) by setting EXPO_PUBLIC_API_URL before `expo start`.
@@ -93,10 +94,17 @@ async function request<T>(path: string, options?: RequestInit, timeoutMs = 55000
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    // Attach the Supabase access token so the backend can scope to this user.
+    // supabase-js auto-refreshes, so this is current; null when logged out.
+    const token = await getAccessToken();
     const res = await fetch(`${BASE_URL}${path}`, {
-      headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
       ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(options?.headers || {}),
+      },
+      signal: controller.signal,
     });
     if (!res.ok) {
       const err = await res.text();

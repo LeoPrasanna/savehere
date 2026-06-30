@@ -9,11 +9,10 @@ import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { AuroraBackground } from './AuroraBackground';
 import { ProfilePanel } from './ProfilePanel';
+import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
 import { FEATURES, Feature } from '../constants/features';
 
-// TODO: comes from the signed-in account once auth lands. Hardcoded for the draft.
-const USER_NAME = 'Prasanna';
 const TIER = 'Free';
 // Surface "Ask your library" prominently once there's enough saved to answer from.
 // Low bar: retrieval works on whatever's saved, and hiding it hurts discoverability.
@@ -22,6 +21,7 @@ const ASK_MIN_REELS = 3;
 export function Landing({ onEnter }: { onEnter: () => void }) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { email, displayName: userName } = useAuth();
   const [reels, setReels] = useState<Reel[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -55,7 +55,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
       >
         <MotiView from={{ opacity: 0, translateY: -10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 450 }} style={styles.headerRow}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.hi}>Hi, {USER_NAME} 👋</Text>
+            <Text style={styles.hi}>Hi, {userName} 👋</Text>
             <Text style={styles.welcome}>Welcome to SaveHere</Text>
           </View>
           <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)} scaleTo={0.9}>
@@ -68,8 +68,8 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
             <Icon name="user" size={24} color="#FFF" />
           </LinearGradient>
           <View style={{ flex: 1 }}>
-            <Text style={styles.tierName}>{USER_NAME}</Text>
-            <Text style={styles.tierSub}>Saved on this device</Text>
+            <Text style={styles.tierName} numberOfLines={1}>{userName}</Text>
+            <Text style={styles.tierSub} numberOfLines={1}>{email ?? 'Synced to your account'}</Text>
           </View>
           <View style={styles.tierBadge}><Text style={styles.tierBadgeText}>{TIER}</Text></View>
         </View>
@@ -131,7 +131,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
 
         <View style={styles.upsell}>
           <Icon name="sparkles" size={16} color={colors.accentLight} />
-          <Text style={styles.upsellText}>You're on the <Text style={styles.upsellStrong}>{TIER} tier</Text> — unlimited saves on this device. Pro plans coming soon.</Text>
+          <Text style={styles.upsellText}>You're on the <Text style={styles.upsellStrong}>{TIER} tier</Text> — unlimited saves, synced to your account. Pro plans coming soon.</Text>
         </View>
 
         {/* What you can do — save anything, turn it into action */}

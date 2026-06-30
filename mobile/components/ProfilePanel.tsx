@@ -6,6 +6,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Reel } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
+import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
 
 const APP_VERSION = '1.0.0';
@@ -26,6 +27,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const panelWidth = Math.min(330, width * 0.86);
+  const { email, displayName, signOut } = useAuth();
 
   const go = (path: string) => { onClose(); router.push(path as any); };
 
@@ -80,23 +82,25 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
               <Pressable onPress={onClose} hitSlop={10}><Icon name="close" size={20} color={colors.textSecondary} /></Pressable>
             </View>
 
-            {/* Account block (placeholder until auth) */}
+            {/* Account block */}
             <View style={styles.account}>
               <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
                 <Icon name="user" size={26} color="#FFF" />
               </LinearGradient>
-              <Text style={styles.name}>Guest</Text>
-              <Text style={styles.sub}>Saved on this device</Text>
+              <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
+              <Text style={styles.sub} numberOfLines={1}>{email ?? 'Synced to your account'}</Text>
             </View>
 
-            <View style={styles.signInWrap}>
+            <Pressable
+              style={styles.signInWrap}
+              scaleTo={0.98}
+              onPress={() => { onClose(); signOut(); }}
+            >
               <View style={styles.signIn}>
-                <Icon name="login" size={16} color={colors.textSecondary} />
-                <Text style={styles.signInText}>Sign in</Text>
-                <View style={styles.soon}><Text style={styles.soonText}>Soon</Text></View>
+                <Icon name="login" size={16} color={colors.danger} />
+                <Text style={[styles.signInText, { color: colors.danger }]}>Sign out</Text>
               </View>
-              <Text style={styles.signInHint}>Accounts & cloud sync are coming. For now your library lives on this device.</Text>
-            </View>
+            </Pressable>
 
             {/* Library stats */}
             <Text style={styles.sectionLabel}>YOUR LIBRARY</Text>
@@ -114,9 +118,10 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
               <NavRow icon="sparkles" label="What you can do" path="/help" />
             </View>
 
-            {/* Settings (placeholders) */}
+            {/* Settings */}
             <Text style={styles.sectionLabel}>SETTINGS</Text>
             <View style={styles.menu}>
+              <NavRow icon="create" label="Edit profile" path="/profile" />
               <Row icon="settings" label="Appearance" />
               <Row icon="bell" label="Notifications" />
               <Row icon="download" label="Export data" />

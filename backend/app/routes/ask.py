@@ -7,6 +7,7 @@ from app.models.reel import ReelResponse
 from app.services import librarian
 from app.routes.reels import _to_response
 from app.ratelimit import rate_limit
+from app.auth import get_current_user, AuthUser
 
 router = APIRouter(prefix="/api", tags=["ask"])
 
@@ -39,12 +40,17 @@ class AskResponse(BaseModel):
         Depends(rate_limit(ASK_DAILY_LIMIT, 86400, "ask_daily", message=_ASK_DAILY_MSG)),  # daily budget cap
     ],
 )
-def ask(body: AskRequest, db: Session = Depends(get_db)):
+def ask(body: AskRequest, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     q = (body.question or "").strip()
     if len(q) < 3:
         raise HTTPException(status_code=422, detail="Ask a real question — a few words at least.")
 
-    reels = db.query(ReelDB).order_by(ReelDB.created_at.desc()).all()
+    reels = (
+        db.query(ReelDB)
+        .filter(ReelDB.user_id == user.id)
+        .order_by(ReelDB.created_at.desc())
+        .all()
+    )
     payload = [
         {"id": r.id, "title": r.title, "summary": r.summary or [], "tags": r.tags or [], "notes": r.notes}
         for r in reels

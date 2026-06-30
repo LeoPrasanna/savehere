@@ -12,6 +12,7 @@ from app.database import get_db, SessionLocal, ReelDB, ExtractionCacheDB
 from app.models.reel import ReelSaveRequest, ReelNotesRequest, ReelCategoryRequest, ReelResponse, ReelListResponse
 from app.services import extractor, transcriber, summarizer
 from app.ratelimit import rate_limit
+from app.auth import get_current_user, AuthUser
 
 logger = logging.getLogger(__name__)
 
@@ -39,12 +40,31 @@ PENDING_RECOVERY_LIMIT = 25
 router = APIRouter(prefix="/api/reels", tags=["reels"])
 
 
+def _get_owned_reel_or_404(reel_id: str, user: AuthUser, db: Session) -> ReelDB:
+    """Fetch a reel the caller owns, else 404. A 404 (not 403) on someone else's
+    reel avoids leaking that the id exists."""
+    reel = (
+        db.query(ReelDB)
+        .filter(ReelDB.id == reel_id, ReelDB.user_id == user.id)
+        .first()
+    )
+    if not reel:
+        raise HTTPException(status_code=404, detail="Reel not found")
+    return reel
+
+
 @router.post("/save", response_model=ReelResponse, dependencies=[Depends(rate_limit(20, 60, "save"))])
-def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
+              user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     _prune_cache_if_due(db)
     canonical_url = extractor.normalize_url(body.url)
 
-    existing = db.query(ReelDB).filter(ReelDB.url == canonical_url).first()
+    # Dedup per-user: the same link saved by another user is a separate card.
+    existing = (
+        db.query(ReelDB)
+        .filter(ReelDB.url == canonical_url, ReelDB.user_id == user.id)
+        .first()
+    )
     if existing:
         return _to_response(existing)
 
@@ -98,6 +118,7 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks, db: Sess
 
     reel = ReelDB(
         id=str(uuid.uuid4()),
+        user_id=user.id,
         url=canonical_url,
         platform=info["platform"],
         title=info["title"],
@@ -129,6 +150,7 @@ def list_reels(
     platform: str = None,
     limit: int = 1000,
     offset: int = 0,
+    user: AuthUser = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """`total` is the full count for the active filter; `items` is the requested
@@ -137,7 +159,7 @@ def list_reels(
     limit = max(1, min(limit, 1000))
     offset = max(0, offset)
 
-    query = db.query(ReelDB)
+    query = db.query(ReelDB).filter(ReelDB.user_id == user.id)
     if platform:
         query = query.filter(ReelDB.platform == platform)
     if category:
@@ -158,7 +180,8 @@ def list_reels(
 
 
 @router.get("/search", response_model=ReelListResponse)
-def search_reels(q: str = "", limit: int = 24, offset: int = 0, db: Session = Depends(get_db)):
+def search_reels(q: str = "", limit: int = 24, offset: int = 0,
+                 user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Full-library search across title, notes, summary, and tags."""
     q = q.strip()
     if not q:
@@ -167,6 +190,7 @@ def search_reels(q: str = "", limit: int = 24, offset: int = 0, db: Session = De
     offset = max(0, offset)
     term = f"%{q.lower()}%"
     query = db.query(ReelDB).filter(
+        ReelDB.user_id == user.id,
         or_(
             func.lower(ReelDB.title).like(term),
             func.lower(ReelDB.notes).like(term),
@@ -180,10 +204,8 @@ def search_reels(q: str = "", limit: int = 24, offset: int = 0, db: Session = De
 
 
 @router.get("/{reel_id}", response_model=ReelResponse)
-def get_reel(reel_id: str, db: Session = Depends(get_db)):
-    reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
-    if not reel:
-        raise HTTPException(status_code=404, detail="Reel not found")
+def get_reel(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    reel = _get_owned_reel_or_404(reel_id, user, db)
     return _to_response(reel)
 
 
@@ -191,10 +213,8 @@ RESUMMARIZE_LIMIT = 3
 
 
 @router.post("/{reel_id}/resummarize", response_model=ReelResponse, dependencies=[Depends(rate_limit(10, 60, "resummarize"))])
-def resummarize_reel(reel_id: str, db: Session = Depends(get_db)):
-    reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
-    if not reel:
-        raise HTTPException(status_code=404, detail="Reel not found")
+def resummarize_reel(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    reel = _get_owned_reel_or_404(reel_id, user, db)
 
     if reel.summarize_count >= RESUMMARIZE_LIMIT:
         raise HTTPException(
@@ -233,13 +253,11 @@ def resummarize_reel(reel_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{reel_id}/summarize", response_model=ReelResponse, dependencies=[Depends(rate_limit(10, 60, "summarize"))])
-def summarize_now(reel_id: str, db: Session = Depends(get_db)):
+def summarize_now(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Run (or retry) the background summary synchronously for one reel. Used by the
     detail screen to retry a 'failed'/'pending' summary or to summarize on demand.
     A reel already summarized is returned untouched (use resummarize to redo it)."""
-    reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
-    if not reel:
-        raise HTTPException(status_code=404, detail="Reel not found")
+    reel = _get_owned_reel_or_404(reel_id, user, db)
     if reel.summary_status == "ready" and reel.summary:
         return _to_response(reel)
 
@@ -249,10 +267,9 @@ def summarize_now(reel_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/{reel_id}/category", response_model=ReelResponse)
-def update_category(reel_id: str, body: ReelCategoryRequest, db: Session = Depends(get_db)):
-    reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
-    if not reel:
-        raise HTTPException(status_code=404, detail="Reel not found")
+def update_category(reel_id: str, body: ReelCategoryRequest,
+                    user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    reel = _get_owned_reel_or_404(reel_id, user, db)
     cat = (body.category or "").strip().lower()
     if cat not in ALLOWED_CATEGORIES:
         raise HTTPException(status_code=422, detail="Invalid category.")
@@ -263,10 +280,9 @@ def update_category(reel_id: str, body: ReelCategoryRequest, db: Session = Depen
 
 
 @router.patch("/{reel_id}/notes", response_model=ReelResponse)
-def update_notes(reel_id: str, body: ReelNotesRequest, db: Session = Depends(get_db)):
-    reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
-    if not reel:
-        raise HTTPException(status_code=404, detail="Reel not found")
+def update_notes(reel_id: str, body: ReelNotesRequest,
+                 user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    reel = _get_owned_reel_or_404(reel_id, user, db)
     reel.notes = body.notes
     db.commit()
     db.refresh(reel)
@@ -274,10 +290,8 @@ def update_notes(reel_id: str, body: ReelNotesRequest, db: Session = Depends(get
 
 
 @router.delete("/{reel_id}")
-def delete_reel(reel_id: str, db: Session = Depends(get_db)):
-    reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
-    if not reel:
-        raise HTTPException(status_code=404, detail="Reel not found")
+def delete_reel(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    reel = _get_owned_reel_or_404(reel_id, user, db)
     db.delete(reel)
     db.commit()
     return {"message": "Deleted"}

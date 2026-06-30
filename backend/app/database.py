@@ -17,7 +17,12 @@ class ReelDB(Base):
     __tablename__ = "reels"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    url = Column(String, nullable=False, unique=True)
+    # Owner (Supabase user id / JWT `sub`). Nullable so a pre-auth row or a migration
+    # doesn't fail; every new save sets it. Indexed — every list/search filters on it.
+    user_id = Column(String, nullable=True, index=True)
+    # NOT globally unique: two users may save the same link. Dedup is per-user in the
+    # save route (url + user_id). Indexed for that lookup.
+    url = Column(String, nullable=False, index=True)
     platform = Column(String, nullable=False)
     title = Column(Text, nullable=True)
     thumbnail_url = Column(String, nullable=True)
@@ -110,6 +115,8 @@ def create_tables():
             "ALTER TABLE reels ADD COLUMN tasks_count INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE reels ADD COLUMN workout_count INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE reels ADD COLUMN summary_status TEXT NOT NULL DEFAULT 'ready'",
+            "ALTER TABLE reels ADD COLUMN user_id TEXT",
+            "CREATE INDEX IF NOT EXISTS ix_reels_user_id ON reels (user_id)",
             "ALTER TABLE tasks ADD COLUMN kind TEXT DEFAULT 'task'",
             "ALTER TABLE tasks ADD COLUMN source TEXT DEFAULT 'content'",
         ]:

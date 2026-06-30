@@ -62,32 +62,15 @@ mobile/    Expo SDK 56 + expo-router + React Native (dev on web).
 
 **Not built yet:** auth, per-user data (everything shares one DB), deployment, payments, iOS share extension.
 
-### Pending fix (recipe extraction — highest priority)
+### Recipe extraction fallback — FIXED (was "highest priority")
 
-**Bug:** "Could not extract actionable tasks from this content" when tapping "Get Recipe" on a cooking reel that has a summary but where the caption says "recipe in pinned comment" (no actual steps).
-
-**Root cause** in `backend/app/services/workout_extractor.py`, `extract_tasks()`:
-```python
-# The existing guard only calls _infer_recipe when content is SHORT:
-if is_cooking and not has_content:          # ← only when caption < 50 chars
-    return _infer_recipe(title=title, notes=notes)
-
-# Normal path uses RECIPE_PROMPT — but caption has no steps so returns tasks: []
-result = _parse_model_json(msg.content[0].text, {"tasks": []})
-# No fallback → returns empty tasks → route raises HTTPException → alert shown
-```
-
-**Fix needed** (one-liner after the `_parse_model_json` call, ~line 207):
-```python
-result = _parse_model_json(msg.content[0].text, {"tasks": []})
-if not isinstance(result.get("tasks"), list):
-    result["tasks"] = []
-# NEW: cooking prompt returned nothing → fall through to title-based inference
-if is_cooking and not result.get("tasks"):
-    return _infer_recipe(title=title or "", notes=notes or "")
-```
-
-Also improve the mobile error UX in `mobile/app/reel/[id].tsx` `handleGenerateTasks()` — replace the bare `window.alert()` with an inline error state in the card area with a friendly message.
+The "Could not extract actionable tasks" failure on cooking reels (caption says
+"recipe in pinned comment" → no steps) is resolved in `workout_extractor.extract_tasks()`:
+when a cooking prompt returns empty tasks it now falls through to `_infer_recipe`
+(title/notes-based), and a genuinely un-inferable dish returns `needs_input` →
+a friendly 422 asking for a note. Mobile shows this **inline** (`taskError` state +
+alert-circle icon in `reel/[id].tsx`), not a `window.alert()`. Locked by
+`tests/test_workout_extractor.py` (mock-based, 6 cases covering the fallthrough).
 
 ## 4. Key decisions (the "why")
 
@@ -103,9 +86,13 @@ Also improve the mobile error UX in `mobile/app/reel/[id].tsx` `handleGenerateTa
 - iOS subscriptions **must** use Apple IAP (15% via Small Business Program / 30% otherwise) — can't use Stripe in-app. Manage with RevenueCat.
 - "Lifetime" tier: deferred for v1 (unbounded AI-cost liability without a hard cap).
 
-### Auth (planned — parked)
-- Recommended **Supabase** (auth + Postgres in one; $0 free tier through early launch, ~$25/mo Pro for always-on at launch). Clerk is the runner-up (better auth DX, but auth-only → second vendor).
-- Plan: `users` table, `user_id` FK on reels/tasks/workouts, JWT-verify dependency, per-user query filtering + ownership checks, per-user AI quota (replaces interim per-IP cap). Keep SQLite for local dev, Postgres for prod.
+### Auth (in progress — Supabase, asymmetric JWT)
+- **Supabase** (auth + Postgres in one; $0 free tier through early launch, ~$25/mo Pro for always-on at launch). Project `lukmwwcilrjqqtgqbynq`. Uses the **new key system**: `publishable` (was anon) + `secret` (was service_role), and **asymmetric ECC/ES256 JWT signing** — so the backend verifies tokens against the public **JWKS** endpoint, no shared secret.
+- **Phase 1 (connect) ✓** — mobile `@supabase/supabase-js` client in `services/supabase.ts` (AsyncStorage session); env wiring (`SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_JWKS_URL`, `SUPABASE_SERVICE_ROLE_KEY`); `backend/scripts/check_supabase.py` connectivity check.
+- **Phase 2 (verify primitive) ✓** — `backend/app/auth.py`: `get_current_user()` dependency verifies ES256 tokens via cached `PyJWKClient`, returns `AuthUser(id=sub, email)`, clean 401s. 9 offline tests (`test_auth.py`, locally-minted EC keypair — no network in CI).
+- **Phase 3 (per-user data) ✓** — `user_id` on `ReelDB` (indexed); `url` no longer globally unique → per-user dedup in `save_reel`. Every route in `reels.py`/`workout.py`/`ask.py` now takes `Depends(get_current_user)` and filters by `user_id`; single-item ops use `_get_owned_reel_or_404` (and task/exercise ownership via a join to the parent reel) → 404 (not 403) on someone else's id. `test_search_api.py` seeds two users and proves isolation (list/get/delete/search don't cross users; unauthenticated → 401).
+- **Phase 4 (mobile auth) ✓** — `contexts/AuthContext.tsx` (session + `onAuthStateChange`); `components/LoginScreen.tsx` (email/password sign-in/up); auth gate in `app/_layout.tsx` (spinner→login→app); `api.ts` `request()` injects `Authorization: Bearer` from `supabase.getAccessToken()`; sign-out in ProfilePanel. **Dev:** email confirmation OFF (turn ON before launch).
+- **Remaining:** Phase 5 per-user AI quota (replaces interim per-IP cap); Phase 6 Postgres in prod via `DATABASE_URL`. Keep SQLite for local dev.
 
 ### Extraction & bot-detection (datacenter IP) — the prod risk
 - **Symptom (2026-06-23):** saving a YouTube Short from the Codespace fails with `[youtube] …: Sign in to confirm you're not a bot`. yt-dlp is current (2026.06.09) — **not** staleness. `[Certain]`

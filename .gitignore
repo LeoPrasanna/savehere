@@ -27,6 +27,12 @@ mobile/dist/
 mobile/web-build/
 mobile/.env
 
+# Root-level stray npm install (project is Python backend + mobile/ — there is no
+# root npm package; the supabase CLI got pulled in here and must not be committed).
+/node_modules/
+/package.json
+/package-lock.json
+
 # ── Expo native build artefacts ─────────────────────────────
 mobile/ios/
 mobile/android/

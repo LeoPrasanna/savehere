@@ -11,6 +11,7 @@ from app.models.workout import (
 )
 from app.services import workout_extractor
 from app.ratelimit import rate_limit
+from app.auth import get_current_user, AuthUser
 
 router = APIRouter(prefix="/api", tags=["workout"])
 
@@ -23,11 +24,36 @@ WORKOUT_LIMIT = 3
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _get_reel_or_404(reel_id: str, db: Session) -> ReelDB:
-    reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
+def _get_reel_or_404(reel_id: str, user: AuthUser, db: Session) -> ReelDB:
+    reel = db.query(ReelDB).filter(ReelDB.id == reel_id, ReelDB.user_id == user.id).first()
     if not reel:
         raise HTTPException(status_code=404, detail="Reel not found")
     return reel
+
+
+def _get_owned_task_or_404(task_id: str, user: AuthUser, db: Session) -> TaskDB:
+    """A task is owned via its parent reel — join so we never trust the task id alone."""
+    task = (
+        db.query(TaskDB)
+        .join(ReelDB, TaskDB.reel_id == ReelDB.id)
+        .filter(TaskDB.id == task_id, ReelDB.user_id == user.id)
+        .first()
+    )
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
+def _get_owned_exercise_or_404(exercise_id: str, user: AuthUser, db: Session) -> WorkoutExerciseDB:
+    ex = (
+        db.query(WorkoutExerciseDB)
+        .join(ReelDB, WorkoutExerciseDB.reel_id == ReelDB.id)
+        .filter(WorkoutExerciseDB.id == exercise_id, ReelDB.user_id == user.id)
+        .first()
+    )
+    if not ex:
+        raise HTTPException(status_code=404, detail="Exercise not found")
+    return ex
 
 
 def _exercise_to_response(e: WorkoutExerciseDB) -> WorkoutExerciseResponse:
@@ -80,8 +106,8 @@ def _build_plan_response(reel_id: str, exercises: list[WorkoutExerciseDB]) -> Wo
 # ── Workout routes ────────────────────────────────────────────────────────────
 
 @router.post("/reels/{reel_id}/workout", response_model=WorkoutPlanResponse, dependencies=[Depends(rate_limit(10, 60, "workout"))])
-def generate_workout(reel_id: str, db: Session = Depends(get_db)):
-    reel = _get_reel_or_404(reel_id, db)
+def generate_workout(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    reel = _get_reel_or_404(reel_id, user, db)
 
     if (reel.workout_count or 0) >= WORKOUT_LIMIT:
         raise HTTPException(
@@ -151,8 +177,8 @@ def generate_workout(reel_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/reels/{reel_id}/workout", response_model=WorkoutPlanResponse)
-def get_workout(reel_id: str, db: Session = Depends(get_db)):
-    _get_reel_or_404(reel_id, db)
+def get_workout(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    _get_reel_or_404(reel_id, user, db)
     exercises = (
         db.query(WorkoutExerciseDB)
         .filter(WorkoutExerciseDB.reel_id == reel_id)
@@ -163,10 +189,9 @@ def get_workout(reel_id: str, db: Session = Depends(get_db)):
 
 
 @router.patch("/exercises/{exercise_id}", response_model=WorkoutExerciseResponse)
-def update_exercise(exercise_id: str, body: UpdateExerciseRequest, db: Session = Depends(get_db)):
-    ex = db.query(WorkoutExerciseDB).filter(WorkoutExerciseDB.id == exercise_id).first()
-    if not ex:
-        raise HTTPException(status_code=404, detail="Exercise not found")
+def update_exercise(exercise_id: str, body: UpdateExerciseRequest,
+                    user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    ex = _get_owned_exercise_or_404(exercise_id, user, db)
     if body.sets is not None:
         ex.sets = max(1, body.sets)
     if body.reps is not None:
@@ -183,8 +208,8 @@ def update_exercise(exercise_id: str, body: UpdateExerciseRequest, db: Session =
 # ── Task routes ───────────────────────────────────────────────────────────────
 
 @router.post("/reels/{reel_id}/tasks", response_model=TaskListResponse, dependencies=[Depends(rate_limit(15, 60, "tasks"))])
-def generate_tasks(reel_id: str, db: Session = Depends(get_db)):
-    reel = _get_reel_or_404(reel_id, db)
+def generate_tasks(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    reel = _get_reel_or_404(reel_id, user, db)
 
     if (reel.tasks_count or 0) >= TASKS_LIMIT:
         raise HTTPException(
@@ -254,8 +279,8 @@ def generate_tasks(reel_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/reels/{reel_id}/tasks", response_model=TaskListResponse)
-def get_tasks(reel_id: str, db: Session = Depends(get_db)):
-    _get_reel_or_404(reel_id, db)
+def get_tasks(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    _get_reel_or_404(reel_id, user, db)
     tasks = (
         db.query(TaskDB)
         .filter(TaskDB.reel_id == reel_id)
@@ -277,9 +302,10 @@ def get_tasks(reel_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/reels/{reel_id}/tasks/manual", response_model=TaskResponse)
-def add_task(reel_id: str, body: CreateTaskRequest, db: Session = Depends(get_db)):
+def add_task(reel_id: str, body: CreateTaskRequest,
+             user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Add a single task/step by hand. No AI, no limit."""
-    _get_reel_or_404(reel_id, db)
+    _get_reel_or_404(reel_id, user, db)
     text = (body.text or "").strip()
     if not text:
         raise HTTPException(status_code=422, detail="Task text can't be empty.")
@@ -313,11 +339,10 @@ def add_task(reel_id: str, body: CreateTaskRequest, db: Session = Depends(get_db
 
 
 @router.patch("/tasks/{task_id}", response_model=TaskResponse)
-def update_task(task_id: str, body: UpdateTaskRequest, db: Session = Depends(get_db)):
+def update_task(task_id: str, body: UpdateTaskRequest,
+                user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Toggle completion and/or edit a task by hand. No AI."""
-    task = db.query(TaskDB).filter(TaskDB.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = _get_owned_task_or_404(task_id, user, db)
     if body.completed is not None:
         task.completed = body.completed
     if body.text is not None:
@@ -333,11 +358,9 @@ def update_task(task_id: str, body: UpdateTaskRequest, db: Session = Depends(get
 
 
 @router.delete("/tasks/{task_id}")
-def delete_task(task_id: str, db: Session = Depends(get_db)):
+def delete_task(task_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Delete a single task/step by hand. No AI."""
-    task = db.query(TaskDB).filter(TaskDB.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
+    task = _get_owned_task_or_404(task_id, user, db)
     db.delete(task)
     db.commit()
     return {"message": "Deleted"}
