@@ -6,6 +6,7 @@ import { HeaderHomeButton } from '../components/HomeButton';
 import { LoginScreen } from '../components/LoginScreen';
 import { Confetti } from '../components/Confetti';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { OnboardingModal } from '../components/OnboardingModal';
 import { colors, font } from '../constants/theme';
 
 function AppStack() {
@@ -53,6 +54,7 @@ function Gate() {
       {/* Welcome confetti — overlaid above the gate so it keeps playing as the app
           mounts after sign-in. */}
       {celebrate && <Confetti />}
+      <OnboardingModal />
     </>
   );
 }

@@ -4,7 +4,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
-import { Zap, Brain, Mic, TrendingUp, Bookmark } from 'lucide-react-native';
+import { Zap, Brain, TrendingUp, Bookmark, Wand2 } from 'lucide-react-native';
 import { api, Reel } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
@@ -12,8 +12,9 @@ import { AuroraBackground } from './AuroraBackground';
 import { ProfilePanel } from './ProfilePanel';
 import { GlassCard } from './GlassCard';
 import { HolographicShimmer } from './HolographicShimmer';
-import { useAuth } from '../contexts/AuthContext';
+import { FloatingParticleField } from './FloatingParticleField';
 import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
+import { useAuth } from '../contexts/AuthContext';
 import { FEATURES, Feature } from '../constants/features';
 
 const TIER = 'Free';
@@ -59,6 +60,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
 
   return (
     <View style={styles.screen}>
+      <FloatingParticleField />
       <AuroraBackground />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.lg }]}
@@ -168,10 +170,10 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           </Pressable>
         </MotiView>
 
-        {/* Voice save hint */}
-        <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 300, duration: 400 }} style={styles.voiceHint}>
-          <Mic size={14} color={colors.textTertiary} />
-          <Text style={styles.voiceHintText}>Tip: Soon you'll be able to save by voice — "Save this reel about keto recipes"</Text>
+        {/* Quick tip */}
+        <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 300, duration: 400 }} style={styles.quickTip}>
+          <Wand2 size={14} color={colors.textTertiary} />
+          <Text style={styles.quickTipText}>Pro tip: Tap any saved card to see the full AI summary, build a workout plan, or extract a recipe.</Text>
         </MotiView>
 
         {/* Ask card */}
@@ -359,11 +361,11 @@ const styles = StyleSheet.create({
   },
   addText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
 
-  voiceHint: {
+  quickTip: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     paddingHorizontal: spacing.sm, opacity: 0.8,
   },
-  voiceHintText: { flex: 1, color: colors.textTertiary, fontSize: font.xs, lineHeight: 16, fontStyle: 'italic' },
+  quickTipText: { flex: 1, color: colors.textTertiary, fontSize: font.xs, lineHeight: 16, fontStyle: 'italic' },
 
   askWrap: { borderRadius: radius.lg, ...shadow.md },
   askCard: {

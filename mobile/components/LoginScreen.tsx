@@ -11,6 +11,7 @@ import { Pressable } from './Pressable';
 import { AuroraBackground } from './AuroraBackground';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { FloatingParticleField } from './FloatingParticleField';
 import * as haptics from '../services/haptics';
 import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
 
@@ -144,6 +145,7 @@ export function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <FloatingParticleField />
       <AuroraBackground />
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 

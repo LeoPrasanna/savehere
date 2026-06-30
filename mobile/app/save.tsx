@@ -6,7 +6,7 @@ import {
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
-import { Mic, Wand2, ClipboardCheck } from 'lucide-react-native';
+import { Wand2, ClipboardCheck } from 'lucide-react-native';
 import { Icon } from '../components/Icon';
 import { api } from '../services/api';
 import * as haptics from '../services/haptics';
@@ -191,15 +191,15 @@ export default function SaveScreen() {
           </MotiView>
         )}
 
-        {/* Voice save teaser */}
+        {/* Quick tip */}
         {!loading && !url && (
-          <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 400, duration: 400 }} style={styles.voiceTeaser}>
-            <View style={styles.voiceTeaserInner}>
-              <Mic size={16} color={colors.hologram} />
-              <Text style={styles.voiceTeaserText}>Or try voice: "Save this reel about keto recipes"</Text>
+          <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 400, duration: 400 }} style={styles.quickTip}>
+            <View style={styles.quickTipInner}>
+              <Wand2 size={16} color={colors.hologram} />
+              <Text style={styles.quickTipText}>Pro tip: Paste a link from YouTube, Instagram, TikTok, or LinkedIn — we'll extract the content and summarize it with AI.</Text>
             </View>
-            <View style={styles.voiceBadge}>
-              <Text style={styles.voiceBadgeText}>Soon</Text>
+            <View style={styles.quickTipBadge}>
+              <Text style={styles.quickTipBadgeText}>Try it</Text>
             </View>
           </MotiView>
         )}
@@ -327,19 +327,19 @@ const styles = StyleSheet.create({
   },
   smartPasteText: { flex: 1, color: colors.textTertiary, fontSize: font.xs, lineHeight: 16, fontStyle: 'italic' },
 
-  voiceTeaser: {
+  quickTip: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     gap: spacing.sm, paddingHorizontal: spacing.xs,
   },
-  voiceTeaserInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
-  voiceTeaserText: { flex: 1, color: colors.textTertiary, fontSize: font.xs, lineHeight: 16 },
-  voiceBadge: {
+  quickTipInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
+  quickTipText: { flex: 1, color: colors.textTertiary, fontSize: font.xs, lineHeight: 16 },
+  quickTipBadge: {
     backgroundColor: colors.accent + '18',
     borderRadius: radius.full,
     paddingHorizontal: 8, paddingVertical: 3,
     borderWidth: 1, borderColor: colors.accent + '30',
   },
-  voiceBadgeText: { color: colors.accentLight, fontSize: 10, fontWeight: '800' },
+  quickTipBadgeText: { color: colors.accentLight, fontSize: 10, fontWeight: '800' },
 
   errorBox: {
     flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
