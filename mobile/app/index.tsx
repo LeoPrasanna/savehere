@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View, Text, FlatList, StyleSheet, ActivityIndicator,
-  RefreshControl, TextInput, useWindowDimensions, Platform,
+  RefreshControl, TextInput, useWindowDimensions, Platform, Animated,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -15,13 +15,12 @@ import { Icon } from '../components/Icon';
 import { AuroraBackground } from '../components/AuroraBackground';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { Landing } from '../components/Landing';
+import { GlassCard } from '../components/GlassCard';
 import { colors, spacing, font, radius, gradients, shadow, categoryMeta, CATEGORY_OPTIONS } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
-const PAGE = 24;   // library grid page size for infinite scroll
+const PAGE = 24;
 
-// Persists across screen remounts within a session (resets on app cold start),
-// so the landing gate shows on launch but not every time you return home.
 let enteredSession = false;
 
 export default function HomeScreen() {
@@ -42,6 +41,7 @@ export default function HomeScreen() {
   const [searching, setSearching] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [entered, setEntered] = useState(enteredSession);
+  const fabPulse = useRef(new Animated.Value(1)).current;
 
   const load = useCallback(async (category = activeCategory) => {
     try {
@@ -61,7 +61,6 @@ export default function HomeScreen() {
     }
   }, [activeCategory]);
 
-  // Append the next page when the grid nears its end (infinite scroll).
   const loadMore = useCallback(async () => {
     if (loadingMore || reels.length >= total) return;
     setLoadingMore(true);
@@ -74,13 +73,12 @@ export default function HomeScreen() {
       setReels(prev => [...prev, ...data.items]);
       setTotal(data.total);
     } catch {
-      // transient failure — keep what's loaded rather than blanking the grid
+      // transient failure
     } finally {
       setLoadingMore(false);
     }
   }, [loadingMore, reels.length, total, activeCategory]);
 
-  // Web: reflect the browser's online/offline state in a non-blocking banner.
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
     setOffline(!window.navigator.onLine);
@@ -94,7 +92,6 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // Server-side search: debounce 400 ms, replaces the paginated list while active.
   useEffect(() => {
     const q = search.trim();
     if (!q) { setSearchResults(null); setSearching(false); return; }
@@ -114,15 +111,24 @@ export default function HomeScreen() {
 
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
 
-  // Summaries are generated in the background after save, so silently re-poll the
-  // list while any card is still "pending" — they flip to the real summary without
-  // a manual pull-to-refresh. Stops as soon as nothing is pending.
   const hasPending = reels.some(r => r.summary_status === 'pending');
   useEffect(() => {
     if (!entered || !hasPending) return;
     const t = setInterval(() => { load(); }, 4000);
     return () => clearInterval(t);
   }, [entered, hasPending, load]);
+
+  // FAB pulse animation
+  useEffect(() => {
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(fabPulse, { toValue: 1.08, duration: 900, useNativeDriver: true }),
+        Animated.timing(fabPulse, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ])
+    );
+    pulse.start();
+    return () => pulse.stop();
+  }, []);
 
   const onCategoryChange = (cat: string) => {
     setActiveCategory(cat);
@@ -133,13 +139,11 @@ export default function HomeScreen() {
   const inSearchMode = search.trim().length > 0;
   const displayList = inSearchMode ? (searchResults ?? []) : reels;
 
-  // Pad the final row with invisible spacers so cards keep a uniform width.
   const fillers = displayList.length % numColumns === 0 ? 0 : numColumns - (displayList.length % numColumns);
   const gridData: any[] = fillers
     ? [...displayList, ...Array.from({ length: fillers }, (_, i) => ({ id: `__ghost_${i}`, __ghost: true }))]
     : displayList;
 
-  // Entry gate: show the landing summary first; "Open my library" reveals the grid.
   if (!entered) {
     return <Landing onEnter={() => { enteredSession = true; setEntered(true); }} />;
   }
@@ -148,9 +152,9 @@ export default function HomeScreen() {
     <View style={styles.container}>
       <AuroraBackground />
 
-      {/* ── Gradient header ─────────────────────────── */}
+      {/* ── Futuristic Glass Header ─────────────────────────── */}
       <LinearGradient
-        colors={gradients.primary}
+        colors={gradients.darkSurface}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={[styles.header, { paddingTop: insets.top + spacing.md }]}
@@ -164,7 +168,7 @@ export default function HomeScreen() {
           <Pressable style={styles.brandRow} onPress={() => setEntered(false)} scaleTo={0.97}>
             <View style={styles.logoMark}>
               <LinearGradient
-                colors={gradients.vibrant}
+                colors={gradients.hologram}
                 start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                 style={styles.logoMarkInner}
               >
@@ -186,7 +190,7 @@ export default function HomeScreen() {
           </Pressable>
         </MotiView>
 
-        {/* Search */}
+        {/* Search with glassmorphism */}
         <View style={styles.search}>
           <Search size={16} color={colors.textSecondary} />
           <TextInput
@@ -319,19 +323,18 @@ export default function HomeScreen() {
         </>
       )}
 
-      {/* ── FAB ─────────────────────────────────────── */}
-      <MotiView
-        from={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ type: 'spring', delay: 250, damping: 11, stiffness: 170 }}
-        style={[styles.fab, { bottom: insets.bottom + spacing.lg }]}
-      >
+      {/* ── Futuristic Pulse FAB ─────────────────────── */}
+      <Animated.View style={[styles.fab, { bottom: insets.bottom + spacing.lg, transform: [{ scale: fabPulse }] }]}>
         <Pressable onPress={() => router.push('/save')} scaleTo={0.9}>
-          <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fabInner}>
+          <LinearGradient colors={gradients.hologram} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fabInner}>
             <Plus size={30} color="#FFF" />
           </LinearGradient>
+          {/* Orbiting dot */}
+          <View style={styles.fabOrbit}>
+            <View style={styles.fabOrbitDot} />
+          </View>
         </Pressable>
-      </MotiView>
+      </Animated.View>
 
       <ProfilePanel visible={menuOpen} onClose={() => setMenuOpen(false)} reels={reels} total={total} />
     </View>
@@ -378,7 +381,7 @@ const styles = StyleSheet.create({
     width: 18, height: 18, borderRadius: 9,
     backgroundColor: '#FFF',
     alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: '#8B7DFF',
+    borderWidth: 2, borderColor: colors.hologram,
   },
   brand: { color: '#FFF', fontSize: font.xl, fontWeight: '800', letterSpacing: -0.5 },
   brandSub: { color: 'rgba(255,255,255,0.8)', fontSize: font.xs, fontWeight: '500' },
@@ -407,7 +410,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  categoryEmoji: { fontSize: 13 },
   categoryText: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '600', textTransform: 'capitalize' },
   categoryTextActive: { color: '#FFF', fontWeight: '800' },
 
@@ -440,5 +442,21 @@ const styles = StyleSheet.create({
     width: 60, height: 60,
     borderRadius: radius.full,
     alignItems: 'center', justifyContent: 'center',
+  },
+  fabOrbit: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  fabOrbitDot: {
+    width: 6, height: 6,
+    borderRadius: 3,
+    backgroundColor: '#FFF',
+    position: 'absolute',
+    top: -2, right: 8,
+    shadowColor: '#FFF',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
   },
 });

@@ -1,21 +1,22 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Modal, Platform } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
+import { Zap, Brain, Mic, TrendingUp, Bookmark } from 'lucide-react-native';
 import { api, Reel } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { AuroraBackground } from './AuroraBackground';
 import { ProfilePanel } from './ProfilePanel';
+import { GlassCard } from './GlassCard';
+import { HolographicShimmer } from './HolographicShimmer';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
 import { FEATURES, Feature } from '../constants/features';
 
 const TIER = 'Free';
-// Surface "Ask your library" prominently once there's enough saved to answer from.
-// Low bar: retrieval works on whatever's saved, and hiding it hurts discoverability.
 const ASK_MIN_REELS = 3;
 
 export function Landing({ onEnter }: { onEnter: () => void }) {
@@ -29,8 +30,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const [selected, setSelected] = useState<Feature | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Refetch whenever the Landing regains focus (e.g. returning after a save) so the
-  // counts stay current — a plain useEffect([]) only runs once per mount.
   useFocusEffect(
     useCallback(() => {
       setFetchError(false);
@@ -43,8 +42,20 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
 
   const categories = new Set(reels.map(r => r.category).filter(Boolean)).size;
   const platforms = new Set(reels.map(r => r.platform).filter(Boolean)).size;
-  // When the Ask card is shown here, drop it from the menu so it isn't duplicated.
   const askCardVisible = !loading && total >= ASK_MIN_REELS;
+
+  // AI Insight stats
+  const recentSaves = reels.filter(r => {
+    const days = (Date.now() - new Date(r.created_at).getTime()) / (1000 * 60 * 60 * 24);
+    return days <= 7;
+  }).length;
+
+  const topCategory = reels.reduce((acc, r) => {
+    if (!r.category) return acc;
+    acc[r.category] = (acc[r.category] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+  const topCat = Object.entries(topCategory).sort((a, b) => b[1] - a[1])[0]?.[0];
 
   return (
     <View style={styles.screen}>
@@ -53,6 +64,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.lg }]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Header */}
         <MotiView from={{ opacity: 0, translateY: -10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 450 }} style={styles.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.hi}>Hi, {userName} 👋</Text>
@@ -63,17 +75,70 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           </Pressable>
         </MotiView>
 
-        <View style={styles.tierCard}>
-          <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
-            <Icon name="user" size={24} color="#FFF" />
-          </LinearGradient>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.tierName} numberOfLines={1}>{userName}</Text>
-            <Text style={styles.tierSub} numberOfLines={1}>{email ?? 'Synced to your account'}</Text>
-          </View>
-          <View style={styles.tierBadge}><Text style={styles.tierBadgeText}>{TIER}</Text></View>
-        </View>
+        {/* AI Insight Dashboard */}
+        {!loading && !fetchError && total > 0 && (
+          <MotiView from={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', delay: 100, damping: 14 }}>
+            <GlassCard tint="violet" intensity="medium" style={styles.insightCard}>
+              <HolographicShimmer width={400} height={80} color="rgba(139,125,255,0.08)" duration={3500} delay={500} />
+              <View style={styles.insightHeader}>
+                <View style={styles.insightIconWrap}>
+                  <Brain size={18} color={colors.accentLight} />
+                </View>
+                <Text style={styles.insightTitle}>AI Insights</Text>
+              </View>
+              <View style={styles.insightGrid}>
+                <View style={styles.insightCell}>
+                  <Text style={styles.insightNum}>{total}</Text>
+                  <Text style={styles.insightLabel}>Total saves</Text>
+                </View>
+                <View style={styles.insightCell}>
+                  <Text style={styles.insightNum}>{recentSaves}</Text>
+                  <Text style={styles.insightLabel}>This week</Text>
+                </View>
+                <View style={styles.insightCell}>
+                  <Text style={styles.insightNum}>{categories}</Text>
+                  <Text style={styles.insightLabel}>Categories</Text>
+                </View>
+                {topCat && (
+                  <View style={styles.insightCell}>
+                    <Text style={styles.insightNum}>{topCat}</Text>
+                    <Text style={styles.insightLabel}>Top interest</Text>
+                  </View>
+                )}
+              </View>
+            </GlassCard>
+          </MotiView>
+        )}
 
+        {/* Smart Collections Preview */}
+        {!loading && !fetchError && total >= 5 && (
+          <MotiView from={{ opacity: 0, translateY: 12 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', delay: 200, duration: 450 }}>
+            <GlassCard tint="cyan" intensity="low" style={styles.collectionsCard}>
+              <View style={styles.collectionsHeader}>
+                <View style={styles.collectionsIconWrap}>
+                  <Zap size={16} color={colors.hologram} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.collectionsTitle}>Smart Collections</Text>
+                  <Text style={styles.collectionsSub}>AI auto-groups your saves by topic</Text>
+                </View>
+                <TrendingUp size={16} color={colors.success} />
+              </View>
+              <View style={styles.collectionChips}>
+                {Object.entries(topCategory).slice(0, 3).map(([cat, count]) => (
+                  <View key={cat} style={styles.collectionChip}>
+                    <Text style={styles.collectionChipText}>{cat} · {count}</Text>
+                  </View>
+                ))}
+                <View style={[styles.collectionChip, styles.collectionChipMore]}>
+                  <Text style={styles.collectionChipMoreText}>+{Object.keys(topCategory).length - 3} more</Text>
+                </View>
+              </View>
+            </GlassCard>
+          </MotiView>
+        )}
+
+        {/* Hero stat */}
         <MotiView from={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} transition={{ type: 'spring', delay: 150, damping: 13 }} style={styles.heroStat}>
           {loading
             ? <ActivityIndicator color={colors.accent} size="large" />
@@ -88,7 +153,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
               : null}
         </MotiView>
 
-        {/* Prominent, gently pulsing add button */}
+        {/* Pulsing save button */}
         <MotiView
           from={{ scale: 1 }}
           animate={{ scale: 1.035 }}
@@ -103,7 +168,13 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           </Pressable>
         </MotiView>
 
-        {/* Highlighted once the library is big enough to answer from — not buried in the menu */}
+        {/* Voice save hint */}
+        <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 300, duration: 400 }} style={styles.voiceHint}>
+          <Mic size={14} color={colors.textTertiary} />
+          <Text style={styles.voiceHintText}>Tip: Soon you'll be able to save by voice — "Save this reel about keto recipes"</Text>
+        </MotiView>
+
+        {/* Ask card */}
         {askCardVisible && (
           <MotiView from={{ opacity: 0, translateY: 12 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', delay: 220, duration: 450 }} style={styles.askWrap}>
             <Pressable onPress={() => router.push('/ask')} scaleTo={0.97}>
@@ -121,10 +192,10 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           </MotiView>
         )}
 
-        {/* Primary entry into the real library (☰ menu + grid) — right under Ask */}
+        {/* Open library */}
         <Pressable style={styles.ctaWrap} onPress={onEnter} scaleTo={0.97}>
           <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.cta}>
-            <Icon name="bookmark" size={18} color="#FFF" />
+            <Bookmark size={18} color="#FFF" />
             <Text style={styles.ctaText}>Open my library</Text>
           </LinearGradient>
         </Pressable>
@@ -134,7 +205,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           <Text style={styles.upsellText}>You're on the <Text style={styles.upsellStrong}>{TIER} tier</Text> — unlimited saves, synced to your account. Pro plans coming soon.</Text>
         </View>
 
-        {/* What you can do — save anything, turn it into action */}
+        {/* Features */}
         <View style={styles.features}>
           <Text style={styles.sectionLabel}>WHAT YOU CAN DO · tap to learn more</Text>
           {FEATURES.map(f => (
@@ -208,16 +279,40 @@ const styles = StyleSheet.create({
   hi: { color: colors.textPrimary, fontSize: font.display, fontWeight: '900', letterSpacing: -1 },
   welcome: { color: colors.textSecondary, fontSize: font.lg, fontWeight: '600', marginTop: spacing.xs },
 
-  tierCard: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.card, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.md,
+  // AI Insights
+  insightCard: { padding: spacing.md, gap: spacing.sm },
+  insightHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  insightIconWrap: {
+    width: 32, height: 32, borderRadius: radius.full,
+    backgroundColor: colors.accent + '22',
+    alignItems: 'center', justifyContent: 'center',
   },
-  avatar: { width: 48, height: 48, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center', ...shadow.glow },
-  tierName: { color: colors.textPrimary, fontSize: font.md, fontWeight: '800' },
-  tierSub: { color: colors.textSecondary, fontSize: font.xs },
-  tierBadge: { backgroundColor: colors.accent + '22', borderRadius: radius.full, paddingHorizontal: spacing.sm + 2, paddingVertical: 5 },
-  tierBadgeText: { color: colors.accentLight, fontSize: font.xs, fontWeight: '800' },
+  insightTitle: { color: colors.accentLight, fontSize: font.sm, fontWeight: '800', letterSpacing: 0.5 },
+  insightGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginTop: spacing.xs },
+  insightCell: { flex: 1, minWidth: 60, alignItems: 'center' },
+  insightNum: { color: colors.textPrimary, fontSize: font.lg, fontWeight: '900' },
+  insightLabel: { color: colors.textSecondary, fontSize: 10, fontWeight: '600', marginTop: 2 },
+
+  // Smart Collections
+  collectionsCard: { padding: spacing.md, gap: spacing.sm },
+  collectionsHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  collectionsIconWrap: {
+    width: 32, height: 32, borderRadius: radius.full,
+    backgroundColor: colors.hologram + '22',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  collectionsTitle: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '800' },
+  collectionsSub: { color: colors.textSecondary, fontSize: font.xs, marginTop: 1 },
+  collectionChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: spacing.xs },
+  collectionChip: {
+    backgroundColor: colors.card,
+    borderRadius: radius.full,
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  collectionChipText: { color: colors.textSecondary, fontSize: 10, fontWeight: '700' },
+  collectionChipMore: { borderColor: colors.accent + '40', backgroundColor: colors.accent + '12' },
+  collectionChipMoreText: { color: colors.accentLight, fontSize: 10, fontWeight: '700' },
 
   heroStat: {
     alignItems: 'center',
@@ -263,6 +358,12 @@ const styles = StyleSheet.create({
     borderRadius: radius.md, paddingVertical: spacing.md, minHeight: 54,
   },
   addText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
+
+  voiceHint: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingHorizontal: spacing.sm, opacity: 0.8,
+  },
+  voiceHintText: { flex: 1, color: colors.textTertiary, fontSize: font.xs, lineHeight: 16, fontStyle: 'italic' },
 
   askWrap: { borderRadius: radius.lg, ...shadow.md },
   askCard: {

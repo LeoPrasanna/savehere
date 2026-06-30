@@ -6,12 +6,14 @@ import {
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
+import { Mic, Wand2, ClipboardCheck } from 'lucide-react-native';
 import { Icon } from '../components/Icon';
 import { api } from '../services/api';
 import * as haptics from '../services/haptics';
 import { Pressable } from '../components/Pressable';
 import { AuroraBackground } from '../components/AuroraBackground';
 import { BorderBeam } from '../components/BorderBeam';
+import { GlassCard } from '../components/GlassCard';
 import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
 
 const STEPS = [
@@ -22,16 +24,15 @@ const STEPS = [
 
 const STEP_DELAYS = [0, 1500, 4000];
 const N = STEPS.length;
-const NODE = 30;   // station diameter
-const BOT = 44;    // bot box size
+const NODE = 30;
+const BOT = 44;
 
-// Gentle, reassuring heads-ups (kept light so saving never feels risky).
 const SAVE_NOTES = [
   'Public Reels, Shorts, TikToks & LinkedIn posts work best.',
-  'Private or login-only content (and most Facebook reels) can’t be read — you can still save the link and add your own notes.',
+  'Private or login-only content (and most Facebook reels) can\'t be read — you can still save the link and add your own notes.',
   'Summaries are AI-made, so a small detail might slip — easy to edit anytime.',
   'Your card appears in seconds — the AI summary finishes on its own right after.',
-  'We save the link and an AI summary for your personal reference — the content stays its creator’s.',
+  'We save the link and an AI summary for your personal reference — the content stays its creator\'s.',
 ];
 
 function parseError(e: any): string {
@@ -62,20 +63,17 @@ export default function SaveScreen() {
   const [box, setBox] = useState({ w: 0, h: 0 });
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
 
-  // Animation values
-  const botX = useRef(new Animated.Value(0)).current;     // translateX along track
-  const botJump = useRef(new Animated.Value(0)).current;  // jump arc (negative = up)
-  const bob = useRef(new Animated.Value(0)).current;      // idle hover bob
-  const squash = useRef(new Animated.Value(1)).current;   // landing squash (scaleY)
-  const fillW = useRef(new Animated.Value(0)).current;    // progress line fill width
-  const pulse = useRef(new Animated.Value(1)).current;    // label pulse
+  const botX = useRef(new Animated.Value(0)).current;
+  const botJump = useRef(new Animated.Value(0)).current;
+  const bob = useRef(new Animated.Value(0)).current;
+  const squash = useRef(new Animated.Value(1)).current;
+  const fillW = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
 
-  // Station geometry (depends on measured track width)
   const nodeCenter = (i: number) => NODE / 2 + (trackW > 0 ? i * (trackW - NODE) / (N - 1) : 0);
   const botLeftFor = (i: number) => nodeCenter(i) - BOT / 2;
   const fillFor = (i: number) => Math.max(0, nodeCenter(i) - NODE / 2);
 
-  // Place bot instantly when the track first measures
   useEffect(() => {
     if (trackW > 0) {
       botX.setValue(botLeftFor(stepIdx));
@@ -83,7 +81,6 @@ export default function SaveScreen() {
     }
   }, [trackW]);
 
-  // Idle hover + label pulse while loading
   useEffect(() => {
     if (!loading) return;
     const hover = Animated.loop(Animated.sequence([
@@ -98,23 +95,18 @@ export default function SaveScreen() {
     return () => { hover.stop(); blink.stop(); };
   }, [loading]);
 
-  // The hop: whenever the step advances, the bot jumps to the next station
   useEffect(() => {
     if (!loading || trackW === 0) return;
     Animated.parallel([
-      // horizontal glide
       Animated.timing(botX, { toValue: botLeftFor(stepIdx), duration: 620, easing: Easing.inOut(Easing.cubic), useNativeDriver: true }),
-      // progress line catches up
       Animated.timing(fillW, { toValue: fillFor(stepIdx), duration: 620, easing: Easing.inOut(Easing.cubic), useNativeDriver: false }),
-      // jump arc: up fast, land with a spring
       Animated.sequence([
         Animated.timing(botJump, { toValue: -38, duration: 300, easing: Easing.out(Easing.quad), useNativeDriver: true }),
         Animated.spring(botJump, { toValue: 0, friction: 4, tension: 90, useNativeDriver: true }),
       ]),
-      // squash & stretch for personality
       Animated.sequence([
-        Animated.timing(squash, { toValue: 1.12, duration: 150, useNativeDriver: true }),  // stretch on takeoff
-        Animated.timing(squash, { toValue: 0.82, duration: 200, easing: Easing.in(Easing.quad), useNativeDriver: true }), // squash on land
+        Animated.timing(squash, { toValue: 1.12, duration: 150, useNativeDriver: true }),
+        Animated.timing(squash, { toValue: 0.82, duration: 200, easing: Easing.in(Easing.quad), useNativeDriver: true }),
         Animated.spring(squash, { toValue: 1, friction: 4, useNativeDriver: true }),
       ]),
     ]).start();
@@ -159,8 +151,8 @@ export default function SaveScreen() {
           transition={{ type: 'spring', damping: 13 }}
           style={styles.heroIcon}
         >
-          <LinearGradient colors={gradients.vibrant} style={styles.heroIconInner}>
-            <Icon name="cloud-download" size={26} color="#FFF" />
+          <LinearGradient colors={gradients.hologram} style={styles.heroIconInner}>
+            <Wand2 size={26} color="#FFF" />
           </LinearGradient>
         </MotiView>
 
@@ -187,10 +179,30 @@ export default function SaveScreen() {
               multiline
               editable={!loading}
             />
-            {/* Light travelling around the border */}
             <BorderBeam width={box.w} height={box.h} radius={radius.md} color={colors.accentLight} />
           </View>
         </MotiView>
+
+        {/* Smart paste detection hint */}
+        {!loading && !url && (
+          <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 300, duration: 400 }} style={styles.smartPaste}>
+            <ClipboardCheck size={14} color={colors.textTertiary} />
+            <Text style={styles.smartPasteText}>Smart Paste: copy a link from any app and it will appear here automatically in the next update.</Text>
+          </MotiView>
+        )}
+
+        {/* Voice save teaser */}
+        {!loading && !url && (
+          <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 400, duration: 400 }} style={styles.voiceTeaser}>
+            <View style={styles.voiceTeaserInner}>
+              <Mic size={16} color={colors.hologram} />
+              <Text style={styles.voiceTeaserText}>Or try voice: "Save this reel about keto recipes"</Text>
+            </View>
+            <View style={styles.voiceBadge}>
+              <Text style={styles.voiceBadgeText}>Soon</Text>
+            </View>
+          </MotiView>
+        )}
 
         {error ? (
           <View style={styles.errorBox}>
@@ -204,26 +216,26 @@ export default function SaveScreen() {
             from={{ opacity: 0, scale: 0.96, translateY: 12 }}
             animate={{ opacity: 1, scale: 1, translateY: 0 }}
             transition={{ type: 'spring', damping: 15, delay: 240 }}
-            style={styles.notesCard}
           >
-            <View style={styles.notesHeader}>
-              <Icon name="information-circle" size={15} color={colors.accentLight} />
-              <Text style={styles.notesTitle}>Good to know</Text>
-            </View>
-            {SAVE_NOTES.map((n, i) => (
-              <View key={i} style={styles.noteRow}>
-                <Icon name="checkmark" size={12} color={colors.accentLight} style={{ marginTop: 2 }} />
-                <Text style={styles.noteText}>{n}</Text>
+            <GlassCard tint="none" intensity="low" style={styles.notesCard}>
+              <View style={styles.notesHeader}>
+                <Icon name="information-circle" size={15} color={colors.accentLight} />
+                <Text style={styles.notesTitle}>Good to know</Text>
               </View>
-            ))}
+              {SAVE_NOTES.map((n, i) => (
+                <View key={i} style={styles.noteRow}>
+                  <Icon name="checkmark" size={12} color={colors.accentLight} style={{ marginTop: 2 }} />
+                  <Text style={styles.noteText}>{n}</Text>
+                </View>
+              ))}
+            </GlassCard>
           </MotiView>
         )}
 
-        {/* ── Bot progress track ─────────────────────── */}
+        {/* Bot progress track */}
         {loading && (
           <View style={styles.progressCard}>
             <View style={styles.track} onLayout={onTrackLayout}>
-              {/* Bot hopping layer */}
               <View style={styles.botLayer}>
                 <Animated.View style={[
                   styles.bot,
@@ -240,7 +252,6 @@ export default function SaveScreen() {
                 </Animated.View>
               </View>
 
-              {/* Rail + stations */}
               <View style={styles.rail}>
                 <View style={styles.railLine} />
                 <Animated.View style={[styles.railFill, { width: fillW }]} />
@@ -260,7 +271,6 @@ export default function SaveScreen() {
               </View>
             </View>
 
-            {/* Honest live status */}
             <Animated.Text style={[styles.stepLabel, { opacity: pulse }]}>
               {STEPS[stepIdx].text}
             </Animated.Text>
@@ -270,7 +280,7 @@ export default function SaveScreen() {
 
         <Pressable onPress={handleSave} disabled={loading} style={styles.buttonWrap} scaleTo={0.97}>
           <LinearGradient
-            colors={loading ? [colors.cardElevated, colors.card] : gradients.primary}
+            colors={loading ? [colors.cardElevated, colors.card] : gradients.hologram}
             start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
             style={styles.button}
           >
@@ -311,6 +321,26 @@ const styles = StyleSheet.create({
   inputDisabled: { opacity: 0.5 },
   input: { flex: 1, color: colors.textPrimary, fontSize: font.md, textAlignVertical: 'top', minHeight: 50 },
 
+  smartPaste: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  smartPasteText: { flex: 1, color: colors.textTertiary, fontSize: font.xs, lineHeight: 16, fontStyle: 'italic' },
+
+  voiceTeaser: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    gap: spacing.sm, paddingHorizontal: spacing.xs,
+  },
+  voiceTeaserInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
+  voiceTeaserText: { flex: 1, color: colors.textTertiary, fontSize: font.xs, lineHeight: 16 },
+  voiceBadge: {
+    backgroundColor: colors.accent + '18',
+    borderRadius: radius.full,
+    paddingHorizontal: 8, paddingVertical: 3,
+    borderWidth: 1, borderColor: colors.accent + '30',
+  },
+  voiceBadgeText: { color: colors.accentLight, fontSize: 10, fontWeight: '800' },
+
   errorBox: {
     flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
     backgroundColor: colors.danger + '1A',
@@ -319,15 +349,13 @@ const styles = StyleSheet.create({
   errorText: { flex: 1, color: colors.danger, fontSize: font.sm, lineHeight: 20 },
 
   notesCard: {
-    backgroundColor: colors.card, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.sm,
+    padding: spacing.md, gap: spacing.sm,
   },
   notesHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   notesTitle: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
   noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   noteText: { flex: 1, color: colors.textSecondary, fontSize: font.xs, lineHeight: 17 },
 
-  // Progress card
   progressCard: {
     backgroundColor: colors.card, borderRadius: radius.lg,
     borderWidth: 1, borderColor: colors.border,

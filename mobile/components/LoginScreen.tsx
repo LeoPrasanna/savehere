@@ -285,7 +285,7 @@ export function LoginScreen() {
 
             {/* Submit */}
             <Pressable onPress={submit} disabled={busy} style={styles.submitWrap}>
-              <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.submit}>
+              <LinearGradient colors={gradients.hologram} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.submit}>
                 {busy ? (
                   <ActivityIndicator color="#FFF" />
                 ) : (

@@ -33,8 +33,16 @@ export const colors = {
   success: '#3DD68C',
   warning: '#FFB84D',
 
-  // Overlay for image scrims
-  scrim: 'rgba(11,10,15,0.85)',
+  // Holographic / futuristic accents
+  hologram: '#00F0FF',
+  neonPink: '#FF2E8C',
+  neonCyan: '#00F0FF',
+  neonViolet: '#BD00FF',
+
+  // Glassmorphism overlays
+  glassBg: 'rgba(28,25,36,0.55)',
+  glassBorder: 'rgba(62,58,72,0.6)',
+  glassBorderLight: 'rgba(139,125,255,0.25)',
 };
 
 /** Gradient stop pairs — feed straight into <LinearGradient colors={...} /> */
@@ -46,6 +54,9 @@ export const gradients = {
   success: ['#3DD68C', '#2BB673'] as const,
   surface: ['#1C1924', '#15131C'] as const,      // subtle card depth
   scrim: ['transparent', 'rgba(11,10,15,0.0)', 'rgba(11,10,15,0.9)'] as const,
+  hologram: ['#00F0FF', '#BD00FF', '#FF2E8C'] as const, // futuristic tri-color
+  neon: ['#00F0FF', '#8B7DFF'] as const,         // cyan → violet neon
+  darkSurface: ['#0F0D14', '#1A1724'] as const,
 };
 
 /** Per-platform brand colors for badges / accents */
@@ -129,3 +140,46 @@ export const shadow = {
     default: { elevation: 12 },
   }),
 } as const;
+
+/** Glassmorphism preset style object for quick use */
+export const glass = {
+  card: {
+    backgroundColor: colors.glassBg,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.glassBorder,
+  } as const,
+  cardElevated: {
+    backgroundColor: 'rgba(28,25,36,0.72)',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.glassBorderLight,
+    ...shadow.md,
+  } as const,
+  neonBorder: {
+    borderWidth: 1.5,
+    borderColor: colors.accent + '40',
+  } as const,
+};
+
+/** Animated / futuristic shadow presets */
+export const glow = {
+  violet: {
+    shadowColor: colors.accent,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6,
+    shadowRadius: 16,
+  },
+  cyan: {
+    shadowColor: colors.hologram,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 14,
+  },
+  pink: {
+    shadowColor: colors.neonPink,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.5,
+    shadowRadius: 14,
+  },
+};
