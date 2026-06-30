@@ -12,6 +12,7 @@ from app.database import get_db, SessionLocal, ReelDB, ExtractionCacheDB
 from app.models.reel import ReelSaveRequest, ReelNotesRequest, ReelCategoryRequest, ReelResponse, ReelListResponse
 from app.services import extractor, transcriber, summarizer
 from app.ratelimit import rate_limit
+from app.quota import charge_ai_action
 from app.auth import get_current_user, AuthUser
 
 logger = logging.getLogger(__name__)
@@ -229,6 +230,9 @@ def resummarize_reel(reel_id: str, user: AuthUser = Depends(get_current_user), d
             detail="No content to summarize. Paste the post text into Notes first, then re-summarize."
         )
 
+    # Per-user daily AI budget (shared across all AI actions). Charged before the call.
+    charge_ai_action(db, user)
+
     ai = summarizer.summarize(
         platform=reel.platform,
         title=reel.title or "",
@@ -260,6 +264,10 @@ def summarize_now(reel_id: str, user: AuthUser = Depends(get_current_user), db: 
     reel = _get_owned_reel_or_404(reel_id, user, db)
     if reel.summary_status == "ready" and reel.summary:
         return _to_response(reel)
+
+    # Per-user daily AI budget — only charged when we actually run the summary (a
+    # reel already 'ready' returned above without spending a unit).
+    charge_ai_action(db, user)
 
     _summarize_reel(reel.id)        # own session; commits the result
     db.refresh(reel)                # pull the freshly-committed row into this session

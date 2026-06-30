@@ -31,5 +31,13 @@ class Settings:
     # Driver-agnostic. Defaults to local SQLite; set DATABASE_URL to a Postgres URL
     # in production (lands with auth). SQLAlchemy picks the driver from the scheme.
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./savehere.db")
+    # Per-user AI actions allowed per UTC day (summaries, recipes, workouts, asks
+    # all count). The real spend ceiling per user — env-overridable so the budget
+    # can be tightened without a deploy. This is the FREE tier's limit.
+    AI_DAILY_LIMIT: int = int(os.getenv("AI_DAILY_LIMIT", "30"))
+    # Paid tier's daily AI-action limit. Applies to users whose JWT carries
+    # app_metadata.tier == "pro" (set server-side by the RevenueCat/IAP webhook at
+    # launch). Placeholder number until pricing is finalized — env-tunable.
+    AI_PRO_DAILY_LIMIT: int = int(os.getenv("AI_PRO_DAILY_LIMIT", "100"))
 
 settings = Settings()

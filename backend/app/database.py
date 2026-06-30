@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, DateTime, JSON, Text, Integer, Boolean, ForeignKey, text
+from sqlalchemy import create_engine, Column, String, DateTime, Date, JSON, Text, Integer, Boolean, ForeignKey, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
 import uuid
@@ -95,6 +95,19 @@ class TaskDB(Base):
     kind = Column(String, default="task")     # "step" (ordered how-to) | "task" (standalone)
     source = Column(String, default="content") # "content" | "title" | "notes" (how it was derived)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AiUsageDB(Base):
+    """Per-user, per-UTC-day count of AI actions — the daily quota counter.
+
+    DB-backed (unlike the in-memory per-IP rate limiter) so it survives restarts/
+    redeploys and can't be reset by rotating IPs. One row per user per day; the
+    quota helper increments `count` and refuses once it hits the limit."""
+    __tablename__ = "ai_usage"
+
+    user_id = Column(String, primary_key=True)
+    day = Column(Date, primary_key=True)
+    count = Column(Integer, nullable=False, default=0)
 
 
 def get_db():

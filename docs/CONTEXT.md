@@ -25,12 +25,13 @@ backend/   FastAPI + SQLAlchemy, SQLite (dev). System Python 3.12.
   app/
     main.py              app + CORS + /health + /health/extract + /api/thumbnail proxy
     config.py            env via python-dotenv + os.getenv (reads .env OR real env vars)
-    database.py          ReelDB, TaskDB, WorkoutExerciseDB, ExtractionCacheDB (+ ALTER-TABLE migrations)
-    ratelimit.py         per-IP sliding-window limiter (burst + daily)
+    database.py          ReelDB, TaskDB, WorkoutExerciseDB, ExtractionCacheDB, AiUsageDB (+ ALTER-TABLE migrations)
+    ratelimit.py         per-IP sliding-window limiter (burst/anti-loop guard)
+    quota.py             per-user DB-backed daily AI quota (enforce_daily_ai_quota, AI_DAILY_LIMIT)
     routes/
       reels.py           save/list/get/delete, notes, category, resummarize; extraction cache + eviction
       workout.py         tasks (AI once) + manual add/edit/delete; workout plans
-      ask.py             "ask your library" endpoint (burst + daily caps)
+      ask.py             "ask your library" endpoint (burst guard + per-user quota)
     services/
       extractor.py       yt-dlp (process=False, ios/tv/android clients) + page/JSON-LD fallback
       summarizer.py      Claude Haiku summary + tags
@@ -77,7 +78,9 @@ alert-circle icon in `reel/[id].tsx`), not a `window.alert()`. Locked by
 ### AI cost & caps
 - Model: Claude Haiku `claude-haiku-4-5-20251001`. Pricing **$1/1M input, $5/1M output** `[Certain]`.
 - Est. per-ask cost ~**$0.0015** after retrieval (was ~$0.0055 when dumping 60 reels) `[Guessing on tokens]`.
-- `/api/ask` was the only **uncapped** AI feature → added per-IP **daily cap 15/day** (`ASK_DAILY_LIMIT`) on top of 15/min burst. This is an **interim guardrail**: in-memory (resets on restart), per-IP (shared NAT). The real fix is a **per-user daily/monthly quota**, which needs auth and doubles as the paywall lever (free vs paid limits).
+- **Per-user daily AI quota (Phase 5) ✓** — every AI action (ask/tasks/workout/(re)summarize) draws from one **per-user, DB-backed daily budget** keyed on the Supabase user id (`app/quota.py` + `ai_usage` table). Routes call `charge_ai_action(db, user)`. Replaces the old interim per-IP 15/day ask cap: it persists across restarts/redeploys and can't be bypassed by rotating IPs. A per-IP **burst** guard still sits beneath it (anti-loop). Charged *before* the call (a failed gen still cost tokens).
+  - **Race-safe:** the charge is a single atomic conditional `UPDATE ... WHERE count < limit` (after an idempotent `INSERT ... ON CONFLICT DO NOTHING`), so concurrent requests can't overshoot the cap — correct on SQLite *and* Postgres, single- or multi-instance.
+  - **Tier-aware (the paywall lever):** `daily_limit_for(user)` reads `tier_for(user)` from the JWT's **`app_metadata.tier`** claim (server-set, so a user can't self-upgrade via `user_metadata`). `free` → `AI_DAILY_LIMIT` (30); `pro` → `AI_PRO_DAILY_LIMIT` (100, placeholder). **Remaining owner work:** the RevenueCat/IAP webhook must write `app_metadata.tier="pro"` on purchase, and the pro number gets finalized with pricing — no code change to the quota.
 - Rule to never cross: **net revenue per user ≥ their token cost.** Price-down and cap-down are ONE lever.
 
 ### Pricing (planned — see TODO "Pricing & Monetization")
@@ -92,7 +95,8 @@ alert-circle icon in `reel/[id].tsx`), not a `window.alert()`. Locked by
 - **Phase 2 (verify primitive) ✓** — `backend/app/auth.py`: `get_current_user()` dependency verifies ES256 tokens via cached `PyJWKClient`, returns `AuthUser(id=sub, email)`, clean 401s. 9 offline tests (`test_auth.py`, locally-minted EC keypair — no network in CI).
 - **Phase 3 (per-user data) ✓** — `user_id` on `ReelDB` (indexed); `url` no longer globally unique → per-user dedup in `save_reel`. Every route in `reels.py`/`workout.py`/`ask.py` now takes `Depends(get_current_user)` and filters by `user_id`; single-item ops use `_get_owned_reel_or_404` (and task/exercise ownership via a join to the parent reel) → 404 (not 403) on someone else's id. `test_search_api.py` seeds two users and proves isolation (list/get/delete/search don't cross users; unauthenticated → 401).
 - **Phase 4 (mobile auth) ✓** — `contexts/AuthContext.tsx` (session + `onAuthStateChange`); `components/LoginScreen.tsx` (email/password sign-in/up); auth gate in `app/_layout.tsx` (spinner→login→app); `api.ts` `request()` injects `Authorization: Bearer` from `supabase.getAccessToken()`; sign-out in ProfilePanel. **Dev:** email confirmation OFF (turn ON before launch).
-- **Remaining:** Phase 5 per-user AI quota (replaces interim per-IP cap); Phase 6 Postgres in prod via `DATABASE_URL`. Keep SQLite for local dev.
+- **Phase 5 (per-user AI quota) ✓** — `app/quota.py` `enforce_daily_ai_quota` + `ai_usage` table; one daily budget across all AI actions, env-tunable `AI_DAILY_LIMIT` (30/day); replaces the interim per-IP ask cap. See "AI cost & caps" above.
+- **Remaining:** Phase 6 Postgres in prod via `DATABASE_URL`. Keep SQLite for local dev.
 
 ### Extraction & bot-detection (datacenter IP) — the prod risk
 - **Symptom (2026-06-23):** saving a YouTube Short from the Codespace fails with `[youtube] …: Sign in to confirm you're not a bot`. yt-dlp is current (2026.06.09) — **not** staleness. `[Certain]`
