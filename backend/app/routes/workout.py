@@ -11,6 +11,7 @@ from app.models.workout import (
 )
 from app.services import workout_extractor
 from app.ratelimit import rate_limit
+from app.quota import charge_ai_action
 from app.auth import get_current_user, AuthUser
 
 router = APIRouter(prefix="/api", tags=["workout"])
@@ -115,6 +116,10 @@ def generate_workout(reel_id: str, user: AuthUser = Depends(get_current_user), d
             detail=f"You've built a workout for this reel {WORKOUT_LIMIT} times — that's the limit for now (each one uses AI).",
         )
 
+    # Per-user daily AI budget — charged before the AI call and before we delete the
+    # existing plan, so a quota 429 never destroys a workout the user already had.
+    charge_ai_action(db, user)
+
     # Delete existing plan before regenerating
     db.query(WorkoutExerciseDB).filter(WorkoutExerciseDB.reel_id == reel_id).delete()
     db.commit()
@@ -216,6 +221,9 @@ def generate_tasks(reel_id: str, user: AuthUser = Depends(get_current_user), db:
             status_code=429,
             detail="These were already generated with AI. You can add, edit, or delete them by hand — regenerating isn't available (it would use AI again).",
         )
+
+    # Per-user daily AI budget (shared across all AI actions). Charged before the call.
+    charge_ai_action(db, user)
 
     result = workout_extractor.extract_tasks(
         platform=reel.platform,

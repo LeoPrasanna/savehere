@@ -52,5 +52,5 @@ Be an **advisor, not an assistant** — sharper and more direct than expected:
 
 **Cost discipline** (every AI endpoint costs Claude tokens):
 - Per-reel caps exist (tasks 1, workout 3, resummarize 3).
-- `/api/ask` has per-IP burst (15/min) **and** daily (15/day) caps in `app/ratelimit.py` — interim guardrail until per-user quotas land with auth.
+- A **per-user daily AI quota** (`app/quota.py` + `ai_usage` table, env `AI_DAILY_LIMIT`=30/day free, `AI_PRO_DAILY_LIMIT` paid) bounds total spend per user across **all** AI actions. Any new AI endpoint must call `charge_ai_action(db, user)` (after free checks, before the Claude call). It's tier-aware (reads `app_metadata.tier`) and atomic (race-safe on SQLite/Postgres). A per-IP burst guard in `app/ratelimit.py` still sits beneath as anti-loop.
 - Don't add an uncapped AI call. See `docs/CONTEXT.md` → "AI cost & caps".
