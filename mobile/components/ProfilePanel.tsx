@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, StyleSheet, Modal, useWindowDimensions, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, Modal, useWindowDimensions, Dimensions, Alert, ScrollView } from 'react-native';
 import { MotiView } from 'moti';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -99,97 +99,102 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
         <Pressable style={StyleSheet.absoluteFill} onPress={onClose} scaleTo={1} />
 
         <MotiView
-          from={{ translateX: panelWidth }}
-          animate={{ translateX: 0 }}
-          transition={{ type: 'timing', duration: 260 }}
-          style={[styles.panelWrap, { width: panelWidth }]}
+      from={{ translateX: panelWidth }}
+      animate={{ translateX: 0 }}
+      transition={{ type: 'timing', duration: 260 }}
+      style={[styles.panelWrap, { width: panelWidth }]}
+    >
+      <ScrollView
+        style={styles.panel}
+        contentContainerStyle={{
+          gap: spacing.md,
+          paddingHorizontal: spacing.lg,
+          paddingTop: insets.top + spacing.md,
+          paddingBottom: insets.bottom + spacing.md,
+        }}
+        showsVerticalScrollIndicator={false}
+      >
+        <HolographicShimmer width={shimmerW} height={SCREEN_H} color="rgba(139,125,255,0.04)" duration={5000} delay={800} />
+
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Profile</Text>
+          <Pressable onPress={onClose} hitSlop={10}><Icon name="close" size={20} color={colors.textSecondary} /></Pressable>
+        </View>
+
+        {/* Account block with glassmorphism */}
+        <MotiView
+          from={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: 'spring', damping: 14, delay: 100 }}
         >
-          <Pressable
-            scaleTo={1}
-            onPress={() => {}}
-            style={[styles.panel, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + spacing.md }]}
-          >
-            <HolographicShimmer width={shimmerW} height={SCREEN_H} color="rgba(139,125,255,0.04)" duration={5000} delay={800} />
-
-            <View style={styles.header}>
-              <Text style={styles.headerTitle}>Profile</Text>
-              <Pressable onPress={onClose} hitSlop={10}><Icon name="close" size={20} color={colors.textSecondary} /></Pressable>
+          <GlassCard tint="violet" intensity="medium" style={styles.accountCard}>
+            <LinearGradient colors={gradients.hologram} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
+              <Icon name="user" size={26} color="#FFF" />
+            </LinearGradient>
+            <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
+            <Text style={styles.sub} numberOfLines={1}>{email ?? 'Synced to your account'}</Text>
+            <View style={styles.tierBadge}>
+              <Text style={styles.tierBadgeText}>Free</Text>
             </View>
+          </GlassCard>
+        </MotiView>
 
-            {/* Account block with glassmorphism */}
-            <MotiView
-              from={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: 'spring', damping: 14, delay: 100 }}
-            >
-              <GlassCard tint="violet" intensity="medium" style={styles.accountCard}>
-                <LinearGradient colors={gradients.hologram} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
-                  <Icon name="user" size={26} color="#FFF" />
-                </LinearGradient>
-                <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
-                <Text style={styles.sub} numberOfLines={1}>{email ?? 'Synced to your account'}</Text>
-                <View style={styles.tierBadge}>
-                  <Text style={styles.tierBadgeText}>Free</Text>
-                </View>
-              </GlassCard>
-            </MotiView>
+        <Pressable
+          style={styles.signInWrap}
+          scaleTo={0.98}
+          onPress={() => { onClose(); signOut(); }}
+        >
+          <View style={styles.signIn}>
+            <Icon name="login" size={16} color={colors.danger} />
+            <Text style={[styles.signInText, { color: colors.danger }]}>Sign out</Text>
+          </View>
+        </Pressable>
 
-            <Pressable
-              style={styles.signInWrap}
-              scaleTo={0.98}
-              onPress={() => { onClose(); signOut(); }}
-            >
-              <View style={styles.signIn}>
-                <Icon name="login" size={16} color={colors.danger} />
-                <Text style={[styles.signInText, { color: colors.danger }]}>Sign out</Text>
-              </View>
-            </Pressable>
+        {/* Library stats with animation */}
+        <Text style={styles.sectionLabel}>YOUR LIBRARY</Text>
+        <View style={styles.stats}>
+          <Stat icon="bookmark" value={total} label="Saved" delay={200} />
+          <Stat icon="layers" value={categories} label="Categories" delay={300} />
+          <Stat icon="all" value={platforms} label="Platforms" delay={400} />
+        </View>
 
-            {/* Library stats with animation */}
-            <Text style={styles.sectionLabel}>YOUR LIBRARY</Text>
-            <View style={styles.stats}>
-              <Stat icon="bookmark" value={total} label="Saved" delay={200} />
-              <Stat icon="layers" value={categories} label="Categories" delay={300} />
-              <Stat icon="all" value={platforms} label="Platforms" delay={400} />
-            </View>
+        {/* Explore */}
+        <Text style={styles.sectionLabel}>EXPLORE</Text>
+        <View style={styles.menu}>
+          {showAsk && <NavRow icon="ask" label="Ask your library" path="/ask" delay={500} />}
+          <NavRow icon="rediscover" label="Rediscover saves" path="/rediscover" delay={600} />
+          <NavRow icon="sparkles" label="What you can do" path="/help" delay={700} />
+        </View>
 
-            {/* Explore */}
-            <Text style={styles.sectionLabel}>EXPLORE</Text>
-            <View style={styles.menu}>
-              {showAsk && <NavRow icon="ask" label="Ask your library" path="/ask" delay={500} />}
-              <NavRow icon="rediscover" label="Rediscover saves" path="/rediscover" delay={600} />
-              <NavRow icon="sparkles" label="What you can do" path="/help" delay={700} />
-            </View>
+        {/* Settings */}
+        <Text style={styles.sectionLabel}>SETTINGS</Text>
+        <View style={styles.menu}>
+          <NavRow icon="create" label="Edit profile" path="/profile" delay={800} />
+          <Row icon="settings" label="Appearance" delay={900} />
+          <Row icon="bell" label="Notifications" delay={1000} />
+          <Row icon="download" label="Export data" delay={1100} />
+        </View>
 
-            {/* Settings */}
-            <Text style={styles.sectionLabel}>SETTINGS</Text>
-            <View style={styles.menu}>
-              <NavRow icon="create" label="Edit profile" path="/profile" delay={800} />
-              <Row icon="settings" label="Appearance" delay={900} />
-              <Row icon="bell" label="Notifications" delay={1000} />
-              <Row icon="download" label="Export data" delay={1100} />
-            </View>
-
-            {/* Danger zone */}
-            <Text style={styles.sectionLabel}>DANGER ZONE</Text>
-            <MotiView
-              from={{ opacity: 0, translateX: 20 }}
-              animate={{ opacity: 1, translateX: 0 }}
-              transition={{ type: 'timing', delay: 1200, duration: 300 }}
-            >
-              <Pressable style={styles.dangerRow} onPress={() => setShowDeleteConfirm(true)} scaleTo={0.98}>
-                <Icon name="trash" size={18} color={colors.danger} />
-                <Text style={styles.dangerLabel}>Delete account</Text>
-              </Pressable>
-            </MotiView>
-
-            <View style={{ flex: 1 }} />
-            <View style={styles.footer}>
-              <Text style={styles.footerApp}>SaveHere</Text>
-              <Text style={styles.footerVer}>v{APP_VERSION}</Text>
-            </View>
+        {/* Danger zone */}
+        <Text style={styles.sectionLabel}>DANGER ZONE</Text>
+        <MotiView
+          from={{ opacity: 0, translateX: 20 }}
+          animate={{ opacity: 1, translateX: 0 }}
+          transition={{ type: 'timing', delay: 1200, duration: 300 }}
+        >
+          <Pressable style={styles.dangerRow} onPress={() => setShowDeleteConfirm(true)} scaleTo={0.98}>
+            <Icon name="trash" size={18} color={colors.danger} />
+            <Text style={styles.dangerLabel}>Delete account</Text>
           </Pressable>
         </MotiView>
+
+        <View style={{ flex: 1 }} />
+        <View style={styles.footer}>
+          <Text style={styles.footerApp}>SaveHere</Text>
+          <Text style={styles.footerVer}>v{APP_VERSION}</Text>
+        </View>
+      </ScrollView>
+    </MotiView>
       </View>
 
       {/* Delete Account Confirmation Modal */}
@@ -233,8 +238,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(21,19,28,0.92)',
     borderLeftWidth: 1, borderLeftColor: colors.borderLight,
-    paddingHorizontal: spacing.lg,
-    gap: spacing.md,
   },
 
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

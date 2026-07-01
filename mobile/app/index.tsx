@@ -21,26 +21,7 @@ import { colors, spacing, font, radius, gradients, shadow, categoryMeta, CATEGOR
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
 const PAGE = 24;
 
-let enteredSession = false;
-
-export default function HomeScreen() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const numColumns = width < 600 ? 2 : width < 1024 ? 3 : 4;
-  const [reels, setReels] = useState<Reel[]>([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error, setError] = useState('');
-  const [offline, setOffline] = useState(false);
-  const [activeCategory, setActiveCategory] = useState('all');
-  const [search, setSearch] = useState('');
-  const [searchResults, setSearchResults] = useState<Reel[] | null>(null);
-  const [searching, setSearching] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [entered, setEntered] = useState(enteredSession);
+  const [entered, setEntered] = useState(false);
   const fabPulse = useRef(new Animated.Value(1)).current;
 
   const load = useCallback(async (category = activeCategory) => {
@@ -145,7 +126,7 @@ export default function HomeScreen() {
     : displayList;
 
   if (!entered) {
-    return <Landing onEnter={() => { enteredSession = true; setEntered(true); }} />;
+    return <Landing onEnter={() => setEntered(true)} />;
   }
 
   return (

@@ -12,6 +12,7 @@ import {
 import { Pressable } from './Pressable';
 import { GlassCard } from './GlassCard';
 import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
+import { useAuth } from '../contexts/AuthContext';
 
 const ONBOARDING_KEY = '@savehere:onboarding:v1';
 const { width: SCREEN_W } = Dimensions.get('window');
