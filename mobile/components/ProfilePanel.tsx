@@ -1,4 +1,5 @@
-import { View, Text, StyleSheet, Modal, useWindowDimensions, Dimensions } from 'react-native';
+import { useState } from 'react';
+import { View, Text, StyleSheet, Modal, useWindowDimensions, Dimensions, Alert } from 'react-native';
 import { MotiView } from 'moti';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,7 +28,9 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const panelWidth = Math.min(330, width * 0.86);
-  const { email, displayName, signOut } = useAuth();
+  const { email, displayName, signOut, deleteAccount } = useAuth();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const shimmerW = panelWidth - spacing.lg * 2;
 
   const go = (path: string) => { onClose(); router.push(path as any); };
@@ -35,6 +38,17 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const total = totalProp ?? reels.length;
   const categories = new Set(reels.map(r => r.category).filter(Boolean)).size;
   const platforms = new Set(reels.map(r => r.platform).filter(Boolean)).size;
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    const result = await deleteAccount();
+    setDeleting(false);
+    setShowDeleteConfirm(false);
+    onClose();
+    if (result.error) {
+      Alert.alert('Error', result.error);
+    }
+  };
 
   const Stat = ({ icon, value, label, delay = 0 }: { icon: string; value: number; label: string; delay?: number }) => (
     <MotiView
@@ -156,6 +170,19 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
               <Row icon="download" label="Export data" delay={1100} />
             </View>
 
+            {/* Danger zone */}
+            <Text style={styles.sectionLabel}>DANGER ZONE</Text>
+            <MotiView
+              from={{ opacity: 0, translateX: 20 }}
+              animate={{ opacity: 1, translateX: 0 }}
+              transition={{ type: 'timing', delay: 1200, duration: 300 }}
+            >
+              <Pressable style={styles.dangerRow} onPress={() => setShowDeleteConfirm(true)} scaleTo={0.98}>
+                <Icon name="trash" size={18} color={colors.danger} />
+                <Text style={styles.dangerLabel}>Delete account</Text>
+              </Pressable>
+            </MotiView>
+
             <View style={{ flex: 1 }} />
             <View style={styles.footer}>
               <Text style={styles.footerApp}>SaveHere</Text>
@@ -164,6 +191,37 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
           </Pressable>
         </MotiView>
       </View>
+
+      {/* Delete Account Confirmation Modal */}
+      <Modal visible={showDeleteConfirm} transparent animationType="fade" statusBarTranslucent>
+        <View style={styles.confirmOverlay}>
+          <MotiView
+            from={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: 'spring', damping: 15 }}
+          >
+            <GlassCard tint="none" intensity="high" style={styles.confirmCard}>
+              <View style={styles.confirmIconWrap}>
+                <Icon name="trash" size={32} color={colors.danger} />
+              </View>
+              <Text style={styles.confirmTitle}>Delete your account?</Text>
+              <Text style={styles.confirmDesc}>
+                This will permanently remove all your saved reels, notes, workout plans, and personal data. This action cannot be undone.
+              </Text>
+              <View style={styles.confirmActions}>
+                <Pressable style={styles.confirmCancel} onPress={() => setShowDeleteConfirm(false)} scaleTo={0.97}>
+                  <Text style={styles.confirmCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable style={styles.confirmDelete} onPress={handleDeleteAccount} scaleTo={0.97}>
+                  <LinearGradient colors={[colors.danger, '#FF4757']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.confirmDeleteInner}>
+                    <Text style={styles.confirmDeleteText}>{deleting ? 'Deleting…' : 'Delete Account'}</Text>
+                  </LinearGradient>
+                </Pressable>
+              </View>
+            </GlassCard>
+          </MotiView>
+        </View>
+      </Modal>
     </Modal>
   );
 }
@@ -233,7 +291,63 @@ const styles = StyleSheet.create({
   soon: { backgroundColor: colors.accent + '22', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
   soonText: { color: colors.accentLight, fontSize: 10, fontWeight: '800' },
 
+  dangerRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.danger + '12', borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.danger + '40', padding: spacing.md,
+  },
+  dangerLabel: { flex: 1, color: colors.danger, fontSize: font.md, fontWeight: '700' },
+
   footer: { alignItems: 'center', gap: 2 },
   footerApp: { color: colors.textSecondary, fontSize: font.sm, fontWeight: '800' },
   footerVer: { color: colors.textTertiary, fontSize: font.xs },
+
+  // Confirmation modal
+  confirmOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  confirmCard: {
+    width: '100%',
+    maxWidth: 380,
+    padding: spacing.lg,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  confirmIconWrap: {
+    width: 64, height: 64, borderRadius: radius.full,
+    backgroundColor: colors.danger + '18',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: spacing.xs,
+  },
+  confirmTitle: { color: colors.textPrimary, fontSize: font.lg, fontWeight: '900', textAlign: 'center' },
+  confirmDesc: { color: colors.textSecondary, fontSize: font.sm, lineHeight: 20, textAlign: 'center' },
+  confirmActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    width: '100%',
+    marginTop: spacing.md,
+  },
+  confirmCancel: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  confirmCancelText: { color: colors.textPrimary, fontSize: font.md, fontWeight: '700' },
+  confirmDelete: { flex: 1, borderRadius: radius.md, ...shadow.sm },
+  confirmDeleteInner: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+  },
+  confirmDeleteText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
 });

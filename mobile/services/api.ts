@@ -211,4 +211,8 @@ export const api = {
 
   deleteTask: (taskId: string) =>
     request<{ message: string }>(`/api/tasks/${taskId}`, { method: 'DELETE' }),
+
+  // ── Account ───────────────────────────────────────────────
+  deleteAccount: () =>
+    request<{ deleted: boolean; reels_removed: number; message: string }>(`/api/account`, { method: 'DELETE' }),
 };

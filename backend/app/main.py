@@ -9,6 +9,7 @@ from app.database import create_tables
 from app.routes.reels import router as reels_router, recover_pending_summaries
 from app.routes.workout import router as workout_router
 from app.routes.ask import router as ask_router
+from app.routes.account import router as account_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,6 +56,7 @@ app.add_middleware(
 app.include_router(reels_router)
 app.include_router(workout_router)
 app.include_router(ask_router)
+app.include_router(account_router)
 
 
 @app.on_event("startup")

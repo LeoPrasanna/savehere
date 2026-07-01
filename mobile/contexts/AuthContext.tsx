@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
+import { api } from '../services/api';
 
 export interface Profile {
   first_name?: string;
@@ -20,6 +21,7 @@ interface AuthState {
   triggerCelebrate: () => void;
   updateProfile: (fields: Profile) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<{ error: string | null }>;
 }
 
 // Friendly fallback name from the email local-part, e.g. "prasanna.a1@x.com" ->
@@ -39,6 +41,7 @@ const AuthContext = createContext<AuthState>({
   triggerCelebrate: () => {},
   updateProfile: async () => ({ error: null }),
   signOut: async () => {},
+  deleteAccount: async () => ({ error: null }),
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -89,6 +92,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const deleteAccount = async (): Promise<{ error: string | null }> => {
+    try {
+      // 1. Delete all user data from backend
+      await api.deleteAccount();
+    } catch (e: any) {
+      // If backend deletion fails, still attempt to sign out locally
+      console.warn('Backend account deletion failed:', e?.message || e);
+    }
+    // 2. Sign out from Supabase
+    const { error } = await supabase.auth.signOut();
+    if (error) return { error: error.message };
+    return { error: null };
+  };
+
   const email = session?.user?.email ?? null;
   const profile = (session?.user?.user_metadata ?? {}) as Profile;
   const displayName =
@@ -96,7 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, loading, email, profile, displayName, celebrate, triggerCelebrate, updateProfile, signOut }}
+      value={{ session, loading, email, profile, displayName, celebrate, triggerCelebrate, updateProfile, signOut, deleteAccount }}
     >
       {children}
     </AuthContext.Provider>
