@@ -27,7 +27,7 @@ export const FEATURES: Feature[] = [
   },
   {
     icon: 'search',
-    color: '#5BC0FF',
+    color: '#5FC9BD',
     title: 'Find anything fast',
     desc: 'Search titles, summaries, tags & notes.',
     detail: 'The search bar matches your titles, AI summaries, tags AND your own notes — so you can find that one thing you saved even if you only remember a small detail from it.',

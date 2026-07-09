@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0A0A0D"
+      "backgroundColor": "#0F0D0A"
     },
     "ios": {
       "supportsTablet": true,
@@ -20,11 +20,11 @@
       "splash": {
         "image": "./assets/splash-icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#0A0A0D",
+        "backgroundColor": "#0F0D0A",
         "dark": {
           "image": "./assets/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#0A0A0D"
+          "backgroundColor": "#0F0D0A"
         }
       }
     },

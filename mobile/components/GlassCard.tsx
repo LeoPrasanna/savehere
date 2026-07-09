@@ -16,8 +16,8 @@ interface GlassCardProps {
 
 const BORDER_MAP = {
   violet: colors.accent + '2E',
-  cyan: '#5BC0FF2E',
-  pink: '#FF6B9D2E',
+  cyan: '#5FC9BD2E',
+  pink: '#FF6B8A2E',
   none: colors.border,
 };
 

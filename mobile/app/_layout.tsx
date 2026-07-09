@@ -3,6 +3,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useFonts, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
+import { Fraunces_700Bold, Fraunces_900Black } from '@expo-google-fonts/fraunces';
 import { HeaderHomeButton } from '../components/HomeButton';
 import { LoginScreen } from '../components/LoginScreen';
 import { Confetti } from '../components/Confetti';
@@ -41,9 +42,10 @@ function AppStack() {
 // navigate — AuthProvider's listener flips this gate on sign-in/out.
 function Gate() {
   const { session, loading, celebrate } = useAuth();
-  // Display font for titles/brand; body text stays on the system face. We don't
-  // block the gate on it — RN falls back to system until it's ready.
-  useFonts({ Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold });
+  // Display faces (Manrope for UI titles, Fraunces serif for brand moments);
+  // body text stays on the system face. We don't block the gate on them — RN
+  // falls back to system until they're ready.
+  useFonts({ Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold, Fraunces_700Bold, Fraunces_900Black });
   return (
     <>
       {loading ? (

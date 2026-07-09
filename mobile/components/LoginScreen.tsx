@@ -208,7 +208,7 @@ export function LoginScreen() {
                   transition={{ type: 'spring', damping: 18, stiffness: 200 }}
                   style={[styles.segPill, { width: pillW }]}
                 >
-                  <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+                  <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
                 </MotiView>
               )}
               <Pressable style={styles.segBtn} scaleTo={0.97} onPress={() => switchMode('signin')}>
@@ -344,8 +344,8 @@ const styles = StyleSheet.create({
 
   // Wordmark
   title: {
-    color: colors.textPrimary, fontFamily: typeface.display, fontSize: font.display, fontWeight: '900',
-    textAlign: 'center', letterSpacing: -1.5,
+    color: colors.textPrimary, fontFamily: typeface.serifBlack, fontSize: font.display, fontWeight: '900',
+    textAlign: 'center', letterSpacing: -0.5,
   },
   tagline: {
     color: colors.textSecondary, fontSize: font.md, fontWeight: '600', textAlign: 'center',

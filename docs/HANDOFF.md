@@ -145,12 +145,18 @@ Each prompt is self-contained. Do them one at a time, verify (§3), update TODO.
 
 ## 4.5 UI system (branch `revamp/ui-refresh`) — rules for any UI work
 
-The app moved to a **"calm premium dark"** design system. If you touch UI:
+The app's identity is **"Ember on Ink"** — warm ink-black surfaces, ONE
+ember-orange accent (`#FF6B3D`), cream text, Fraunces serif for brand moments.
+If you touch UI:
 
 - **Tokens only** — every color/space/radius/type value comes from
   `mobile/constants/theme.ts`. Never hardcode hex values in screens.
-- **One accent** (iris violet `colors.accent`) for actions/active states. Color
+- **One accent** (ember `colors.accent`) for actions/active states. Color
   otherwise carries *meaning* (platform, category, status) — never decoration.
+- **Serif discipline**: `typeface.serif`/`serifBlack` (Fraunces) is only for
+  brand moments — landing greeting, login wordmark, reel titles. UI titles use
+  Manrope (`typeface.display*`); body text is the system font. Never serif on
+  buttons, labels, or body copy.
 - **No glassmorphism / neon / rainbow gradients.** `gradients.hologram` and
   `gradients.neon` are legacy aliases that now resolve to the brand violet ramp
   — don't reintroduce multi-hue gradients. `GlassCard` is a flat card.

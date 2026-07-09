@@ -31,8 +31,8 @@ function Blob({ id, color, size, start, drift, position, duration = 9000 }: Blob
       <Svg width={size} height={size}>
         <Defs>
           <RadialGradient id={id} cx="50%" cy="50%" r="50%">
-            <Stop offset="0%" stopColor={color} stopOpacity={0.5} />
-            <Stop offset="60%" stopColor={color} stopOpacity={0.18} />
+            <Stop offset="0%" stopColor={color} stopOpacity={0.3} />
+            <Stop offset="60%" stopColor={color} stopOpacity={0.1} />
             <Stop offset="100%" stopColor={color} stopOpacity={0} />
           </RadialGradient>
         </Defs>
@@ -46,17 +46,17 @@ export function AuroraBackground() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <LinearGradient
-        colors={['#0B0A0F', '#130F1E', '#0B0A0F']}
+        colors={['#0F0D0A', '#1A1410', '#0F0D0A']}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Deep space nebula blobs */}
-      <Blob id="aurora-a" color="#8B7DFF" size={520} start={{ x: -40, y: -30 }} drift={{ x: 30, y: 40 }} position={{ top: -140, left: -100 }} duration={12000} />
-      <Blob id="aurora-b" color="#FF6B9D" size={440} start={{ x: 0, y: 0 }} drift={{ x: -40, y: 50 }} position={{ top: 60, right: -120 }} duration={9500} />
-      <Blob id="aurora-c" color="#5BC0FF" size={480} start={{ x: 0, y: 0 }} drift={{ x: 40, y: -40 }} position={{ bottom: -160, left: 10 }} duration={14000} />
-      <Blob id="aurora-d" color="#BD00FF" size={360} start={{ x: 20, y: -20 }} drift={{ x: -30, y: 30 }} position={{ bottom: 100, right: -60 }} duration={11000} />
+      {/* Warm ember glow blobs — candlelight, not neon */}
+      <Blob id="aurora-a" color="#FF6B3D" size={520} start={{ x: -40, y: -30 }} drift={{ x: 30, y: 40 }} position={{ top: -140, left: -100 }} duration={12000} />
+      <Blob id="aurora-b" color="#FFB35C" size={440} start={{ x: 0, y: 0 }} drift={{ x: -40, y: 50 }} position={{ top: 60, right: -120 }} duration={9500} />
+      <Blob id="aurora-c" color="#C9552F" size={480} start={{ x: 0, y: 0 }} drift={{ x: 40, y: -40 }} position={{ bottom: -160, left: 10 }} duration={14000} />
+      <Blob id="aurora-d" color="#FF6B8A" size={360} start={{ x: 20, y: -20 }} drift={{ x: -30, y: 30 }} position={{ bottom: 100, right: -60 }} duration={11000} />
 
       {/* Subtle starfield dots */}
       <View style={styles.starfield} pointerEvents="none">

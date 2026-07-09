@@ -1,73 +1,74 @@
 import { Platform } from 'react-native';
 
 /**
- * SaveHere design system — "calm premium dark".
+ * SaveHere design system — "Ember on Ink".
  *
- * One confident accent (iris violet, matching the app icon), near-black warm
- * surfaces, hairline borders, an iOS-leaning type scale, and restrained motion.
- * Color is reserved for meaning (platform, category, status) — the chrome stays
- * quiet so the user's saved content is the loudest thing on screen.
+ * A warm editorial dark identity: ink-black surfaces with a hint of warmth,
+ * one ember-orange accent, cream text, and a serif display face (Fraunces) for
+ * brand moments. Color is reserved for meaning (platform, category, status) —
+ * the chrome stays quiet so the user's saved content is the loudest thing on
+ * screen, and the warmth makes it feel human instead of "AI product".
  *
  * NOTE: token names are a stable API — screens import these by name. Add new
  * tokens freely; rename/remove only with a sweep of all usages.
  */
 
 export const colors = {
-  // Surfaces — warm near-blacks. Each step is one perceptible notch brighter.
-  background: '#0A0A0D',
-  surface: '#121118',
-  card: '#17151D',
-  cardElevated: '#1E1B25',
-  border: '#242130',        // hairline on card edges
-  borderLight: '#2E2A3B',   // slightly stronger, for inputs/dividers
+  // Surfaces — warm ink. Each step is one perceptible notch brighter.
+  background: '#0F0D0A',
+  surface: '#161310',
+  card: '#1C1814',
+  cardElevated: '#252019',
+  border: '#2B251D',        // hairline on card edges
+  borderLight: '#383126',   // slightly stronger, for inputs/dividers
 
-  // Primary accent (iris violet — the app icon's hue). Use for primary actions,
-  // active states and links; never as large background washes.
-  accent: '#8B7DFF',
-  accentDark: '#6C5CE7',
-  accentLight: '#A99EFF',
+  // Primary accent — ember. Use for primary actions, active states and links;
+  // never as large background washes.
+  accent: '#FF6B3D',
+  accentDark: '#E4501F',
+  accentLight: '#FF9770',
 
-  // Text — soft off-white reads calmer than pure #FFF on OLED black.
-  textPrimary: '#F4F2F8',
-  textSecondary: '#A29BB3',
-  textTertiary: '#6B6478',
+  // Text — warm cream reads softer than pure #FFF on ink.
+  textPrimary: '#F7F2E9',
+  textSecondary: '#B3A99A',
+  textTertiary: '#786F61',
 
   // Tags
-  tagBg: '#211E2B',
-  tagText: '#B0A6E8',
+  tagBg: '#292219',
+  tagText: '#E8B98F',
 
   // Status
-  danger: '#FF5C7A',
-  success: '#3DD68C',
-  warning: '#FFB84D',
+  danger: '#FF4D5E',
+  success: '#4FCE8F',
+  warning: '#FFC24D',
 
-  // Legacy accent aliases (kept for API compatibility) — now mapped to the calm
-  // palette instead of neon so old call sites inherit the new look.
-  hologram: '#5BC0FF',
-  neonPink: '#FF6B9D',
-  neonCyan: '#5BC0FF',
-  neonViolet: '#8B7DFF',
+  // Legacy accent aliases (kept for API compatibility) — mapped into the warm
+  // palette so old call sites inherit the new look.
+  hologram: '#FFB35C',
+  neonPink: '#FF6B8A',
+  neonCyan: '#5FC9BD',
+  neonViolet: '#FF6B3D',
 
   // Former "glass" tokens — now flat surfaces (glassmorphism retired).
-  glassBg: '#17151D',
-  glassBorder: '#242130',
-  glassBorderLight: '#2E2A3B',
+  glassBg: '#1C1814',
+  glassBorder: '#2B251D',
+  glassBorderLight: '#383126',
 };
 
 /** Gradient stop pairs — feed straight into <LinearGradient colors={...} />.
- *  All gradients are now tight, single-hue ramps: enough depth to feel alive,
- *  never a rainbow. `hologram`/`neon` alias the brand ramp for compatibility. */
+ *  Tight, single-hue ramps: enough depth to feel alive, never a rainbow.
+ *  `hologram`/`neon` alias the brand ramp for compatibility. */
 export const gradients = {
-  primary: ['#8B7DFF', '#6C5CE7'] as const,      // brand violet — primary actions
-  vibrant: ['#FF6B9D', '#E8478B'] as const,      // pink ramp — workout action
-  sunset: ['#FF8A5B', '#FF6B9D'] as const,
-  cool: ['#5BC0FF', '#3D9BE8'] as const,         // blue ramp — tasks action
-  success: ['#3DD68C', '#2BB673'] as const,
-  surface: ['#17151D', '#121118'] as const,
-  scrim: ['transparent', 'rgba(10,10,13,0.0)', 'rgba(10,10,13,0.92)'] as const,
-  hologram: ['#8B7DFF', '#6C5CE7'] as const,     // legacy alias → brand ramp
-  neon: ['#8B7DFF', '#6C5CE7'] as const,         // legacy alias → brand ramp
-  darkSurface: ['#121118', '#0A0A0D'] as const,
+  primary: ['#FF7A45', '#E4501F'] as const,      // ember ramp — primary actions
+  vibrant: ['#FF5C7A', '#E43D5F'] as const,      // warm pink ramp — workout action
+  sunset: ['#FFB35C', '#FF7A45'] as const,
+  cool: ['#5FC9BD', '#3FA79B'] as const,         // teal ramp — tasks action
+  success: ['#4FCE8F', '#33B274'] as const,
+  surface: ['#1C1814', '#161310'] as const,
+  scrim: ['transparent', 'rgba(15,13,10,0.0)', 'rgba(15,13,10,0.92)'] as const,
+  hologram: ['#FF7A45', '#E4501F'] as const,     // legacy alias → brand ramp
+  neon: ['#FF7A45', '#E4501F'] as const,         // legacy alias → brand ramp
+  darkSurface: ['#161310', '#0F0D0A'] as const,
 };
 
 /** Per-platform brand colors for badges / accents */
@@ -77,26 +78,27 @@ export const platformMeta: Record<string, { color: string; gradient: readonly [s
   tiktok: { color: '#25F4EE', gradient: ['#12333A', '#0D2228'], icon: 'logo-tiktok', label: 'TikTok' },
   linkedin: { color: '#4A9DE0', gradient: ['#132A3F', '#0D1C2A'], icon: 'logo-linkedin', label: 'LinkedIn' },
   facebook: { color: '#4A90F2', gradient: ['#14263F', '#0D1A2A'], icon: 'logo-facebook', label: 'Facebook' },
-  unknown: { color: '#8B7DFF', gradient: ['#252139', '#1A1728'], icon: 'globe-outline', label: 'Web' },
+  unknown: { color: '#FF9770', gradient: ['#33251C', '#241A14'], icon: 'globe-outline', label: 'Web' },
 };
 
-/** Category visual identity — icon + tint for chips and cards */
+/** Category visual identity — icon + tint for chips and cards.
+ *  Vivid but warm-harmonized so they sit comfortably on ink. */
 export const categoryMeta: Record<string, { icon: string; color: string }> = {
-  all: { icon: 'all', color: '#8B7DFF' },
-  fitness: { icon: 'fitness', color: '#FF6B9D' },
-  cooking: { icon: 'cooking', color: '#FFB84D' },
-  tech: { icon: 'tech', color: '#5BC0FF' },
+  all: { icon: 'all', color: '#FF6B3D' },
+  fitness: { icon: 'fitness', color: '#FF6B8A' },
+  cooking: { icon: 'cooking', color: '#FFAE52' },
+  tech: { icon: 'tech', color: '#5FC9BD' },
   motivation: { icon: 'motivation', color: '#FF8A5B' },
-  education: { icon: 'education', color: '#3DD68C' },
-  entertainment: { icon: 'entertainment', color: '#C44EFF' },
-  fashion: { icon: 'fashion', color: '#FF8FB1' },
-  travel: { icon: 'travel', color: '#42C9FF' },
-  business: { icon: 'business', color: '#B6AEFF' },
-  news: { icon: 'news', color: '#9AA0AA' },
-  health: { icon: 'health', color: '#4ADE80' },
+  education: { icon: 'education', color: '#71C787' },
+  entertainment: { icon: 'entertainment', color: '#C98BFF' },
+  fashion: { icon: 'fashion', color: '#FF9BB1' },
+  travel: { icon: 'travel', color: '#5FB9E8' },
+  business: { icon: 'business', color: '#D9B36B' },
+  news: { icon: 'news', color: '#A29C90' },
+  health: { icon: 'health', color: '#63D69B' },
   finance: { icon: 'finance', color: '#F4C430' },
-  general: { icon: 'general', color: '#9A93A8' },
-  other: { icon: 'other', color: '#9A93A8' },
+  general: { icon: 'general', color: '#B3A99A' },
+  other: { icon: 'other', color: '#B3A99A' },
 };
 
 export const categoryFor = (c?: string | null) =>
@@ -135,6 +137,10 @@ export const typeface = {
   display: 'Manrope_800ExtraBold',
   displaySemi: 'Manrope_700Bold',
   displayMedium: 'Manrope_600SemiBold',
+  // Editorial serif for brand moments only: landing greeting, hero numbers,
+  // login wordmark, reel titles. Never on UI controls or body text.
+  serif: 'Fraunces_700Bold',
+  serifBlack: 'Fraunces_900Black',
 };
 
 /** Type scale — restrained, close to iOS defaults. Pair with the weights below. */

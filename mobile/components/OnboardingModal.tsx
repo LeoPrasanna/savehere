@@ -43,7 +43,7 @@ const STEPS: OnboardingStep[] = [
       'Ask natural questions like "What was that high-protein recipe?" or "Remind me of the shoulder workout." SaveHere answers using only your saved content — no generic web results.',
     icon: <Brain size={40} color="#FFF" />,
     gradient: gradients.cool,
-    accent: '#5BC0FF',
+    accent: '#5FC9BD',
   },
   {
     title: 'Build Workouts',
@@ -52,7 +52,7 @@ const STEPS: OnboardingStep[] = [
       'Save any gym or fitness video, then tap "Build Workout." We extract exercises, sets, reps, and rest times into a hands-free session player with countdown timers.',
     icon: <Dumbbell size={40} color="#FFF" />,
     gradient: gradients.vibrant,
-    accent: '#FF6B9D',
+    accent: '#FF6B8A',
   },
   {
     title: 'Extract Recipes',

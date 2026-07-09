@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
   catOptionEmoji: { fontSize: 15 },
   catOptionText: { color: colors.textSecondary, fontSize: font.sm, fontWeight: '600', textTransform: 'capitalize' },
   catOptionTextActive: { color: '#FFF', fontWeight: '800' },
-  title: { color: colors.textPrimary, fontFamily: typeface.display, fontSize: font.xl, fontWeight: '800', lineHeight: 30, letterSpacing: -0.5 },
+  title: { color: colors.textPrimary, fontFamily: typeface.serif, fontSize: font.xl + 2, fontWeight: '700', lineHeight: 32, letterSpacing: -0.3 },
 
   card: {
     backgroundColor: colors.card,

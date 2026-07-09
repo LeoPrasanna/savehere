@@ -7,7 +7,7 @@ import { MotiView } from 'moti';
  * it runs identically on iOS, Android and web. Purely decorative — full-screen,
  * pointerEvents none, so it never blocks touches. Mount it briefly to play once.
  */
-const COLORS = ['#FF6B9D', '#C44EFF', '#8B7DFF', '#5BC0FF', '#3DD68C', '#FFB84D'];
+const COLORS = ['#FF6B3D', '#FFB35C', '#FF6B8A', '#5FC9BD', '#4FCE8F', '#F4C430'];
 const PIECES = 32;
 
 export function Confetti() {
