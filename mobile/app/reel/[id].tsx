@@ -13,7 +13,6 @@ import { Pressable } from '../../components/Pressable';
 import { goHome } from '../../components/HomeButton';
 import { TaskList } from '../../components/TaskList';
 import { Disclaimer } from '../../components/Disclaimer';
-import { AuroraBackground } from '../../components/AuroraBackground';
 import { colors, spacing, font, radius, gradients, shadow, platformMeta, categoryFor, categoryMeta, CATEGORY_OPTIONS } from '../../constants/theme';
 
 export default function ReelDetailScreen() {
@@ -236,7 +235,6 @@ export default function ReelDetailScreen() {
 
   return (
     <View style={styles.screen}>
-      <AuroraBackground />
       <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       {/* ── Hero ─────────────────────────────────────── */}
       <View style={styles.hero}>
@@ -528,7 +526,7 @@ const styles = StyleSheet.create({
   notFound: { color: colors.textSecondary, fontSize: font.md },
 
   hero: { borderRadius: radius.lg, overflow: 'hidden', ...shadow.md },
-  heroImg: { width: '100%', height: 220, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  heroImg: { width: '100%', height: 248, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   heroScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 90 },
   platformChip: {
     position: 'absolute', left: spacing.md, bottom: spacing.md,

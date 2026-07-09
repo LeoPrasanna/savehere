@@ -9,7 +9,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, WorkoutExercise, WorkoutPlan } from '../../../services/api';
 import { Pressable } from '../../../components/Pressable';
 import { FloatingHomeButton, goHome } from '../../../components/HomeButton';
-import { AuroraBackground } from '../../../components/AuroraBackground';
 import { Disclaimer } from '../../../components/Disclaimer';
 import { colors, spacing, font, radius, gradients, shadow } from '../../../constants/theme';
 
@@ -140,7 +139,6 @@ export default function WorkoutSessionScreen() {
   if (phase === 'ready' && plan) {
     return (
       <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
-        <AuroraBackground />
         <FloatingHomeButton top={insets.top + spacing.xs} />
         <View style={styles.readyHeader}>
           <LinearGradient colors={gradients.vibrant} style={styles.readyIcon}>
@@ -177,7 +175,6 @@ export default function WorkoutSessionScreen() {
   if (phase === 'complete') {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
-        <AuroraBackground />
         <FloatingHomeButton top={insets.top + spacing.xs} />
         <Icon name="celebrate" size={72} color={colors.accent} style={{ marginBottom: spacing.md }} />
         <Text style={styles.completeTitle}>Workout Complete!</Text>
@@ -262,7 +259,6 @@ export default function WorkoutSessionScreen() {
   // ── Exercise ─────────────────────────────────────────────
   return (
     <View style={[styles.screen, { paddingTop: insets.top + spacing.sm }]}>
-      <AuroraBackground />
       <View style={styles.topProgress}>
         <View style={[styles.topProgressFillStatic, { width: `${progressPct}%` as any }]}>
           <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1 }} />

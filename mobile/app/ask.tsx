@@ -8,7 +8,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { api, AskResponse } from '../services/api';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
-import { AuroraBackground } from '../components/AuroraBackground';
 import { Disclaimer } from '../components/Disclaimer';
 import { colors, spacing, font, radius, gradients, categoryFor } from '../constants/theme';
 
@@ -45,7 +44,6 @@ export default function AskScreen() {
 
   return (
     <View style={styles.screen}>
-      <AuroraBackground />
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Text style={styles.sub}>Ask anything about what you've saved — answers come only from your own library.</Text>

@@ -1,13 +1,11 @@
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { Icon } from '../components/Icon';
-import { AuroraBackground } from '../components/AuroraBackground';
 import { FEATURES } from '../constants/features';
 import { colors, spacing, font, radius } from '../constants/theme';
 
 export default function HelpScreen() {
   return (
     <View style={styles.screen}>
-      <AuroraBackground />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Text style={styles.sub}>SaveHere isn't just a bookmark — here's everything it can do with your saves.</Text>
 

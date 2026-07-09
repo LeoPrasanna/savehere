@@ -3,7 +3,6 @@ import { View, Text, FlatList, StyleSheet, ActivityIndicator, useWindowDimension
 import { api, Reel } from '../services/api';
 import { ReelCard } from '../components/ReelCard';
 import { Icon } from '../components/Icon';
-import { AuroraBackground } from '../components/AuroraBackground';
 import { colors, spacing, font } from '../constants/theme';
 
 function shuffle<T>(arr: T[]): T[] {
@@ -53,7 +52,6 @@ export default function RediscoverScreen() {
   if (picks.length === 0) {
     return (
       <View style={styles.screen}>
-        <AuroraBackground />
         <View style={styles.center}>
           <Icon name="rediscover" size={44} color={colors.textTertiary} />
           <Text style={styles.emptyTitle}>Nothing to rediscover yet</Text>
@@ -70,7 +68,6 @@ export default function RediscoverScreen() {
 
   return (
     <View style={styles.screen}>
-      <AuroraBackground />
       <FlatList
         data={gridData}
         keyExtractor={(r: any) => r.id}

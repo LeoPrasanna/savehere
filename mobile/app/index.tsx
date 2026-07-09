@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, StyleSheet, ActivityIndicator,
-  RefreshControl, TextInput, useWindowDimensions, Platform, Animated,
+  RefreshControl, TextInput, useWindowDimensions, Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -12,10 +12,8 @@ import { api, Reel } from '../services/api';
 import { ReelCard } from '../components/ReelCard';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
-import { AuroraBackground } from '../components/AuroraBackground';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { Landing } from '../components/Landing';
-import { GlassCard } from '../components/GlassCard';
 import { colors, spacing, font, radius, gradients, shadow, categoryMeta, CATEGORY_OPTIONS } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
@@ -43,7 +41,6 @@ export default function HomeScreen() {
   const [searching, setSearching] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [entered, setEntered] = useState(enteredSession);
-  const fabPulse = useRef(new Animated.Value(1)).current;
 
   const load = useCallback(async (category = activeCategory) => {
     try {
@@ -120,18 +117,6 @@ export default function HomeScreen() {
     return () => clearInterval(t);
   }, [entered, hasPending, load]);
 
-  // FAB pulse animation
-  useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(fabPulse, { toValue: 1.08, duration: 900, useNativeDriver: true }),
-        Animated.timing(fabPulse, { toValue: 1, duration: 900, useNativeDriver: true }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, []);
-
   const onCategoryChange = (cat: string) => {
     setActiveCategory(cat);
     setLoading(true);
@@ -152,63 +137,50 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <AuroraBackground />
-
-      {/* ── Futuristic Glass Header ─────────────────────────── */}
-      <LinearGradient
-        colors={gradients.darkSurface}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={[styles.header, { paddingTop: insets.top + spacing.md }]}
-      >
+      {/* ── Header — flat, iOS large-title ───────────────────── */}
+      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <MotiView
-          from={{ opacity: 0, translateY: -10 }}
+          from={{ opacity: 0, translateY: -6 }}
           animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 500 }}
+          transition={{ type: 'timing', duration: 350 }}
           style={styles.headerTop}
         >
           <Pressable style={styles.brandRow} onPress={() => setEntered(false)} scaleTo={0.97}>
-            <View style={styles.logoMark}>
-              <LinearGradient
-                colors={gradients.hologram}
-                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                style={styles.logoMarkInner}
-              >
-                <Bookmark size={17} color="#FFF" fill="#FFF" />
-              </LinearGradient>
-              <View style={styles.logoSpark}>
-                <Sparkles size={9} color={colors.accentDark} fill={colors.accentDark} />
-              </View>
-            </View>
+            <LinearGradient
+              colors={gradients.primary}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={styles.logoMark}
+            >
+              <Bookmark size={15} color="#FFF" fill="#FFF" />
+            </LinearGradient>
             <View>
-              <Text style={styles.brand}>SaveHere</Text>
+              <Text style={styles.brand}>Library</Text>
               <Text style={styles.brandSub}>
                 {total > 0 ? `${total} saved` : 'Your second brain for reels'}
               </Text>
             </View>
           </Pressable>
           <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)} scaleTo={0.9}>
-            <Icon name="menu" size={22} color="#FFF" />
+            <Icon name="menu" size={20} color={colors.textPrimary} />
           </Pressable>
         </MotiView>
 
-        {/* Search with glassmorphism */}
         <View style={styles.search}>
-          <Search size={16} color={colors.textSecondary} />
+          <Search size={15} color={colors.textTertiary} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by title or tag…"
-            placeholderTextColor={colors.textSecondary}
+            placeholder="Search your saves…"
+            placeholderTextColor={colors.textTertiary}
             value={search}
             onChangeText={setSearch}
           />
           {search.length > 0 && (
             <Pressable onPress={() => setSearch('')} hitSlop={8}>
-              <XCircle size={16} color={colors.textSecondary} />
+              <XCircle size={15} color={colors.textTertiary} />
             </Pressable>
           )}
         </View>
-      </LinearGradient>
+      </View>
 
       {/* ── Category chips ──────────────────────────── */}
       <FlatList
@@ -223,19 +195,19 @@ export default function HomeScreen() {
           const meta = categoryMeta[item] ?? categoryMeta.other;
           return (
             <MotiView
-              from={{ opacity: 0, scale: 0.6 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: 'spring', delay: 150 + index * 40, damping: 13, stiffness: 200 }}
+              from={{ opacity: 0, translateY: 6 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', delay: 60 + index * 25, duration: 250 }}
             >
               <Pressable
                 style={[
                   styles.categoryChip,
-                  active && { backgroundColor: meta.color, borderColor: meta.color },
+                  active && { backgroundColor: meta.color + '26', borderColor: meta.color + '66' },
                 ]}
                 onPress={() => onCategoryChange(item)}
               >
-                <Icon name={meta.icon} size={13} color={active ? '#FFF' : meta.color} />
-                <Text style={[styles.categoryText, active && styles.categoryTextActive]}>
+                <Icon name={meta.icon} size={12} color={active ? meta.color : colors.textTertiary} />
+                <Text style={[styles.categoryText, active && { color: meta.color, fontWeight: '700' }]}>
                   {item}
                 </Text>
               </Pressable>
@@ -325,18 +297,14 @@ export default function HomeScreen() {
         </>
       )}
 
-      {/* ── Futuristic Pulse FAB ─────────────────────── */}
-      <Animated.View style={[styles.fab, { bottom: insets.bottom + spacing.lg, transform: [{ scale: fabPulse }] }]}>
-        <Pressable onPress={() => router.push('/save')} scaleTo={0.9}>
-          <LinearGradient colors={gradients.hologram} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fabInner}>
-            <Plus size={30} color="#FFF" />
+      {/* ── Save FAB ─────────────────────────────────── */}
+      <View style={[styles.fab, { bottom: insets.bottom + spacing.lg }]}>
+        <Pressable onPress={() => router.push('/save')} scaleTo={0.92}>
+          <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fabInner}>
+            <Plus size={28} color="#FFF" />
           </LinearGradient>
-          {/* Orbiting dot */}
-          <View style={styles.fabOrbit}>
-            <View style={styles.fabOrbitDot} />
-          </View>
         </Pressable>
-      </Animated.View>
+      </View>
 
       <ProfilePanel visible={menuOpen} onClose={() => setMenuOpen(false)} reels={reels} total={total} />
     </View>
@@ -359,61 +327,52 @@ const styles = StyleSheet.create({
 
   header: {
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
-    borderBottomLeftRadius: radius.xl,
-    borderBottomRightRadius: radius.xl,
+    paddingBottom: spacing.sm,
     gap: spacing.md,
-    ...shadow.md,
+    backgroundColor: colors.background,
   },
   headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   menuBtn: {
-    width: 40, height: 40, borderRadius: radius.md,
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    width: 38, height: 38, borderRadius: radius.full,
+    backgroundColor: colors.card,
+    borderWidth: 1, borderColor: colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  logoMark: { width: 40, height: 40 },
-  logoMarkInner: {
-    width: 40, height: 40, borderRadius: radius.md,
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2 },
+  logoMark: {
+    width: 34, height: 34, borderRadius: radius.sm + 2,
     alignItems: 'center', justifyContent: 'center',
-    ...shadow.sm,
   },
-  logoSpark: {
-    position: 'absolute', top: -4, right: -4,
-    width: 18, height: 18, borderRadius: 9,
-    backgroundColor: '#FFF',
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: colors.hologram,
-  },
-  brand: { color: '#FFF', fontSize: font.xl, fontWeight: '800', letterSpacing: -0.5 },
-  brandSub: { color: 'rgba(255,255,255,0.8)', fontSize: font.xs, fontWeight: '500' },
+  brand: { color: colors.textPrimary, fontSize: font.xxl, fontWeight: '800', letterSpacing: -0.7, lineHeight: 32 },
+  brandSub: { color: colors.textTertiary, fontSize: font.xs, fontWeight: '500', marginTop: -2 },
 
   search: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
     borderRadius: radius.md,
     paddingHorizontal: spacing.md,
-    height: 44,
+    height: 42,
   },
-  searchInput: { flex: 1, color: '#FFF', fontSize: font.md },
+  searchInput: { flex: 1, color: colors.textPrimary, fontSize: font.md },
 
-  categoryList: { flexGrow: 0, height: 54, marginTop: spacing.sm },
+  categoryList: { flexGrow: 0, height: 48, marginTop: spacing.xs },
   categoryContent: { paddingHorizontal: spacing.md, gap: spacing.sm, alignItems: 'center' },
   categoryChip: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: 7,
     borderRadius: radius.full,
-    backgroundColor: colors.card,
+    backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: colors.border,
   },
   categoryText: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '600', textTransform: 'capitalize' },
-  categoryTextActive: { color: '#FFF', fontWeight: '800' },
 
   grid: { flex: 1 },
   ghost: { flex: 1 },
@@ -436,29 +395,13 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: spacing.lg,
-    width: 60, height: 60,
+    width: 58, height: 58,
     borderRadius: radius.full,
     ...shadow.glow,
   },
   fabInner: {
-    width: 60, height: 60,
+    width: 58, height: 58,
     borderRadius: radius.full,
     alignItems: 'center', justifyContent: 'center',
-  },
-  fabOrbit: {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  fabOrbitDot: {
-    width: 6, height: 6,
-    borderRadius: 3,
-    backgroundColor: '#FFF',
-    position: 'absolute',
-    top: -2, right: 8,
-    shadowColor: '#FFF',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
   },
 });

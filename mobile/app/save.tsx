@@ -6,13 +6,12 @@ import {
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
-import { Wand2, ClipboardCheck } from 'lucide-react-native';
+import { Wand2, ClipboardPaste } from 'lucide-react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Icon } from '../components/Icon';
 import { api } from '../services/api';
 import * as haptics from '../services/haptics';
 import { Pressable } from '../components/Pressable';
-import { AuroraBackground } from '../components/AuroraBackground';
-import { BorderBeam } from '../components/BorderBeam';
 import { GlassCard } from '../components/GlassCard';
 import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
 
@@ -60,8 +59,24 @@ export default function SaveScreen() {
   const [stepIdx, setStepIdx] = useState(0);
   const [error, setError] = useState('');
   const [trackW, setTrackW] = useState(0);
-  const [box, setBox] = useState({ w: 0, h: 0 });
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  // Reads the clipboard only on tap (a user gesture), so no permission prompt
+  // fires on open — works the same on iOS and web.
+  const pasteFromClipboard = async () => {
+    try {
+      const text = (await Clipboard.getStringAsync())?.trim();
+      if (text && /^https?:\/\/\S+$/i.test(text)) {
+        setUrl(text);
+        setError('');
+        haptics.tap();
+      } else {
+        setError("No link on the clipboard — copy a reel's URL first, then tap Paste.");
+      }
+    } catch {
+      setError("Couldn't read the clipboard. Paste the link into the box manually.");
+    }
+  };
 
   const botX = useRef(new Animated.Value(0)).current;
   const botJump = useRef(new Animated.Value(0)).current;
@@ -143,16 +158,15 @@ export default function SaveScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <AuroraBackground />
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
         <MotiView
-          from={{ opacity: 0, scale: 0.8, translateY: 10 }}
+          from={{ opacity: 0, scale: 0.9, translateY: 8 }}
           animate={{ opacity: 1, scale: 1, translateY: 0 }}
-          transition={{ type: 'spring', damping: 13 }}
+          transition={{ type: 'timing', duration: 300 }}
           style={styles.heroIcon}
         >
-          <LinearGradient colors={gradients.hologram} style={styles.heroIconInner}>
-            <Wand2 size={26} color="#FFF" />
+          <LinearGradient colors={gradients.primary} style={styles.heroIconInner}>
+            <Wand2 size={24} color="#FFF" />
           </LinearGradient>
         </MotiView>
 
@@ -161,16 +175,13 @@ export default function SaveScreen() {
           <Text style={styles.hint}>YouTube Shorts · Instagram Reels · TikTok · LinkedIn</Text>
         </MotiView>
 
-        <MotiView from={{ opacity: 0, scale: 0.95, translateY: 10 }} animate={{ opacity: 1, scale: 1, translateY: 0 }} transition={{ type: 'spring', damping: 15, delay: 160 }}>
-          <View
-            style={[styles.inputWrap, loading && styles.inputDisabled]}
-            onLayout={e => setBox({ w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height })}
-          >
-            <Icon name="link" size={18} color={colors.textSecondary} style={{ marginTop: 2 }} />
+        <MotiView from={{ opacity: 0, translateY: 8 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 120 }}>
+          <View style={[styles.inputWrap, loading && styles.inputDisabled]}>
+            <Icon name="link" size={18} color={colors.textTertiary} style={{ marginTop: 2 }} />
             <TextInput
               style={styles.input}
               placeholder="Paste any reel, short or post link…"
-              placeholderTextColor={colors.textSecondary}
+              placeholderTextColor={colors.textTertiary}
               value={url}
               onChangeText={t => { setUrl(t); setError(''); }}
               autoCapitalize="none"
@@ -179,28 +190,16 @@ export default function SaveScreen() {
               multiline
               editable={!loading}
             />
-            <BorderBeam width={box.w} height={box.h} radius={radius.md} color={colors.accentLight} />
           </View>
         </MotiView>
 
-        {/* Smart paste detection hint */}
+        {/* One-tap paste — reads the clipboard on demand, no permission surprises */}
         {!loading && !url && (
-          <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 300, duration: 400 }} style={styles.smartPaste}>
-            <ClipboardCheck size={14} color={colors.textTertiary} />
-            <Text style={styles.smartPasteText}>Smart Paste: copy a link from any app and it will appear here automatically in the next update.</Text>
-          </MotiView>
-        )}
-
-        {/* Quick tip */}
-        {!loading && !url && (
-          <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 400, duration: 400 }} style={styles.quickTip}>
-            <View style={styles.quickTipInner}>
-              <Wand2 size={16} color={colors.hologram} />
-              <Text style={styles.quickTipText}>Pro tip: Paste a link from YouTube, Instagram, TikTok, or LinkedIn — we'll extract the content and summarize it with AI.</Text>
-            </View>
-            <View style={styles.quickTipBadge}>
-              <Text style={styles.quickTipBadgeText}>Try it</Text>
-            </View>
+          <MotiView from={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 220, duration: 300 }}>
+            <Pressable style={styles.pasteChip} onPress={pasteFromClipboard} scaleTo={0.97}>
+              <ClipboardPaste size={15} color={colors.accentLight} />
+              <Text style={styles.pasteChipText}>Paste copied link</Text>
+            </Pressable>
           </MotiView>
         )}
 
@@ -321,25 +320,15 @@ const styles = StyleSheet.create({
   inputDisabled: { opacity: 0.5 },
   input: { flex: 1, color: colors.textPrimary, fontSize: font.md, textAlignVertical: 'top', minHeight: 50 },
 
-  smartPaste: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    paddingHorizontal: spacing.xs,
-  },
-  smartPasteText: { flex: 1, color: colors.textTertiary, fontSize: font.xs, lineHeight: 16, fontStyle: 'italic' },
-
-  quickTip: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    gap: spacing.sm, paddingHorizontal: spacing.xs,
-  },
-  quickTipInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1 },
-  quickTipText: { flex: 1, color: colors.textTertiary, fontSize: font.xs, lineHeight: 16 },
-  quickTipBadge: {
-    backgroundColor: colors.accent + '18',
+  pasteChip: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    alignSelf: 'center',
+    backgroundColor: colors.accent + '14',
+    borderWidth: 1, borderColor: colors.accent + '33',
     borderRadius: radius.full,
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderWidth: 1, borderColor: colors.accent + '30',
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
   },
-  quickTipBadgeText: { color: colors.accentLight, fontSize: 10, fontWeight: '800' },
+  pasteChipText: { color: colors.accentLight, fontSize: font.sm, fontWeight: '600' },
 
   errorBox: {
     flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,

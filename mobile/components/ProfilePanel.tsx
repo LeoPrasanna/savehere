@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, useWindowDimensions, Dimensions, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, ScrollView } from 'react-native';
 import { MotiView } from 'moti';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,12 +8,10 @@ import { api, Reel, Usage } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { GlassCard } from './GlassCard';
-import { HolographicShimmer } from './HolographicShimmer';
 import { useAuth } from '../contexts/AuthContext';
 import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
 
 const APP_VERSION = '1.0.0';
-const SCREEN_H = Dimensions.get('window').height;
 
 interface Props {
   visible: boolean;
@@ -38,7 +36,6 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   useEffect(() => {
     if (visible) api.getUsage().then(setUsage).catch(() => {});
   }, [visible]);
-  const shimmerW = panelWidth - spacing.lg * 2;
 
   const go = (path: string) => { onClose(); router.push(path as any); };
 
@@ -121,8 +118,6 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
         }}
         showsVerticalScrollIndicator={false}
       >
-        <HolographicShimmer width={shimmerW} height={SCREEN_H} color="rgba(139,125,255,0.04)" duration={5000} delay={800} />
-
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Profile</Text>
           <Pressable onPress={onClose} hitSlop={10}><Icon name="close" size={20} color={colors.textSecondary} /></Pressable>
@@ -274,8 +269,8 @@ const styles = StyleSheet.create({
   panelWrap: { position: 'absolute', top: 0, bottom: 0, right: 0, ...shadow.md },
   panel: {
     flex: 1,
-    backgroundColor: 'rgba(21,19,28,0.92)',
-    borderLeftWidth: 1, borderLeftColor: colors.borderLight,
+    backgroundColor: colors.surface,
+    borderLeftWidth: 1, borderLeftColor: colors.border,
   },
 
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

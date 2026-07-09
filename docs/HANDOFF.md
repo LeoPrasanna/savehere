@@ -143,6 +143,27 @@ Each prompt is self-contained. Do them one at a time, verify (§3), update TODO.
 > to map it, and the `Usage` type in `mobile/services/api.ts`. Do NOT invent
 > billing — the RevenueCat webhook stamps the tier at launch. Add quota tests.
 
+## 4.5 UI system (branch `revamp/ui-refresh`) — rules for any UI work
+
+The app moved to a **"calm premium dark"** design system. If you touch UI:
+
+- **Tokens only** — every color/space/radius/type value comes from
+  `mobile/constants/theme.ts`. Never hardcode hex values in screens.
+- **One accent** (iris violet `colors.accent`) for actions/active states. Color
+  otherwise carries *meaning* (platform, category, status) — never decoration.
+- **No glassmorphism / neon / rainbow gradients.** `gradients.hologram` and
+  `gradients.neon` are legacy aliases that now resolve to the brand violet ramp
+  — don't reintroduce multi-hue gradients. `GlassCard` is a flat card.
+- **AuroraBackground appears ONLY on Landing and LoginScreen.** App screens are
+  flat `colors.background`.
+- **Motion is subtle**: 250–350 ms fades/rises on entrance, spring scale on
+  press (via `components/Pressable`). No loops, pulses, shimmer sweeps or
+  orbiting elements.
+- **Content first**: ReelCard shows the real `thumbnail_url` (via `thumbUrl()`
+  proxy helper) with a platform-tinted fallback. Don't cover content in chrome.
+- Verify with `npm run typecheck` + `npx expo export --platform web` after any
+  UI change; boot `npx expo start --web` and check the browser console is clean.
+
 ## 5. Known open risks (don't "fix" casually — read context first)
 
 - **Extraction from datacenter IPs fails for YouTube/IG** — the prod-critical

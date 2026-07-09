@@ -6,7 +6,6 @@ import { Icon } from '../../components/Icon';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, WorkoutExercise, WorkoutPlan } from '../../services/api';
 import { Pressable } from '../../components/Pressable';
-import { AuroraBackground } from '../../components/AuroraBackground';
 import { Disclaimer } from '../../components/Disclaimer';
 import { colors, spacing, font, radius, gradients, shadow } from '../../constants/theme';
 
@@ -84,7 +83,6 @@ export default function WorkoutPlanScreen() {
 
   return (
     <View style={styles.screen}>
-      <AuroraBackground />
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Gradient header */}
         <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>

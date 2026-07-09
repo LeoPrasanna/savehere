@@ -74,6 +74,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [x] **AI usage meter + live tier badge** — ProfilePanel shows "N of M AI actions left" with a progress bar (from `GET /api/account/usage`) and the real tier instead of a hardcoded "Free", so the daily-quota 429 is never a surprise.
 - [x] **Clean API error messages everywhere** — `services/api.ts` now extracts FastAPI's `detail` centrally, so no screen can ever show raw JSON to the user.
 - [x] **Account deletion honesty** — if the backend data wipe fails, the app now reports the error and does NOT sign out (it used to claim success regardless).
+- [x] **UI/UX revamp — "calm premium dark"** (branch `revamp/ui-refresh`) — design tokens reworked (single iris accent, hairline borders, iOS-leaning type/radius scale, soft shadows); glassmorphism/holographic chrome retired (GlassCard flattened, shimmer/particle/orbit effects removed from app screens; aurora kept on Landing/Login only); **library cards now show the real reel thumbnail** (16:10 cover with platform-tinted fallback) instead of a generic gradient pattern; flat iOS large-title header + quieter tinted category chips; save screen gained a real **"Paste copied link"** clipboard button (`expo-clipboard`), replacing the fake "Smart Paste coming soon" note. ⚠️ Owner: do a visual pass on a logged-in session (agent verified login/onboarding + zero console errors, but couldn't see the library without credentials).
 
 ---
 
