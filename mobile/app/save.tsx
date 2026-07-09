@@ -57,6 +57,7 @@ export default function SaveScreen() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
+  const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [trackW, setTrackW] = useState(0);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -144,7 +145,11 @@ export default function SaveScreen() {
       const reel = await api.saveReel(trimmed);
       clearStepTimers();
       haptics.success();
-      router.replace(`/reel/${reel.id}`);
+      // A short success beat completes the robot's journey before the card
+      // opens — feedback first, then navigation.
+      setStepIdx(N - 1);
+      setSuccess(true);
+      setTimeout(() => router.replace(`/reel/${reel.id}`), 650);
     } catch (e: any) {
       clearStepTimers();
       haptics.error();
@@ -256,8 +261,8 @@ export default function SaveScreen() {
                 <Animated.View style={[styles.railFill, { width: fillW }]} />
                 <View style={styles.nodeRow}>
                   {STEPS.map((step, i) => {
-                    const done = i < stepIdx;
-                    const active = i === stepIdx;
+                    const done = i < stepIdx || success;
+                    const active = i === stepIdx && !success;
                     return (
                       <View key={i} style={[styles.node, done && styles.nodeDone, active && styles.nodeActive]}>
                         {done
@@ -270,10 +275,10 @@ export default function SaveScreen() {
               </View>
             </View>
 
-            <Animated.Text style={[styles.stepLabel, { opacity: pulse }]}>
-              {STEPS[stepIdx].text}
+            <Animated.Text style={[styles.stepLabel, success && { color: colors.success }, { opacity: success ? 1 : pulse }]}>
+              {success ? 'Saved! Opening your card…' : STEPS[stepIdx].text}
             </Animated.Text>
-            <Text style={styles.stepCount}>Step {stepIdx + 1} of {N}</Text>
+            {!success && <Text style={styles.stepCount}>Step {stepIdx + 1} of {N}</Text>}
           </View>
         )}
 
@@ -284,7 +289,7 @@ export default function SaveScreen() {
             style={styles.button}
           >
             {loading ? (
-              <Text style={styles.buttonText}>Working… {stepIdx + 1}/{N}</Text>
+              <Text style={styles.buttonText}>{success ? 'Saved ✓' : `Working… ${stepIdx + 1}/${N}`}</Text>
             ) : (
               <>
                 <Icon name="sparkles" size={18} color="#FFF" />

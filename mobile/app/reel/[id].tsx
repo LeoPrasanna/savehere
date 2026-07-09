@@ -13,7 +13,7 @@ import { Pressable } from '../../components/Pressable';
 import { goHome } from '../../components/HomeButton';
 import { TaskList } from '../../components/TaskList';
 import { Disclaimer } from '../../components/Disclaimer';
-import { colors, spacing, font, radius, gradients, shadow, platformMeta, categoryFor, categoryMeta, CATEGORY_OPTIONS } from '../../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, typeface, platformMeta, categoryFor, categoryMeta, CATEGORY_OPTIONS } from '../../constants/theme';
 
 export default function ReelDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
   catOptionEmoji: { fontSize: 15 },
   catOptionText: { color: colors.textSecondary, fontSize: font.sm, fontWeight: '600', textTransform: 'capitalize' },
   catOptionTextActive: { color: '#FFF', fontWeight: '800' },
-  title: { color: colors.textPrimary, fontSize: font.xl, fontWeight: '800', lineHeight: 30, letterSpacing: -0.5 },
+  title: { color: colors.textPrimary, fontFamily: typeface.display, fontSize: font.xl, fontWeight: '800', lineHeight: 30, letterSpacing: -0.5 },
 
   card: {
     backgroundColor: colors.card,

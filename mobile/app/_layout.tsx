@@ -2,12 +2,13 @@ import { Stack } from 'expo-router/stack';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { useFonts, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
 import { HeaderHomeButton } from '../components/HomeButton';
 import { LoginScreen } from '../components/LoginScreen';
 import { Confetti } from '../components/Confetti';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { OnboardingModal } from '../components/OnboardingModal';
-import { colors, font } from '../constants/theme';
+import { colors, font, typeface } from '../constants/theme';
 
 function AppStack() {
   return (
@@ -15,7 +16,7 @@ function AppStack() {
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.textPrimary,
-        headerTitleStyle: { fontWeight: '800', fontSize: font.lg },
+        headerTitleStyle: { fontFamily: typeface.display, fontWeight: '800', fontSize: font.lg },
         headerShadowVisible: false,
         headerRight: () => <HeaderHomeButton />,
         contentStyle: { backgroundColor: colors.background },
@@ -40,6 +41,9 @@ function AppStack() {
 // navigate — AuthProvider's listener flips this gate on sign-in/out.
 function Gate() {
   const { session, loading, celebrate } = useAuth();
+  // Display font for titles/brand; body text stays on the system face. We don't
+  // block the gate on it — RN falls back to system until it's ready.
+  useFonts({ Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold });
   return (
     <>
       {loading ? (

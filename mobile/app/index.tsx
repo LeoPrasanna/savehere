@@ -10,11 +10,12 @@ import { MotiView } from 'moti';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, Reel } from '../services/api';
 import { ReelCard } from '../components/ReelCard';
+import { SkeletonGrid } from '../components/SkeletonCard';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { Landing } from '../components/Landing';
-import { colors, spacing, font, radius, gradients, shadow, categoryMeta, CATEGORY_OPTIONS } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, typeface, categoryMeta, CATEGORY_OPTIONS } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
 const PAGE = 24;
@@ -41,6 +42,8 @@ export default function HomeScreen() {
   const [searching, setSearching] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [entered, setEntered] = useState(enteredSession);
+  // Hairline under the header once content scrolls beneath it (iOS pattern).
+  const [scrolled, setScrolled] = useState(false);
 
   const load = useCallback(async (category = activeCategory) => {
     try {
@@ -138,7 +141,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       {/* ── Header — flat, iOS large-title ───────────────────── */}
-      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+      <View style={[styles.header, { paddingTop: insets.top + spacing.sm }, scrolled && styles.headerScrolled]}>
         <MotiView
           from={{ opacity: 0, translateY: -6 }}
           animate={{ opacity: 1, translateY: 0 }}
@@ -218,7 +221,7 @@ export default function HomeScreen() {
 
       {/* ── Content ─────────────────────────────────── */}
       {loading ? (
-        <ActivityIndicator color={colors.accent} style={styles.loader} size="large" />
+        <SkeletonGrid columns={numColumns} rows={3} />
       ) : error && reels.length === 0 ? (
         <View style={styles.empty}>
           <View style={styles.emptyIconWrap}>
@@ -234,15 +237,28 @@ export default function HomeScreen() {
         <ActivityIndicator color={colors.accent} style={styles.loader} size="large" />
       ) : displayList.length === 0 ? (
         <View style={styles.empty}>
-          <View style={styles.emptyIconWrap}>
+          <MotiView
+            from={{ translateY: 0 }}
+            animate={{ translateY: -7 }}
+            transition={{ type: 'timing', duration: 1600, loop: true, repeatReverse: true }}
+            style={styles.emptyIconWrap}
+          >
             <Sparkles size={40} color={colors.accent} />
-          </View>
+          </MotiView>
           <Text style={styles.emptyTitle}>
             {inSearchMode ? 'No matches' : 'Nothing saved yet'}
           </Text>
           <Text style={styles.emptyText}>
-            {inSearchMode ? `No results for "${search.trim()}".` : 'Tap the + button to save your first reel.'}
+            {inSearchMode ? `No results for "${search.trim()}".` : 'Save your first reel and the AI summary appears in seconds.'}
           </Text>
+          {!inSearchMode && (
+            <Pressable style={styles.emptyCtaWrap} onPress={() => router.push('/save')} scaleTo={0.96}>
+              <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.emptyCta}>
+                <Plus size={16} color="#FFF" />
+                <Text style={styles.emptyCtaText}>Save your first reel</Text>
+              </LinearGradient>
+            </Pressable>
+          )}
         </View>
       ) : (
         <>
@@ -274,6 +290,12 @@ export default function HomeScreen() {
           showsVerticalScrollIndicator={false}
           onEndReached={inSearchMode ? undefined : loadMore}
           onEndReachedThreshold={0.6}
+          onScroll={e => setScrolled(e.nativeEvent.contentOffset.y > 4)}
+          scrollEventThrottle={32}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS !== 'web'}
           ListFooterComponent={
             <>
               {loadingMore && <ActivityIndicator color={colors.accent} style={{ marginVertical: spacing.md }} />}
@@ -331,6 +353,7 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     backgroundColor: colors.background,
   },
+  headerScrolled: { borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   menuBtn: {
     width: 38, height: 38, borderRadius: radius.full,
@@ -343,7 +366,7 @@ const styles = StyleSheet.create({
     width: 34, height: 34, borderRadius: radius.sm + 2,
     alignItems: 'center', justifyContent: 'center',
   },
-  brand: { color: colors.textPrimary, fontSize: font.xxl, fontWeight: '800', letterSpacing: -0.7, lineHeight: 32 },
+  brand: { color: colors.textPrimary, fontFamily: typeface.display, fontSize: font.xxl, fontWeight: '800', letterSpacing: -0.7, lineHeight: 32 },
   brandSub: { color: colors.textTertiary, fontSize: font.xs, fontWeight: '500', marginTop: -2 },
 
   search: {
@@ -389,8 +412,14 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginBottom: spacing.sm,
   },
-  emptyTitle: { color: colors.textPrimary, fontSize: font.lg, fontWeight: '700' },
+  emptyTitle: { color: colors.textPrimary, fontFamily: typeface.display, fontSize: font.lg, fontWeight: '700' },
   emptyText: { color: colors.textSecondary, fontSize: font.sm, textAlign: 'center', lineHeight: 20 },
+  emptyCtaWrap: { marginTop: spacing.md, borderRadius: radius.full, ...shadow.glow },
+  emptyCta: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    borderRadius: radius.full, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm + 4,
+  },
+  emptyCtaText: { color: '#FFF', fontSize: font.sm, fontWeight: '700' },
 
   fab: {
     position: 'absolute',

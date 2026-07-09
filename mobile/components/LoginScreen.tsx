@@ -13,7 +13,7 @@ import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { FloatingParticleField } from './FloatingParticleField';
 import * as haptics from '../services/haptics';
-import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, typeface } from '../constants/theme';
 
 type Mode = 'signin' | 'signup';
 type FieldName = 'first' | 'last' | 'nick' | 'email' | 'password';
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
 
   // Wordmark
   title: {
-    color: colors.textPrimary, fontSize: font.display, fontWeight: '900',
+    color: colors.textPrimary, fontFamily: typeface.display, fontSize: font.display, fontWeight: '900',
     textAlign: 'center', letterSpacing: -1.5,
   },
   tagline: {

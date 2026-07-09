@@ -161,6 +161,16 @@ The app moved to a **"calm premium dark"** design system. If you touch UI:
   orbiting elements.
 - **Content first**: ReelCard shows the real `thumbnail_url` (via `thumbUrl()`
   proxy helper) with a platform-tinted fallback. Don't cover content in chrome.
+- **Typography**: Manrope (via `@expo-google-fonts/manrope`, loaded in
+  `app/_layout.tsx`) is the display face — use `typeface.display/-Semi/-Medium`
+  from theme.ts on titles/brand only; body text stays on the system font.
+- **Icons**: everything goes through `components/Icon.tsx` (Lucide). If you use
+  a new name, ADD IT TO THE MAP — unmapped names silently render as a circle
+  (that bug shipped once: `barbell`/`trash` were circles). Stroke width is
+  auto-corrected by size; don't pass strokeWidth unless you have a reason.
+- **Lists**: library cards are memoized (`ReelCard` React.memo with a field
+  comparator) — if you add a displayed field to the card, extend the comparator
+  or updates won't repaint. Loading states use `SkeletonGrid`, not spinners.
 - Verify with `npm run typecheck` + `npx expo export --platform web` after any
   UI change; boot `npx expo start --web` and check the browser console is clean.
 

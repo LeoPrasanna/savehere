@@ -10,7 +10,7 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0B0A0F"
+      "backgroundColor": "#0A0A0D"
     },
     "ios": {
       "supportsTablet": true,
@@ -20,11 +20,11 @@
       "splash": {
         "image": "./assets/splash-icon.png",
         "resizeMode": "contain",
-        "backgroundColor": "#0B0A0F",
+        "backgroundColor": "#0A0A0D",
         "dark": {
           "image": "./assets/splash-icon.png",
           "resizeMode": "contain",
-          "backgroundColor": "#0B0A0F"
+          "backgroundColor": "#0A0A0D"
         }
       }
     },
@@ -44,7 +44,8 @@
     },
     "plugins": [
       "expo-router",
-      "expo-status-bar"
+      "expo-status-bar",
+      "expo-font"
     ],
     "extra": {
       "router": {

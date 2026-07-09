@@ -80,8 +80,8 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ## Mobile — App Store Requirements
 
-- [~] **App icon** — custom Canva icon (violet→pink gradient + bookmark) installed at `mobile/assets/icon.png` + `favicon.png` (1024×1024, no transparency). ⚠️ It has pre-rounded corners; before iOS submission re-export a FULL-BLEED square version (gradient to the edges) so Apple's mask doesn't double-round / show corner artifacts.
-- [ ] **Splash screen** — update `mobile/assets/splash-icon.png` to match final brand.
+- [x] **App icon** — replaced with a generated **full-bleed** 1024×1024 icon (violet gradient edge-to-edge, white bookmark + sparkle glyph, no pre-rounded corners) at `mobile/assets/icon.png`; matching `splash-icon.png` (transparent, glyph-only) and rounded `favicon.png`. Safe for Apple's mask. Source generator lives in git history (PIL script) if a tweak is needed.
+- [x] **Splash screen** — `splash-icon.png` regenerated to match the new brand glyph; splash background synced to the theme background (`#0A0A0D`) in `app.json`.
 - [ ] **App Store screenshots** — minimum required sizes: iPhone 6.7" (iPhone 15 Pro Max) and iPhone 6.5" (iPhone 14 Plus). At least 3 screenshots each.
 - [ ] **App Store description** — written, keyword-optimised, under 4000 characters.
 - [ ] **Keywords** — 100-character keyword field for App Store search ranking.

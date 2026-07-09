@@ -11,7 +11,7 @@ import { Icon } from './Icon';
 import { AuroraBackground } from './AuroraBackground';
 import { ProfilePanel } from './ProfilePanel';
 import { FloatingParticleField } from './FloatingParticleField';
-import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, typeface } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { FEATURES, Feature } from '../constants/features';
 
@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  hi: { color: colors.textPrimary, fontSize: font.display, fontWeight: '900', letterSpacing: -1 },
+  hi: { color: colors.textPrimary, fontFamily: typeface.display, fontSize: font.display, fontWeight: '900', letterSpacing: -1 },
   welcome: { color: colors.textSecondary, fontSize: font.lg, fontWeight: '600', marginTop: spacing.xs },
 
   heroStat: {

@@ -28,6 +28,7 @@ const MAP: Record<string, any> = {
   menu: Menu, user: UserRound, settings: Settings, bell: Bell, download: Download,
   login: LogIn, 'chevron-right': ChevronRight, bookmark: Bookmark, layers: Layers, shield: Shield,
   ask: MessageCircle, rediscover: Compass, back: ArrowLeft, send: Send,
+  barbell: Dumbbell, 'barbell-outline': Dumbbell, trash: Trash2,
 
   // ── Categories ──
   fitness: Dumbbell, cooking: ChefHat, tech: Cpu, motivation: Flame,
@@ -73,7 +74,15 @@ interface Props {
   style?: StyleProp<ViewStyle>;
 }
 
-export function Icon({ name, size = 18, color = '#FFF', strokeWidth = 2, style }: Props) {
+// Optical stroke correction: tiny icons need a slightly heavier stroke to stay
+// legible, large ones a lighter stroke to stay elegant. Explicit prop wins.
+function strokeFor(size: number): number {
+  if (size <= 13) return 2.4;
+  if (size >= 28) return 1.75;
+  return 2;
+}
+
+export function Icon({ name, size = 18, color = '#FFF', strokeWidth, style }: Props) {
   const C = resolve(name);
-  return <C size={size} color={color} strokeWidth={strokeWidth} style={style} />;
+  return <C size={size} color={color} strokeWidth={strokeWidth ?? strokeFor(size)} style={style} />;
 }

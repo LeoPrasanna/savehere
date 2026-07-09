@@ -127,6 +127,16 @@ export const radius = {
   full: 999,
 };
 
+/** Typefaces. Manrope (loaded in app/_layout.tsx) is the display face for
+ *  titles, headers and brand moments; body text stays on the system font
+ *  (SF Pro on iOS) for native reading comfort. Until the font loads, RN falls
+ *  back to the system face — same metrics class, no layout jump. */
+export const typeface = {
+  display: 'Manrope_800ExtraBold',
+  displaySemi: 'Manrope_700Bold',
+  displayMedium: 'Manrope_600SemiBold',
+};
+
 /** Type scale — restrained, close to iOS defaults. Pair with the weights below. */
 export const font = {
   xs: 11,      // caption

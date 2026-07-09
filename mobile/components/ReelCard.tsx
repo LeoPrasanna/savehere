@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { View, Text, Image, StyleSheet, Platform, Animated, Easing, ActivityIndicator } from 'react-native';
+import { memo, useEffect, useRef, useState } from 'react';
+import { View, Text, StyleSheet, Platform, Animated, Easing, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,7 @@ import { Icon } from './Icon';
 import { Reel, api, thumbUrl } from '../services/api';
 import * as haptics from '../services/haptics';
 import { Pressable } from './Pressable';
-import { colors, spacing, radius, font, shadow, platformMeta, categoryFor } from '../constants/theme';
+import { colors, spacing, radius, font, shadow, typeface, platformMeta, categoryFor } from '../constants/theme';
 
 interface ReelCardProps {
   reel: Reel;
@@ -15,7 +15,7 @@ interface ReelCardProps {
   onDelete?: (id: string) => void;
 }
 
-export function ReelCard({ reel, index = 0, onDelete }: ReelCardProps) {
+function ReelCardInner({ reel, index = 0, onDelete }: ReelCardProps) {
   const router = useRouter();
   // The real thumbnail is the card's hero; fall back to a platform-tinted cover
   // only when extraction couldn't get one (or the image itself fails to load).
@@ -24,6 +24,7 @@ export function ReelCard({ reel, index = 0, onDelete }: ReelCardProps) {
   const translateY = useRef(new Animated.Value(12)).current;
   const scale = useRef(new Animated.Value(1)).current;
   const rotate = useRef(new Animated.Value(0)).current;
+  const imgOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const delay = Math.min(index, 8) * 45;
@@ -68,10 +69,11 @@ export function ReelCard({ reel, index = 0, onDelete }: ReelCardProps) {
         {/* Cover — the actual reel thumbnail, or a quiet platform-tinted fallback */}
         <View style={styles.thumbWrap}>
           {thumb ? (
-            <Image
+            <Animated.Image
               source={{ uri: thumb }}
-              style={styles.cover}
+              style={[styles.cover, { opacity: imgOpacity }]}
               resizeMode="cover"
+              onLoad={() => Animated.timing(imgOpacity, { toValue: 1, duration: 220, useNativeDriver: true }).start()}
               onError={() => setThumbFailed(true)}
             />
           ) : (
@@ -135,6 +137,18 @@ export function ReelCard({ reel, index = 0, onDelete }: ReelCardProps) {
   );
 }
 
+// Memoized: infinite-scroll appends re-render only the new cards, not the whole
+// grid. Compare the fields the card actually displays.
+export const ReelCard = memo(ReelCardInner, (prev, next) =>
+  prev.reel.id === next.reel.id &&
+  prev.reel.title === next.reel.title &&
+  prev.reel.summary_status === next.reel.summary_status &&
+  prev.reel.category === next.reel.category &&
+  prev.reel.thumbnail_url === next.reel.thumbnail_url &&
+  prev.reel.summary[0] === next.reel.summary[0] &&
+  prev.reel.tags[0] === next.reel.tags[0]
+);
+
 const styles = StyleSheet.create({
   wrap: { flex: 1, marginBottom: spacing.sm },
   card: {
@@ -193,7 +207,7 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   content: { padding: spacing.sm + 2, gap: 4, flex: 1 },
-  title: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '600', lineHeight: 18, letterSpacing: -0.1 },
+  title: { color: colors.textPrimary, fontFamily: typeface.displayMedium, fontSize: font.sm, fontWeight: '600', lineHeight: 18, letterSpacing: -0.1 },
   bullet: { color: colors.textSecondary, fontSize: font.xs, lineHeight: 16 },
   summarizingText: { color: colors.accent, fontSize: font.xs, fontWeight: '600' },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 'auto', paddingTop: 4 },
