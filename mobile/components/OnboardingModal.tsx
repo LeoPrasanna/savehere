@@ -213,7 +213,7 @@ export function OnboardingModal() {
                   style={styles.iconWrap}
                 >
                   <LinearGradient
-                    colors={current.gradient}
+                    colors={current.gradient as [string, string]}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
                     style={styles.iconGrad}
                   >
@@ -257,7 +257,7 @@ export function OnboardingModal() {
                 {/* CTA */}
                 <Pressable onPress={goNext} scaleTo={0.97} style={styles.ctaWrap}>
                   <LinearGradient
-                    colors={isLast ? gradients.success : current.gradient}
+                    colors={(isLast ? gradients.success : current.gradient) as [string, string]}
                     start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                     style={styles.cta}
                   >
@@ -282,7 +282,7 @@ export function OnboardingModal() {
 
 const styles = StyleSheet.create({
   backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     zIndex: 1,
   },
   overlay: {
@@ -416,7 +416,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.border,
-    transitionProperty: 'width',
   },
   ctaWrap: {
     width: '100%',

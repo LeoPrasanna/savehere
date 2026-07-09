@@ -52,6 +52,15 @@ def daily_limit_for(user: AuthUser) -> int:
     return settings.AI_PRO_DAILY_LIMIT if tier_for(user) == "pro" else settings.AI_DAILY_LIMIT
 
 
+def usage_today(db: Session, user_id: str, *, today: date | None = None) -> int:
+    """How many AI actions the user has spent today. Read-only — never charges."""
+    day = today or _utc_today()
+    count = db.execute(
+        select(AiUsageDB.count).where(AiUsageDB.user_id == user_id, AiUsageDB.day == day)
+    ).scalar_one_or_none()
+    return count or 0
+
+
 def charge_ai_action(db: Session, user: AuthUser, *, today: date | None = None) -> int:
     """Charge one AI action against the user's daily budget (for their tier).
 

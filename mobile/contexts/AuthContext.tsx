@@ -94,11 +94,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const deleteAccount = async (): Promise<{ error: string | null }> => {
     try {
-      // 1. Delete all user data from backend
+      // 1. Delete all user data from backend. If this fails we STOP — signing out
+      // anyway would tell the user their data was erased when it wasn't.
       await api.deleteAccount();
     } catch (e: any) {
-      // If backend deletion fails, still attempt to sign out locally
-      console.warn('Backend account deletion failed:', e?.message || e);
+      return { error: e?.message || "Couldn't delete your data — check your connection and try again." };
     }
     // 2. Sign out from Supabase
     const { error } = await supabase.auth.signOut();

@@ -116,17 +116,13 @@ def generate_workout(reel_id: str, user: AuthUser = Depends(get_current_user), d
             detail=f"You've built a workout for this reel {WORKOUT_LIMIT} times — that's the limit for now (each one uses AI).",
         )
 
-    # Per-user daily AI budget — charged before the AI call and before we delete the
-    # existing plan, so a quota 429 never destroys a workout the user already had.
-    charge_ai_action(db, user)
-
-    # Delete existing plan before regenerating
-    db.query(WorkoutExerciseDB).filter(WorkoutExerciseDB.reel_id == reel_id).delete()
-    db.commit()
-
     source = reel.raw_text or reel.notes or reel.title or ""
     if not source:
         raise HTTPException(status_code=422, detail="No content to extract a workout from.")
+
+    # Per-user daily AI budget (shared across all AI actions). Charged after the
+    # free checks, before the Claude call.
+    charge_ai_action(db, user)
 
     result = workout_extractor.extract_workout(
         platform=reel.platform,
@@ -140,6 +136,10 @@ def generate_workout(reel_id: str, user: AuthUser = Depends(get_current_user), d
             status_code=422,
             detail="No workout exercises found in this content. Try a reel that demonstrates specific exercises."
         )
+
+    # Replace the existing plan only now that extraction succeeded — a failed
+    # regeneration must never destroy a workout the user already had.
+    db.query(WorkoutExerciseDB).filter(WorkoutExerciseDB.reel_id == reel_id).delete()
 
     workout_name = result.get("workout_name", "Custom Workout")
     difficulty = result.get("difficulty", "intermediate")

@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, DateTime, Date, JSON, Text, Integer, Boolean, ForeignKey, text
+from sqlalchemy import create_engine, event, Column, String, DateTime, Date, JSON, Text, Integer, Boolean, ForeignKey, text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
 import uuid
@@ -7,8 +7,18 @@ from app.config import settings
 
 # check_same_thread is a SQLite-only flag; omit it for Postgres/other drivers so a
 # DATABASE_URL swap (with auth) needs no code change.
-_connect_args = {"check_same_thread": False} if settings.DATABASE_URL.startswith("sqlite") else {}
+_is_sqlite = settings.DATABASE_URL.startswith("sqlite")
+_connect_args = {"check_same_thread": False} if _is_sqlite else {}
 engine = create_engine(settings.DATABASE_URL, connect_args=_connect_args)
+
+if _is_sqlite:
+    # SQLite ignores ON DELETE CASCADE unless foreign_keys is switched on per
+    # connection — without this, deleting a reel strands its tasks/exercises.
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_fks(dbapi_conn, _record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

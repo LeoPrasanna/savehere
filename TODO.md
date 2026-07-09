@@ -12,6 +12,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [ ] **Switch API URL in mobile** — `mobile/services/api.ts` `BASE_URL` must point to the deployed backend, not localhost.
 - [~] **User authentication** — Supabase Auth (email now; Google/Apple later). **Phases 1–4 done:** (1) `@supabase/supabase-js` client; (2) `get_current_user()` verifies ECC/ES256 tokens vs JWKS, no shared secret (`app/auth.py`); (3) `user_id` on `ReelDB` + **every** reels/workout/ask route scoped to the caller with ownership 404s (tasks/exercises owned via parent reel join) — `url` no longer globally unique (per-user dedup), isolation proven by tests; (4) mobile login/signup screen + auth gate in `_layout.tsx` + `Bearer` token injected in `api.ts` + sign-out in ProfilePanel. **Phase 5 done:** per-user, DB-backed daily AI quota (`ai_usage` table + `app/quota.py` `enforce_daily_ai_quota`) shared across all AI actions (ask/tasks/workout/(re)summarize), env-tunable `AI_DAILY_LIMIT` (default 30/day), replacing the interim per-IP ask cap. **Remaining:** Phase 6 Postgres in prod (`DATABASE_URL`). Email confirmation is OFF for dev — turn ON before launch. Apple Sign-In required for App Store once social login is added.
 - [ ] **Apple Developer account** — $99/year, required to test on real iPhone and submit to App Store.
+- [ ] **Delete the Supabase Auth user on account deletion** — Apple guideline 5.1.1(v) requires apps with account creation to offer FULL account deletion. `DELETE /api/account` wipes the user's data (reels + tasks + exercises) but the Supabase Auth record survives, so the "account" still exists. Backend must call the Supabase Admin API (`auth.admin.delete_user`, service-role key) after the data wipe. App Store review will check this.
 - [ ] **Production email SMTP** — Supabase's built-in email sender caps at ~2–4/hour ("email rate limit exceeded"), unusable for real signups. Before re-enabling "Confirm email" for launch, wire a custom SMTP under Authentication → Emails → SMTP. Free options: **Brevo** (300/day), **Resend** (3k/mo, best DX), **SendGrid** (100/day). ⚠️ Real prerequisite: a **verified sending domain** (SPF + DKIM DNS records) — so buy the domain first. Dev for now: keep "Confirm email" OFF (no email sent, no limit).
 
 ---
@@ -35,6 +36,10 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [ ] **API key protection** — once auth is added, all API routes should require a valid session token.
 - [ ] **Claude cost cap** — set a monthly spending limit in the Anthropic console dashboard.
 - [x] **Audio download guard** — `download_audio()` now sets `max_filesize=50MB` (+ 15s socket timeout) so it aborts before pulling an oversized file.
+- [x] **Save-time summary charged against the quota (was the last uncapped AI path)** — the auto-summary on `/save` now calls `charge_ai_action` like every other AI action. Over budget → the card still saves instantly, marked `failed` so the detail screen offers a retry after the daily reset. Before this, saving in a loop was unbounded Claude spend (only the per-IP burst guard stood in the way).
+- [x] **Thumbnail proxy hardened** — host check is now a domain-suffix match (`ytimg.com.evil.example` used to pass the old substring check → open proxy), https-only, plus a per-IP rate limit (120/min).
+- [ ] **Rate limiter trusts `X-Forwarded-For` blindly** — fine behind Render/Railway (they set it), but if the app is ever exposed directly, any client can spoof the header and dodge every per-IP limit. Before deploy: only honor XFF when the peer is the known proxy, or use the platform's real-IP header.
+- [ ] **Thumbnail proxy follows redirects** — a whitelisted CDN redirecting off-domain would still be fetched. Low risk (major CDNs don't), but validating the final host after redirects would close it fully.
 
 ---
 
@@ -66,6 +71,9 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [x] **Empty state illustrations** — already using lucide vector icons (Sparkles, CloudOff); emoji placeholders were already replaced. Search empty state shows the query string.
 - [x] **Haptic feedback** — `services/haptics.ts` (web-safe wrapper; native-only, errors swallowed) wired to: save success/failure (`save.tsx`), re-summarize success/failure + delete-confirm warning (`reel/[id].tsx`), and card-delete tap (`ReelCard.tsx`). Web export verified clean.
 - [x] **iPad layout** — detail screen content container capped at `maxWidth: 720` and centered.
+- [x] **AI usage meter + live tier badge** — ProfilePanel shows "N of M AI actions left" with a progress bar (from `GET /api/account/usage`) and the real tier instead of a hardcoded "Free", so the daily-quota 429 is never a surprise.
+- [x] **Clean API error messages everywhere** — `services/api.ts` now extracts FastAPI's `detail` centrally, so no screen can ever show raw JSON to the user.
+- [x] **Account deletion honesty** — if the backend data wipe fails, the app now reports the error and does NOT sign out (it used to claim success regardless).
 
 ---
 
@@ -92,6 +100,9 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [x] **Background summary (instant save)** — `POST /save` returns as soon as metadata is extracted; the Claude summary runs in a FastAPI `BackgroundTask` (`summary_status`: pending→ready/skipped/failed). **Durability:** orphaned `pending` summaries (in-process task lost on restart/cold-start) are re-enqueued on startup (`recover_pending_summaries`, capped at 25); the detail screen polls and offers a manual retry if it stalls past ~60s.
 - [ ] **Whisper local fallback** — for audio-only content with no captions, add local `openai-whisper` library as a free alternative to the OpenAI Whisper API.
 - [x] **Apify LinkedIn integration — NOT NEEDED (removed).** Tested `pratikdani~linkedin-posts-scraper`: it runs sync for 60+ s (would block the save path) and costs ~$0.025/post. Verified the existing free `facebookexternalhit` page scrape already returns the **full** LinkedIn post body (~2.5k chars) via JSON-LD with grounded summaries — so Apify added cost + latency for zero benefit. Reverted to page-scrape-only for all platforms.
+- [x] **Foreign keys enforced + no orphan children** — SQLite now runs with `PRAGMA foreign_keys=ON` (it silently ignores `ON DELETE CASCADE` otherwise), and reel/account deletion explicitly removes `tasks` + `workout_exercises` (also sweeps orphans created before the fix). Account deletion keeps `ai_usage` rows so wiping data can't reset the daily AI quota. Locked by `tests/test_data_integrity.py`.
+- [x] **Workout regeneration no longer destroys the existing plan on failure** — the old plan is deleted only after a successful extraction (the tasks route already worked this way).
+- [x] **`GET /api/account/usage`** — tier + used/limit/remaining/resets_at for the day, read-only (never charges). Powers the mobile usage meter.
 - [ ] **Alembic migrations** — replace the `ALTER TABLE` try/except hack in `database.py`. Deferred until Postgres migration (auth project) — premature for SQLite dev.
 
 ---
@@ -121,7 +132,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [ ] **Analytics** — PostHog or Mixpanel (free tier) to understand which features are used.
 - [ ] **GDPR / data deletion** — "Delete my account and all data" flow, required for EU users.
 - [ ] **Supabase Row Level Security** — enforce per-user data isolation at the database level, not just application level.
-- [~] **CI/CD pipeline** — GitHub Actions: backend pytest runs on push/PR (`.github/workflows/ci.yml`). TODO: EAS build on merge to main.
+- [~] **CI/CD pipeline** — GitHub Actions: backend pytest runs on push/PR (`.github/workflows/ci.yml`). TODO: EAS build on merge to main. ⚠️ **Add `npm run typecheck` for `mobile/` to CI** — the `launch-prep/ui-revamp` branch shipped commits where `app/index.tsx` didn't even parse (the home screen was broken); a 30-second CI job would have caught it.
 - [~] **Unit tests** — `backend/tests/` (pytest, 81 tests): `normalize_url`, `detect_platform`, `_parse_vtt`, `_og` (+ backtracking-hang regression guard), `_extract_jsonld`, `_weak_title`, `_to_response` coercion, the per-IP rate limiter, the per-user daily AI quota (atomic charge, zero-limit kill-switch, tier resolution from `app_metadata`, + wired-into-`/api/ask` integration, no real Claude call), task source disclaimers, DB-backed list/pagination/search + per-user-isolation endpoint tests (in-memory SQLite + TestClient), JWT auth verification, and mock-based `extract_tasks` cooking-fallback tests. Run with `python -m pytest tests/ -q` from `backend/`. **CI:** `.github/workflows/ci.yml` runs the suite on every push/PR touching `backend/`. TODO: mock-based test for `summarizer.summarize`.
 
 ---

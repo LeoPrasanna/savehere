@@ -61,7 +61,10 @@ mobile/    Expo SDK 56 + expo-router + React Native (dev on web).
 - Per-IP rate limiting incl. daily cap on `/api/ask`; audio download size guard; cache eviction; `/health/extract` self-test.
 - 27 pytest tests; `npm run typecheck` and `npx expo export --platform web` both pass.
 
-**Not built yet:** auth, per-user data (everything shares one DB), deployment, payments, iOS share extension.
+**Not built yet:** deployment, payments, iOS share extension. (Auth + per-user data ARE built — Phases 1–5 below.)
+
+### Reliability/tier revamp (branch `revamp/reliability-tiers`, 2026-07-09)
+SQLite FK enforcement + explicit cascade deletes (no more orphaned tasks/exercises on reel/account delete); the save-time auto-summary now charges the per-user AI quota (was the last uncapped Claude path — over budget the card still saves, summary marked `failed`); workout regeneration no longer destroys the old plan on a failed extraction; thumbnail proxy host check hardened (substring → domain-suffix, https-only, rate-limited); `GET /api/account/usage` powers a mobile AI-usage meter + live tier badge. Full change list, guardrails, and copy-paste prompts for follow-up work: **[`docs/HANDOFF.md`](HANDOFF.md)**.
 
 ### Recipe extraction fallback — FIXED (was "highest priority")
 

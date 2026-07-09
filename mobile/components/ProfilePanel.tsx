@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Modal, useWindowDimensions, Dimensions, Alert, ScrollView } from 'react-native';
 import { MotiView } from 'moti';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Reel } from '../services/api';
+import { api, Reel, Usage } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { GlassCard } from './GlassCard';
@@ -31,6 +31,13 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const { email, displayName, signOut, deleteAccount } = useAuth();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [usage, setUsage] = useState<Usage | null>(null);
+
+  // Refresh the AI budget each time the panel opens; quietly keep the last known
+  // value if the request fails (the meter is informative, never blocking).
+  useEffect(() => {
+    if (visible) api.getUsage().then(setUsage).catch(() => {});
+  }, [visible]);
   const shimmerW = panelWidth - spacing.lg * 2;
 
   const go = (path: string) => { onClose(); router.push(path as any); };
@@ -134,7 +141,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
             <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
             <Text style={styles.sub} numberOfLines={1}>{email ?? 'Synced to your account'}</Text>
             <View style={styles.tierBadge}>
-              <Text style={styles.tierBadgeText}>Free</Text>
+              <Text style={styles.tierBadgeText}>{usage?.tier === 'pro' ? 'Pro' : 'Free'}</Text>
             </View>
           </GlassCard>
         </MotiView>
@@ -157,6 +164,37 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
           <Stat icon="layers" value={categories} label="Categories" delay={300} />
           <Stat icon="all" value={platforms} label="Platforms" delay={400} />
         </View>
+
+        {/* Daily AI budget — honest meter so a quota 429 is never a surprise */}
+        {usage && (
+          <>
+            <Text style={styles.sectionLabel}>AI TODAY</Text>
+            <MotiView
+              from={{ opacity: 0, translateY: 8 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 300, delay: 450 }}
+            >
+              <GlassCard tint="violet" intensity="low" style={styles.usageCard}>
+                <View style={styles.usageHeader}>
+                  <Icon name="sparkles" size={14} color={colors.accentLight} />
+                  <Text style={styles.usageTitle}>
+                    {usage.remaining} of {usage.limit} AI actions left
+                  </Text>
+                </View>
+                <View style={styles.usageTrack}>
+                  <LinearGradient
+                    colors={gradients.hologram}
+                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+                    style={[styles.usageFill, { width: `${Math.min(100, (usage.used / Math.max(1, usage.limit)) * 100)}%` }]}
+                  />
+                </View>
+                <Text style={styles.usageHint}>
+                  Summaries, recipes, workouts & questions all count. Resets daily.
+                </Text>
+              </GlassCard>
+            </MotiView>
+          </>
+        )}
 
         {/* Explore */}
         <Text style={styles.sectionLabel}>EXPLORE</Text>
@@ -283,6 +321,16 @@ const styles = StyleSheet.create({
   },
   statValue: { color: colors.textPrimary, fontSize: font.xl, fontWeight: '800' },
   statLabel: { color: colors.textSecondary, fontSize: 10, fontWeight: '600' },
+
+  usageCard: { padding: spacing.md, gap: spacing.xs },
+  usageHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  usageTitle: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' },
+  usageTrack: {
+    height: 6, borderRadius: radius.full, overflow: 'hidden',
+    backgroundColor: colors.border, marginTop: 2,
+  },
+  usageFill: { height: '100%', borderRadius: radius.full },
+  usageHint: { color: colors.textTertiary, fontSize: 10, marginTop: 2 },
 
   menu: { gap: spacing.sm },
   row: {

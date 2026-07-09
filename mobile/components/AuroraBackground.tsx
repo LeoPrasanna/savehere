@@ -82,10 +82,10 @@ const STAR_POSITIONS = [
   { x: '90%', y: '48%', size: 1.5 }, { x: '20%', y: '70%', size: 1 }, { x: '50%', y: '68%', size: 2 },
   { x: '80%', y: '75%', size: 1.5 }, { x: '10%', y: '88%', size: 2 }, { x: '40%', y: '85%', size: 1 },
   { x: '60%', y: '92%', size: 1.5 }, { x: '88%', y: '90%', size: 2 },
-];
+] as const;
 
 const styles = StyleSheet.create({
-  starfield: { ...StyleSheet.absoluteFillObject },
+  starfield: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   star: {
     position: 'absolute',
     borderRadius: 99,

@@ -1,9 +1,10 @@
 import { useRef, ReactNode } from 'react';
-import { Animated, Pressable as RNPressable, ViewStyle, StyleProp, GestureResponderEvent } from 'react-native';
+import { Animated, Pressable as RNPressable, ViewStyle, StyleProp, GestureResponderEvent, LayoutChangeEvent } from 'react-native';
 
 interface Props {
   children?: ReactNode;
   onPress?: (e: GestureResponderEvent) => void;
+  onLayout?: (e: LayoutChangeEvent) => void;
   style?: StyleProp<ViewStyle>;
   scaleTo?: number;
   disabled?: boolean;
@@ -17,7 +18,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(RNPressable);
 /**
  * Tap target with a spring scale-down on press. Used everywhere for tactile feel.
  */
-export function Pressable({ children, onPress, style, scaleTo = 0.96, disabled, hitSlop }: Props) {
+export function Pressable({ children, onPress, onLayout, style, scaleTo = 0.96, disabled, hitSlop }: Props) {
   const scale = useRef(new Animated.Value(1)).current;
 
   const animateTo = (to: number) =>
@@ -31,6 +32,7 @@ export function Pressable({ children, onPress, style, scaleTo = 0.96, disabled, 
   return (
     <AnimatedPressable
       onPress={onPress}
+      onLayout={onLayout}
       onPressIn={() => !disabled && animateTo(scaleTo)}
       onPressOut={() => animateTo(1)}
       disabled={disabled}

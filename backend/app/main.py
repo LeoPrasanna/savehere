@@ -1,10 +1,11 @@
 import logging
 from urllib.parse import urlparse
 import httpx
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import Depends, FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
+from app.ratelimit import rate_limit
 from app.database import create_tables
 from app.routes.reels import router as reels_router, recover_pending_summaries
 from app.routes.workout import router as workout_router
@@ -118,12 +119,17 @@ _THUMB_HEADERS = {
 }
 
 
-@app.get("/api/thumbnail")
+@app.get("/api/thumbnail", dependencies=[Depends(rate_limit(120, 60, "thumbnail"))])
 def thumbnail(url: str):
     """Proxy a media-CDN image so it loads on web (Instagram/Facebook CDNs block
     browser hotlinking via CORS). Native loads the URL directly and skips this."""
-    host = urlparse(url).netloc.lower()
-    if not any(h in host for h in _THUMB_HOSTS):
+    if urlparse(url).scheme != "https":
+        raise HTTPException(status_code=400, detail="Host not allowed")
+    # Suffix match on domain-label boundaries — a plain substring check would let
+    # "ytimg.com.evil.example" through and turn this into an open proxy.
+    host = urlparse(url).hostname or ""
+    host = host.lower().rstrip(".")
+    if not any(host == h or host.endswith("." + h) for h in _THUMB_HOSTS):
         raise HTTPException(status_code=400, detail="Host not allowed")
     try:
         r = httpx.get(url, headers=_THUMB_HEADERS, timeout=10, follow_redirects=True)

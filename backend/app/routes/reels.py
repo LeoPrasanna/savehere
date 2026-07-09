@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
-from app.database import get_db, SessionLocal, ReelDB, ExtractionCacheDB
+from app.database import get_db, SessionLocal, ReelDB, ExtractionCacheDB, TaskDB, WorkoutExerciseDB
 from app.models.reel import ReelSaveRequest, ReelNotesRequest, ReelCategoryRequest, ReelResponse, ReelListResponse
 from app.services import extractor, transcriber, summarizer
 from app.ratelimit import rate_limit
@@ -117,6 +117,21 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
     raw_text = (info.get("best_text") or "").strip()
     should_summarize = len(raw_text) >= 50 or bool(info.get("needs_audio"))
 
+    # The auto-summary is an AI action like any other — without this charge, saving
+    # in a loop was unbounded Claude spend (the per-IP burst guard was the only cap).
+    # Over budget → the card still saves instantly, marked 'failed' so the detail
+    # screen offers a retry once the daily quota resets.
+    quota_spent = False
+    if should_summarize:
+        try:
+            charge_ai_action(db, user)
+        except HTTPException as e:
+            if e.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
+                raise
+            quota_spent = True
+            should_summarize = False
+            logger.info(f"[SAVE] AI quota spent for user {user.id} — saving without summary")
+
     reel = ReelDB(
         id=str(uuid.uuid4()),
         user_id=user.id,
@@ -130,7 +145,7 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
         tags=[],
         category="other",
         raw_text=raw_text,
-        summary_status="pending" if should_summarize else "skipped",
+        summary_status="pending" if should_summarize else ("failed" if quota_spent else "skipped"),
         created_at=datetime.utcnow(),
     )
     db.add(reel)
@@ -270,6 +285,15 @@ def summarize_now(reel_id: str, user: AuthUser = Depends(get_current_user), db: 
     if reel.summary_status == "ready" and reel.summary:
         return _to_response(reel)
 
+    # 'skipped' means a prior run already found nothing readable (and the audio
+    # fallback failed) — retrying would charge the user's budget for a guaranteed
+    # skip. Point them at notes + re-summarize instead.
+    if reel.summary_status == "skipped" and len((reel.raw_text or "").strip()) < 50:
+        raise HTTPException(
+            status_code=422,
+            detail="There's nothing readable in this reel to summarize. Paste the post text into Notes, then use re-summarize.",
+        )
+
     # Per-user daily AI budget — only charged when we actually run the summary (a
     # reel already 'ready' returned above without spending a unit).
     charge_ai_action(db, user)
@@ -305,6 +329,10 @@ def update_notes(reel_id: str, body: ReelNotesRequest,
 @router.delete("/{reel_id}")
 def delete_reel(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     reel = _get_owned_reel_or_404(reel_id, user, db)
+    # Children are removed explicitly — SQLite only honors ON DELETE CASCADE with
+    # PRAGMA foreign_keys on, and rows saved before that fix may be orphaned.
+    db.query(TaskDB).filter(TaskDB.reel_id == reel.id).delete(synchronize_session=False)
+    db.query(WorkoutExerciseDB).filter(WorkoutExerciseDB.reel_id == reel.id).delete(synchronize_session=False)
     db.delete(reel)
     db.commit()
     return {"message": "Deleted"}

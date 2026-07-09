@@ -74,6 +74,14 @@ export interface Task {
   sort_order: number;
 }
 
+export interface Usage {
+  tier: 'free' | 'pro';
+  used: number;
+  limit: number;
+  remaining: number;
+  resets_at: string;
+}
+
 export interface AskResponse {
   answer: string;
   sources: Reel[];
@@ -107,8 +115,15 @@ async function request<T>(path: string, options?: RequestInit, timeoutMs = 55000
       signal: controller.signal,
     });
     if (!res.ok) {
-      const err = await res.text();
-      throw new Error(err || `Request failed: ${res.status}`);
+      // Surface the backend's human-readable `detail` so screens never have to
+      // show raw JSON. Falls back to the raw body for non-FastAPI errors.
+      const raw = await res.text();
+      let msg = raw || `Request failed: ${res.status}`;
+      try {
+        const detail = JSON.parse(raw)?.detail;
+        if (typeof detail === 'string' && detail) msg = detail;
+      } catch {}
+      throw new Error(msg);
     }
     return res.json();
   } catch (e: any) {
@@ -213,6 +228,8 @@ export const api = {
     request<{ message: string }>(`/api/tasks/${taskId}`, { method: 'DELETE' }),
 
   // ── Account ───────────────────────────────────────────────
+  getUsage: () => request<Usage>('/api/account/usage'),
+
   deleteAccount: () =>
     request<{ deleted: boolean; reels_removed: number; message: string }>(`/api/account`, { method: 'DELETE' }),
 };
