@@ -159,6 +159,30 @@ Each prompt is self-contained. Do them one at a time, verify (§3), update TODO.
   with a session; `services/sessionFlags.ts` resets on SIGNED_IN/SIGNED_OUT so
   every fresh sign-in starts at the Landing screen.
 
+## 4.45 Tier system (branch `feat/tier-system`) — rules
+
+- **`entitlements_for(user, db)` (app/entitlements.py) is the ONLY source of
+  truth** for what a user may do (effective tier trial/free/pro, AI daily
+  limit, save cap, trial end). Never duplicate tier math in a route; never gate
+  anything client-side only.
+- Effective tiers: trial (10d, 30 AI/day, unlimited saves) → free (3 AI/day
+  trickle + 20-save cap on NEW saves — the library itself never locks) → pro
+  (100 AI/day, unlimited saves).
+- The trial clock is server-side (`profiles.trial_started_at`) and keyed to a
+  hash of the normalized email (`trial_grants`) so account deletion / +tag
+  re-signup continues the original trial. `trial_grants` intentionally
+  survives account deletion — do not "clean it up".
+- Paid tier comes ONLY from JWT `app_metadata.tier`, written by
+  `scripts/set_tier.py` (service-role) — never build an admin API for tier
+  writes. At launch, the RevenueCat webhook (signature-verified, idempotent)
+  replaces the script. Known/accepted: downgrades lag up to 1 h (token TTL).
+- `trial_extra_days` on profiles is the referral seam — the math already
+  honors it; the referral program itself is deliberately NOT built (fraud
+  surface). Don't add one casually.
+- New AI endpoints: still just `charge_ai_action(db, user)` — it already
+  resolves the effective limit. New save-like endpoints must check
+  `ent.save_limit` the way `/save` does (after dedup, before insert).
+
 ## 4.5 UI system (branch `revamp/ui-refresh`) — rules for any UI work
 
 The app's identity is **"Ember on Ink"** — warm ink-black surfaces, ONE

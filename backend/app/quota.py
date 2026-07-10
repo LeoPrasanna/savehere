@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.auth import AuthUser
 from app.database import AiUsageDB
+from app.entitlements import entitlements_for, tier_for  # noqa: F401  (tier_for re-exported for compat)
 
 # Idempotent "make sure today's row exists" — DO NOTHING on a concurrent insert.
 # The ON CONFLICT (column-list) syntax is identical on SQLite and Postgres.
@@ -35,20 +36,9 @@ def _utc_today() -> date:
     return datetime.utcnow().date()
 
 
-def tier_for(user: AuthUser) -> str:
-    """The user's entitlement tier, read from the JWT's `app_metadata` claim.
-
-    `app_metadata` is server-controlled (only the service-role key can write it), so
-    a user can't self-upgrade by editing their own `user_metadata`. Defaults to
-    "free" until a paid entitlement is written — that write is the single seam the
-    RevenueCat/IAP webhook will hook into at launch (no change needed here)."""
-    meta = (getattr(user, "claims", None) or {}).get("app_metadata") or {}
-    tier = meta.get("tier")
-    return tier if tier in ("free", "pro") else "free"
-
-
 def daily_limit_for(user: AuthUser) -> int:
-    """Per-tier daily AI-action limit — the cost ceiling that scales with the plan."""
+    """Paid-tier daily AI limit from the JWT alone — no trial math. Use
+    `entitlements_for` for the user's EFFECTIVE limit; kept for tests/compat."""
     return settings.AI_PRO_DAILY_LIMIT if tier_for(user) == "pro" else settings.AI_DAILY_LIMIT
 
 
@@ -62,11 +52,13 @@ def usage_today(db: Session, user_id: str, *, today: date | None = None) -> int:
 
 
 def charge_ai_action(db: Session, user: AuthUser, *, today: date | None = None) -> int:
-    """Charge one AI action against the user's daily budget (for their tier).
+    """Charge one AI action against the user's daily budget for their EFFECTIVE
+    tier (pro / in-trial / post-trial trickle — see app/entitlements.py).
 
     Raises HTTP 429 when the day's allowance is exhausted. Call it AFTER any free
     validation/cap checks and BEFORE the Claude call."""
-    return enforce_daily_ai_quota(db, user.id, daily_limit_for(user), today=today)
+    ent = entitlements_for(user, db)
+    return enforce_daily_ai_quota(db, user.id, ent.ai_daily_limit, today=today)
 
 
 def enforce_daily_ai_quota(

@@ -152,7 +152,8 @@ class TestUsageEndpoint:
         client, Session = env
         c = client(USER_A)
         body = c.get("/api/account/usage").json()
-        assert body["tier"] == "free"
+        # A fresh user starts inside their trial window (tier system).
+        assert body["tier"] == "trial"
         assert body["used"] == 5
         assert body["limit"] >= body["used"]
         assert body["remaining"] == body["limit"] - 5

@@ -75,9 +75,13 @@ export interface Task {
 }
 
 export interface Usage {
-  tier: 'free' | 'pro';
-  used: number;
-  limit: number;
+  // Effective tier: 'trial' (first days, full limits), 'free' (post-trial:
+  // capped saves + a small daily AI trickle), 'pro' (paid, unlimited saves).
+  tier: 'trial' | 'free' | 'pro';
+  trial_ends_at: string | null;                    // ISO UTC; null for pro
+  saves: { used: number; limit: number | null };   // limit null = unlimited
+  used: number;        // AI actions spent today
+  limit: number;       // AI actions allowed today (tier-dependent)
   remaining: number;
   resets_at: string;
 }

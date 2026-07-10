@@ -31,13 +31,23 @@ class Settings:
     # Driver-agnostic. Defaults to local SQLite; set DATABASE_URL to a Postgres URL
     # in production (lands with auth). SQLAlchemy picks the driver from the scheme.
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./savehere.db")
+    # ── Tier system (see app/entitlements.py) ────────────────────────────────
     # Per-user AI actions allowed per UTC day (summaries, recipes, workouts, asks
     # all count). The real spend ceiling per user — env-overridable so the budget
-    # can be tightened without a deploy. This is the FREE tier's limit.
+    # can be tightened without a deploy. This is the IN-TRIAL limit (the name is
+    # kept from when free==trial, so existing env files/dashboards keep working).
     AI_DAILY_LIMIT: int = int(os.getenv("AI_DAILY_LIMIT", "30"))
+    # Post-trial free tier: a small daily trickle keeps the product alive enough
+    # to convert instead of going view-only (owner decision 2026-07-10).
+    AI_FREE_DAILY_LIMIT: int = int(os.getenv("AI_FREE_DAILY_LIMIT", "3"))
     # Paid tier's daily AI-action limit. Applies to users whose JWT carries
-    # app_metadata.tier == "pro" (set server-side by the RevenueCat/IAP webhook at
-    # launch). Placeholder number until pricing is finalized — env-tunable.
+    # app_metadata.tier == "pro" (set server-side: scripts/set_tier.py now, the
+    # RevenueCat/IAP webhook at launch). Placeholder until pricing is finalized.
     AI_PRO_DAILY_LIMIT: int = int(os.getenv("AI_PRO_DAILY_LIMIT", "100"))
+    # Trial length in days, counted from the user's first authenticated request.
+    TRIAL_DAYS: int = int(os.getenv("TRIAL_DAYS", "10"))
+    # Post-trial free tier: total saves allowed (existing saves are grandfathered
+    # — the cap gates NEW saves only; view/search/delete are never locked).
+    FREE_SAVE_LIMIT: int = int(os.getenv("FREE_SAVE_LIMIT", "20"))
 
 settings = Settings()

@@ -13,6 +13,7 @@ from app.models.reel import ReelSaveRequest, ReelNotesRequest, ReelCategoryReque
 from app.services import extractor, transcriber, summarizer
 from app.ratelimit import rate_limit
 from app.quota import charge_ai_action
+from app.entitlements import entitlements_for
 from app.auth import get_current_user, AuthUser
 
 logger = logging.getLogger(__name__)
@@ -76,6 +77,22 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
     )
     if existing:
         return _to_response(existing)
+
+    # Post-trial free tier: total saves are capped. Enforced here (server-side,
+    # before the card is created) and only for NEW saves — the library itself is
+    # never locked, and deleting below the cap re-opens saving. Soft cap under
+    # concurrency (two parallel saves at 19 can land 21) — acceptable.
+    ent = entitlements_for(user, db)
+    if ent.save_limit is not None:
+        saved = db.query(ReelDB).filter(ReelDB.user_id == user.id).count()
+        if saved >= ent.save_limit:
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"Your free library is full ({ent.save_limit} saves). "
+                    "Delete a save to make room — or Pro removes the cap."
+                ),
+            )
 
     # The only sync validation: is this a link we recognize at all?
     platform = extractor.detect_platform(canonical_url)

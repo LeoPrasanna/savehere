@@ -31,7 +31,7 @@ const STEPS: OnboardingStep[] = [
     title: 'Welcome to SaveHere',
     subtitle: 'Your AI-powered second brain',
     description:
-      'You\'re on a 10-day free trial. Love it? Extend up to 30 days by referring friends — each successful referral adds bonus days. No credit card required.',
+      'You start with a 10-day full trial — unlimited saves and 30 AI actions a day, no credit card needed. After that you keep your whole library, with 3 AI actions a day and up to 20 saves. Pro removes the limits.',
     icon: <Sparkles size={40} color="#FFF" />,
     gradient: gradients.hologram,
     accent: colors.hologram,

@@ -13,6 +13,15 @@ import { colors, spacing, font, radius, gradients, shadow } from '../constants/t
 
 const APP_VERSION = '1.0.0';
 
+/** "3 days" / "1 day" / "a few hours" from an ISO end date. */
+function trialDaysLeft(endsAt: string): string {
+  const ms = new Date(endsAt).getTime() - Date.now();
+  const days = Math.floor(ms / 86400000);
+  if (days >= 2) return `${days} days`;
+  if (days === 1) return '1 day';
+  return 'a few hours';
+}
+
 interface Props {
   visible: boolean;
   onClose: () => void;
@@ -140,7 +149,9 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
             <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
             <Text style={styles.sub} numberOfLines={1}>{email ?? 'Synced to your account'}</Text>
             <View style={styles.tierBadge}>
-              <Text style={styles.tierBadgeText}>{usage?.tier === 'pro' ? 'Pro' : 'Free'}</Text>
+              <Text style={styles.tierBadgeText}>
+                {usage?.tier === 'pro' ? 'Pro' : usage?.tier === 'trial' ? 'Trial' : 'Free'}
+              </Text>
             </View>
           </GlassCard>
         </MotiView>
@@ -190,6 +201,24 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                 <Text style={styles.usageHint}>
                   Summaries, recipes, workouts & questions all count. Resets daily.
                 </Text>
+                {usage.tier === 'trial' && usage.trial_ends_at && (
+                  <View style={styles.planRow}>
+                    <Icon name="time" size={13} color={colors.warning} />
+                    <Text style={styles.planText}>
+                      Trial — {trialDaysLeft(usage.trial_ends_at)} left, then {' '}
+                      <Text style={styles.planStrong}>3 AI actions/day · 20 saves</Text>
+                    </Text>
+                  </View>
+                )}
+                {usage.tier === 'free' && usage.saves.limit != null && (
+                  <View style={styles.planRow}>
+                    <Icon name="bookmark" size={13} color={colors.accentLight} />
+                    <Text style={styles.planText}>
+                      Saves used: <Text style={styles.planStrong}>{usage.saves.used} of {usage.saves.limit}</Text>
+                      {'  ·  Pro removes the caps'}
+                    </Text>
+                  </View>
+                )}
               </GlassCard>
             </MotiView>
           </>
@@ -330,6 +359,13 @@ const styles = StyleSheet.create({
   },
   usageFill: { height: '100%', borderRadius: radius.full },
   usageHint: { color: colors.textTertiary, fontSize: 10, marginTop: 2 },
+  planRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    marginTop: spacing.xs, paddingTop: spacing.xs,
+    borderTopWidth: 1, borderTopColor: colors.border,
+  },
+  planText: { flex: 1, color: colors.textSecondary, fontSize: font.xs, lineHeight: 16 },
+  planStrong: { color: colors.textPrimary, fontWeight: '700' },
 
   menu: { gap: spacing.sm },
   row: {

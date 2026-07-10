@@ -6,9 +6,10 @@ import logging
 from datetime import datetime, timedelta
 
 from app.config import settings
-from app.database import get_db, ReelDB, TaskDB, WorkoutExerciseDB
+from app.database import get_db, ReelDB, TaskDB, WorkoutExerciseDB, ProfileDB
 from app.auth import get_current_user, AuthUser
-from app.quota import tier_for, daily_limit_for, usage_today
+from app.quota import usage_today
+from app.entitlements import entitlements_for
 
 logger = logging.getLogger(__name__)
 
@@ -48,16 +49,22 @@ def _delete_auth_user(user_id: str) -> bool:
 
 @router.get("/usage")
 def get_usage(user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    """The caller's tier and today's AI-action usage — read-only, never charges.
-    Lets the app show an honest meter instead of surprising users with a 429."""
+    """The caller's effective tier and today's usage — read-only, never charges.
+    Lets the app show honest meters (AI budget, trial countdown, save cap)
+    instead of surprising users with a 429/403."""
+    ent = entitlements_for(user, db)
     used = usage_today(db, user.id)
-    limit = daily_limit_for(user)
+    saves_used = db.query(ReelDB).filter(ReelDB.user_id == user.id).count()
     tomorrow = datetime.utcnow().date() + timedelta(days=1)
     return {
-        "tier": tier_for(user),
+        # Effective tier: 'pro' | 'trial' | 'free' (trial expired).
+        "tier": ent.tier,
+        "trial_ends_at": ent.trial_ends_at.isoformat() + "Z" if ent.trial_ends_at else None,
+        "saves": {"used": saves_used, "limit": ent.save_limit},   # limit null = unlimited
+        # Legacy top-level AI fields (older clients read these directly).
         "used": used,
-        "limit": limit,
-        "remaining": max(0, limit - used),
+        "limit": ent.ai_daily_limit,
+        "remaining": max(0, ent.ai_daily_limit - used),
         "resets_at": f"{tomorrow.isoformat()}T00:00:00Z",  # quota days are UTC
     }
 
@@ -92,6 +99,10 @@ def delete_account(user: AuthUser = Depends(get_current_user), db: Session = Dep
         .filter(ReelDB.user_id == user_id)
         .delete(synchronize_session=False)
     )
+    # Profile (trial clock) goes with the account. trial_grants stays: it holds
+    # only a hash of the normalized email and exists precisely so that deleting
+    # the account can't mint a fresh trial (fraud-prevention, no readable PII).
+    db.query(ProfileDB).filter(ProfileDB.user_id == user_id).delete(synchronize_session=False)
     # extraction_cache is shared (keyed by URL, no user data) — untouched.
     db.commit()
 

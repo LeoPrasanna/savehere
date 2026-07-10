@@ -107,6 +107,33 @@ class TaskDB(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class ProfileDB(Base):
+    """Server-side per-user state the JWT can't carry (and the client can't
+    forge): the trial clock. Created lazily on the user's first authenticated
+    request. `trial_extra_days` is the seam a future referral program credits —
+    the entitlement math already honors it."""
+    __tablename__ = "profiles"
+
+    user_id = Column(String, primary_key=True)
+    trial_started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    trial_extra_days = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class TrialGrantDB(Base):
+    """One row per normalized-email hash that has ever consumed a trial.
+
+    Containment for the re-signup loophole: deleting the account (or signing up
+    as you+2@gmail.com) yields a new user id, but the normalized email hashes to
+    the same row — the new profile inherits the ORIGINAL trial start instead of
+    a fresh 10 days. Stores only a SHA-256 of the normalized email, never the
+    address itself."""
+    __tablename__ = "trial_grants"
+
+    email_hash = Column(String, primary_key=True)
+    trial_started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+
+
 class AiUsageDB(Base):
     """Per-user, per-UTC-day count of AI actions — the daily quota counter.
 
