@@ -57,6 +57,14 @@ def _get_owned_reel_or_404(reel_id: str, user: AuthUser, db: Session) -> ReelDB:
 @router.post("/save", response_model=ReelResponse, dependencies=[Depends(rate_limit(20, 60, "save"))])
 def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
               user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Instant save: the card is persisted and returned in one DB round-trip.
+
+    Nothing slow runs on the request path — extraction (2–20 s of network),
+    the quota charge and the Claude summary all happen in ONE background chain
+    (`_extract_and_summarize`), flipping `summary_status` pending→ready as
+    fields land. Cache hits skip extraction and go straight to the summary.
+    The client polls the reel (it already does for summaries) and watches
+    title/thumbnail/summary fill in."""
     _prune_cache_if_due(db)
     canonical_url = extractor.normalize_url(body.url)
 
@@ -69,94 +77,158 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
     if existing:
         return _to_response(existing)
 
-    # Cache-first: a prior successful extraction (even of a since-deleted reel)
-    # is reused instantly, so re-saving never re-hits the source platform.
-    info = _get_cached_extraction(db, canonical_url)
-    if info is not None:
-        logger.info(f"[SAVE] cache hit for {canonical_url}")
-    else:
-        try:
-            future = _executor.submit(extractor.extract_info, canonical_url)
-            info = future.result(timeout=EXTRACT_TIMEOUT)
-        except FuturesTimeout:
-            _platform = extractor.detect_platform(canonical_url)
-            logger.error(f"[SAVE] timeout platform={_platform} url={canonical_url}")
-            raise HTTPException(status_code=422, detail="Extraction timed out. The platform may be slow or the URL is not accessible. Try again.")
-        except Exception as e:
-            _platform = extractor.detect_platform(canonical_url)
-            logger.error(f"[SAVE] failed platform={_platform} url={canonical_url}: {type(e).__name__}: {e}")
-            raise HTTPException(status_code=422, detail=f"Could not extract content from URL: {str(e)}")
-
-        if info.get("extracted"):
-            _store_extraction(db, canonical_url, info)
-
-    # Couldn't read any text or thumbnail. For a recognized platform (e.g. a
-    # login-walled Facebook reel) save it as a link-only bookmark with a clean
-    # label so the user keeps it and can add notes. Only reject unknown/garbage URLs.
-    if not (info.get("best_text") or "").strip() and not info.get("thumbnail_url"):
-        if info.get("platform") in (None, "", "unknown"):
-            raise HTTPException(
-                status_code=422,
-                detail="Couldn't read anything from this link. Try a public YouTube Short, Instagram Reel, TikTok, LinkedIn or Facebook post.",
-            )
-        if _weak_title(info.get("title")):
-            kind = "Reel" if "/reel" in canonical_url.lower() else "Post"
-            info["title"] = f"{info['platform'].capitalize()} {kind}"
-
-    duration = info.get("duration") or 0
-    if duration > 600:
-        mins = int(duration // 60)
+    # The only sync validation: is this a link we recognize at all?
+    platform = extractor.detect_platform(canonical_url)
+    if platform in (None, "", "unknown"):
         raise HTTPException(
             status_code=422,
-            detail=f"This video is {mins} minutes long. SaveHere is for short-form content under 10 minutes (Reels, Shorts, TikToks)."
+            detail="Couldn't recognize this link. Try a public YouTube Short, Instagram Reel, TikTok, LinkedIn or Facebook post.",
         )
 
-    # Persist the card immediately — NO AI call on the request path. The summary
-    # (and the slow audio-transcription fallback) run in a background task so the
-    # save returns as soon as metadata is extracted and the card appears instantly.
-    raw_text = (info.get("best_text") or "").strip()
-    should_summarize = len(raw_text) >= 50 or bool(info.get("needs_audio"))
+    # Cache-first: a prior successful extraction (even of a since-deleted reel)
+    # fills the card immediately — no background extraction needed.
+    info = _get_cached_extraction(db, canonical_url)
 
-    # The auto-summary is an AI action like any other — without this charge, saving
-    # in a loop was unbounded Claude spend (the per-IP burst guard was the only cap).
-    # Over budget → the card still saves instantly, marked 'failed' so the detail
-    # screen offers a retry once the daily quota resets.
-    quota_spent = False
-    if should_summarize:
-        try:
-            charge_ai_action(db, user)
-        except HTTPException as e:
-            if e.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
-                raise
-            quota_spent = True
+    if info is not None:
+        logger.info(f"[SAVE] cache hit for {canonical_url}")
+        reel = _reel_from_info(user.id, canonical_url, info)
+        _apply_duration_guard(reel)
+        should_summarize = reel.summary_status == "pending"
+        if should_summarize and not _try_charge(db, user):
+            reel.summary_status = "failed"   # over budget — retryable after reset
             should_summarize = False
-            logger.info(f"[SAVE] AI quota spent for user {user.id} — saving without summary")
+        db.add(reel)
+        db.commit()
+        db.refresh(reel)
+        if should_summarize:
+            background_tasks.add_task(_summarize_reel, reel.id)
+        logger.info(f"[SAVE] success (cached) platform={reel.platform} id={reel.id}")
+        return _to_response(reel)
 
+    # Instant path: persist a pending card NOW; extract + charge + summarize
+    # in the background. The card appears in ~200 ms instead of 2–20 s.
     reel = ReelDB(
         id=str(uuid.uuid4()),
         user_id=user.id,
         url=canonical_url,
-        platform=info["platform"],
-        title=info["title"],
-        thumbnail_url=info["thumbnail_url"],
-        uploader=info["uploader"],
-        duration=info["duration"],
+        platform=platform,
+        title=None,
+        thumbnail_url=None,
+        uploader=None,
+        duration=None,
         summary=[],
         tags=[],
         category="other",
-        raw_text=raw_text,
-        summary_status="pending" if should_summarize else ("failed" if quota_spent else "skipped"),
+        raw_text=None,
+        summary_status="pending",
         created_at=datetime.utcnow(),
     )
     db.add(reel)
     db.commit()
     db.refresh(reel)
-
-    logger.info(f"[SAVE] success platform={reel.platform} id={reel.id}")
-    if should_summarize:
-        background_tasks.add_task(_summarize_reel, reel.id)
-
+    background_tasks.add_task(_extract_and_summarize, reel.id, user)
+    logger.info(f"[SAVE] accepted (async extract) platform={platform} id={reel.id}")
     return _to_response(reel)
+
+
+def _reel_from_info(user_id: str, url: str, info: dict) -> ReelDB:
+    """Build an (unsaved) reel row from an extraction info dict."""
+    title = info.get("title")
+    if not (info.get("best_text") or "").strip() and not info.get("thumbnail_url"):
+        # Link-only bookmark (e.g. login-walled) — give it a clean label.
+        if _weak_title(title):
+            kind = "Reel" if "/reel" in url.lower() else "Post"
+            title = f"{(info.get('platform') or 'web').capitalize()} {kind}"
+    raw_text = (info.get("best_text") or "").strip()
+    should_summarize = len(raw_text) >= 50 or bool(info.get("needs_audio"))
+    return ReelDB(
+        id=str(uuid.uuid4()),
+        user_id=user_id,
+        url=url,
+        platform=info.get("platform") or "unknown",
+        title=title,
+        thumbnail_url=info.get("thumbnail_url"),
+        uploader=info.get("uploader"),
+        duration=info.get("duration"),
+        summary=[],
+        tags=[],
+        category="other",
+        raw_text=raw_text,
+        summary_status="pending" if should_summarize else "skipped",
+        created_at=datetime.utcnow(),
+    )
+
+
+def _apply_duration_guard(reel: ReelDB) -> None:
+    """Long-form content isn't summarized (cost guard) — the card stays as a
+    link-only bookmark instead of being rejected after the fact."""
+    if (reel.duration or 0) > 600:
+        reel.summary_status = "skipped"
+        reel.raw_text = None
+
+
+def _try_charge(db: Session, user: AuthUser) -> bool:
+    """Charge one AI action; False when today's budget is spent (never raises)."""
+    try:
+        charge_ai_action(db, user)
+        return True
+    except HTTPException as e:
+        if e.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
+            raise
+        logger.info(f"[SAVE] AI quota spent for user {user.id} — saving without summary")
+        return False
+
+
+def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
+    """Background chain for the instant-save path: extract metadata, fill the
+    card, charge the quota, then run the summary. Every failure degrades the
+    card gracefully (link-only bookmark / retryable 'failed') — it never
+    disappears on the user. `user=None` (recovery path) skips the quota charge."""
+    db = SessionLocal()
+    try:
+        reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
+        if not reel:
+            return
+
+        try:
+            future = _executor.submit(extractor.extract_info, reel.url)
+            info = future.result(timeout=EXTRACT_TIMEOUT)
+        except Exception as e:
+            logger.error(f"[EXTRACT-BG] failed for {reel_id} ({reel.url}): {type(e).__name__}: {e}")
+            # Keep the bookmark: clean label, honest 'failed' so the UI offers retry.
+            kind = "Reel" if "/reel" in reel.url.lower() else "Post"
+            reel.title = reel.title or f"{(reel.platform or 'web').capitalize()} {kind}"
+            reel.summary_status = "failed"
+            db.commit()
+            return
+
+        if info.get("extracted"):
+            _store_extraction(db, reel.url, info)
+
+        filled = _reel_from_info(reel.user_id, reel.url, info)
+        reel.platform = filled.platform if filled.platform != "unknown" else reel.platform
+        reel.title = filled.title
+        reel.thumbnail_url = filled.thumbnail_url
+        reel.uploader = filled.uploader
+        reel.duration = filled.duration
+        reel.raw_text = filled.raw_text
+        reel.summary_status = filled.summary_status
+        _apply_duration_guard(reel)
+        db.commit()
+
+        if reel.summary_status != "pending":
+            logger.info(f"[EXTRACT-BG] {reel_id} filled — no summary needed")
+            return
+
+        if user is not None and not _try_charge(db, user):
+            reel.summary_status = "failed"
+            db.commit()
+            return
+    finally:
+        db.close()
+
+    # Own session inside; commits the summary result.
+    _summarize_reel(reel_id)
 
 
 @router.get("", response_model=ReelListResponse)
@@ -515,20 +587,25 @@ def recover_pending_summaries() -> None:
     db = SessionLocal()
     try:
         rows = (
-            db.query(ReelDB.id)
+            db.query(ReelDB.id, ReelDB.raw_text, ReelDB.title)
             .filter(ReelDB.summary_status == "pending")
             .order_by(ReelDB.created_at.desc())
             .limit(PENDING_RECOVERY_LIMIT)
             .all()
         )
-        ids = [r[0] for r in rows]
+        pending = [(r[0], bool((r[1] or "").strip() or r[2])) for r in rows]
     except Exception as e:
         logger.warning(f"[RECOVER] could not query pending summaries: {e}")
         return
     finally:
         db.close()
 
-    for rid in ids:
-        _executor.submit(_summarize_reel, rid)
-    if ids:
-        logger.info(f"[RECOVER] re-enqueued {len(ids)} orphaned pending summary task(s)")
+    for rid, extracted in pending:
+        if extracted:
+            _executor.submit(_summarize_reel, rid)
+        else:
+            # Died before extraction finished — redo the whole chain. user=None:
+            # the recovery path doesn't charge quota (bounded by the cap above).
+            _executor.submit(_extract_and_summarize, rid, None)
+    if pending:
+        logger.info(f"[RECOVER] re-enqueued {len(pending)} orphaned pending task(s)")

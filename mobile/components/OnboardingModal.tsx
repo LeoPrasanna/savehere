@@ -89,20 +89,30 @@ export function OnboardingModal() {
   const [checked, setChecked] = useState(false);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const { session } = useAuth();
   const cardWidth = Math.min(width - spacing.lg * 2, 400);
   const progress = useRef(new Animated.Value(0)).current;
   const slideX = useRef(new Animated.Value(0)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
 
+  // Keyed per user: each newly signed-in account sees the tour once, right
+  // after their first sign-in (never over the login screen — no session, no
+  // check). Behind the modal the app sits at the Landing screen, so closing
+  // the tour lands them there.
+  const userId = session?.user?.id;
+  const storageKey = userId ? `${ONBOARDING_KEY}:${userId}` : null;
+
   useEffect(() => {
-    AsyncStorage.getItem(ONBOARDING_KEY).then((val) => {
+    if (!storageKey) { setChecked(false); setVisible(false); return; }
+    AsyncStorage.getItem(storageKey).then((val) => {
       if (!val) {
         setVisible(true);
+        setStep(0);
         Animated.timing(fadeIn, { toValue: 1, duration: 300, useNativeDriver: true }).start();
       }
       setChecked(true);
     });
-  }, []);
+  }, [storageKey]);
 
   useEffect(() => {
     Animated.timing(progress, {
@@ -134,7 +144,7 @@ export function OnboardingModal() {
 
   const finish = () => {
     Animated.timing(fadeIn, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
-      AsyncStorage.setItem(ONBOARDING_KEY, 'completed');
+      if (storageKey) AsyncStorage.setItem(storageKey, 'completed');
       setVisible(false);
     });
   };

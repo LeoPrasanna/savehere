@@ -1,50 +1,20 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Modal } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import { ArrowRight, Plus } from 'lucide-react-native';
-import { api, Reel, thumbUrl } from '../services/api';
+import { api, Reel } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { AuroraBackground } from './AuroraBackground';
 import { ProfilePanel } from './ProfilePanel';
-import { colors, spacing, font, radius, gradients, shadow, typeface, platformMeta } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, typeface } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { FEATURES, Feature } from '../constants/features';
 
 const ASK_MIN_REELS = 3;
-const STRIP_COUNT = 8;
-
-/** Mini thumbnail for the recent-saves strip — real content as navigation. */
-function RecentThumb({ reel, index, onPress }: { reel: Reel; index: number; onPress: () => void }) {
-  const [failed, setFailed] = useState(false);
-  const platform = platformMeta[reel.platform] ?? platformMeta.unknown;
-  const thumb = !failed ? thumbUrl(reel.thumbnail_url) : undefined;
-  return (
-    <MotiView
-      from={{ opacity: 0, translateX: 16 }}
-      animate={{ opacity: 1, translateX: 0 }}
-      transition={{ type: 'timing', duration: 300, delay: 150 + index * 60 }}
-    >
-      <Pressable style={styles.thumbCard} onPress={onPress} scaleTo={0.94}>
-        {thumb ? (
-          <Image source={{ uri: thumb }} style={styles.thumbImg} resizeMode="cover" onError={() => setFailed(true)} />
-        ) : (
-          <LinearGradient colors={platform.gradient as [string, string]} style={[styles.thumbImg, styles.thumbFallback]} />
-        )}
-        <LinearGradient
-          colors={['transparent', 'rgba(0,0,0,0.72)']}
-          start={{ x: 0, y: 0.3 }} end={{ x: 0, y: 1 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        <Text style={styles.thumbTitle} numberOfLines={2}>{reel.title || 'Untitled'}</Text>
-      </Pressable>
-    </MotiView>
-  );
-}
 
 export function Landing({ onEnter }: { onEnter: () => void }) {
   const router = useRouter();
@@ -60,7 +30,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   useFocusEffect(
     useCallback(() => {
       setFetchError(false);
-      api.listReels({ limit: STRIP_COUNT })
+      api.listReels({ limit: 24 })
         .then(d => { setReels(d.items); setTotal(d.total); })
         .catch(() => setFetchError(true))
         .finally(() => setLoading(false));
@@ -113,41 +83,21 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           </Pressable>
         </MotiView>
 
-        {/* ── Recent saves — your content is the door to the library ── */}
-        {hasSaves && (
-          <View style={styles.recent}>
-            <View style={styles.recentHeader}>
-              <Text style={styles.sectionLabel}>RECENT SAVES</Text>
-              <Pressable style={styles.seeAll} onPress={onEnter} hitSlop={8}>
-                <Text style={styles.seeAllText}>Open library</Text>
-                <ArrowRight size={14} color={colors.accent} />
-              </Pressable>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.strip}>
-              {reels.slice(0, STRIP_COUNT).map((r, i) => (
-                <RecentThumb key={r.id} reel={r} index={i} onPress={() => router.push(`/reel/${r.id}`)} />
-              ))}
-              <Pressable style={styles.thumbMore} onPress={onEnter} scaleTo={0.94}>
-                <Icon name="bookmark" size={18} color={colors.accent} />
-                <Text style={styles.thumbMoreText}>All {total}</Text>
-              </Pressable>
-            </ScrollView>
-          </View>
-        )}
-
-        {/* First-run: no saves yet → the library door is still visible */}
-        {!hasSaves && !loading && (
+        {/* ── Library door ─────────────────────────────── */}
+        <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 180 }}>
           <Pressable style={styles.quietRow} onPress={onEnter} scaleTo={0.98}>
             <View style={[styles.quietIcon, { backgroundColor: colors.accent + '1A' }]}>
               <Icon name="bookmark" size={18} color={colors.accent} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.quietTitle}>Open my library</Text>
-              <Text style={styles.quietSub}>Everything you save lives here.</Text>
+              <Text style={styles.quietSub}>
+                {hasSaves ? `All ${total} ${total === 1 ? 'save' : 'saves'}, searchable and organized.` : 'Everything you save lives here.'}
+              </Text>
             </View>
             <Icon name="chevron-right" size={16} color={colors.textTertiary} />
           </Pressable>
-        )}
+        </MotiView>
 
         {/* ── Ask — quiet, secondary ───────────────────── */}
         {askVisible && (
@@ -253,26 +203,7 @@ const styles = StyleSheet.create({
   saveTitle: { color: '#FFF', fontFamily: typeface.display, fontSize: font.lg, fontWeight: '800' },
   saveSub: { color: 'rgba(255,255,255,0.85)', fontSize: font.xs, marginTop: 1 },
 
-  recent: { gap: spacing.sm },
-  recentHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionLabel: { color: colors.textTertiary, fontSize: font.xs, fontWeight: '800', letterSpacing: 1.2 },
-  seeAll: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  seeAllText: { color: colors.accent, fontSize: font.sm, fontWeight: '700' },
-  strip: { gap: spacing.sm, paddingVertical: 2 },
-  thumbCard: {
-    width: 132, height: 88, borderRadius: radius.md, overflow: 'hidden',
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-    justifyContent: 'flex-end',
-  },
-  thumbImg: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
-  thumbFallback: {},
-  thumbTitle: { color: '#FFF', fontSize: font.xs, fontWeight: '700', lineHeight: 14, padding: spacing.sm },
-  thumbMore: {
-    width: 90, height: 88, borderRadius: radius.md,
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.accent + '44',
-    alignItems: 'center', justifyContent: 'center', gap: 6,
-  },
-  thumbMoreText: { color: colors.accent, fontSize: font.xs, fontWeight: '800' },
 
   quietRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2,

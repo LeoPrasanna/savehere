@@ -17,20 +17,22 @@ import { colors, spacing, font, radius, gradients, shadow } from '../constants/t
 
 const STEPS = [
   { icon: 'link', text: 'Checking the link…' },
-  { icon: 'cloud-download', text: 'Fetching title & thumbnail…' },
-  { icon: 'sparkles', text: 'Creating your card…' },
+  { icon: 'cloud-download', text: 'Saving your card…' },
+  { icon: 'sparkles', text: 'Handing off to the AI…' },
 ] as const;
 
-const STEP_DELAYS = [0, 1500, 4000];
+// Saves return in well under a second now (extraction runs in the background),
+// so the arc is quick — the robot still gets its moment without faking work.
+const STEP_DELAYS = [0, 350, 800];
 const N = STEPS.length;
 const NODE = 30;
 const BOT = 44;
 
 const SAVE_NOTES = [
   'Public Reels, Shorts, TikToks & LinkedIn posts work best.',
-  'Private or login-only content (and most Facebook reels) can\'t be read — you can still save the link and add your own notes.',
+  'Your card saves instantly — the title, thumbnail and AI summary fill in on their own right after.',
+  'Private or login-only content (and most Facebook reels) can\'t be read — you can still keep the link and add your own notes.',
   'Summaries are AI-made, so a small detail might slip — easy to edit anytime.',
-  'Your card appears in seconds — the AI summary finishes on its own right after.',
   'We save the link and an AI summary for your personal reference — the content stays its creator\'s.',
 ];
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, Platform, ScrollView } from 'react-native';
 import { MotiView } from 'moti';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -44,13 +44,17 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const platforms = new Set(reels.map(r => r.platform).filter(Boolean)).size;
 
   const handleDeleteAccount = async () => {
+    if (deleting) return;
     setDeleting(true);
     const result = await deleteAccount();
     setDeleting(false);
     setShowDeleteConfirm(false);
     onClose();
     if (result.error) {
-      Alert.alert('Error', result.error);
+      // Alert.alert is a silent no-op on react-native-web — errors must be
+      // visible on every platform or deletion failures look like nothing.
+      if (Platform.OS === 'web') window.alert(result.error);
+      else Alert.alert('Account deletion failed', result.error);
     }
   };
 

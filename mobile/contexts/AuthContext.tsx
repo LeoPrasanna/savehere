@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
 import { api } from '../services/api';
+import { resetSessionFlags } from '../services/sessionFlags';
 
 export interface Profile {
   first_name?: string;
@@ -68,7 +69,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     // React to sign-in / sign-out / token refresh for the app's lifetime.
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, next) => {
+      // A real auth transition resets session-scoped UI flags so the next user
+      // starts at the Landing screen (not wherever the last user navigated).
+      // Token refreshes must NOT reset — they fire mid-session.
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') resetSessionFlags();
       setSession(next);
       setLoading(false);
     });
@@ -94,15 +99,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const deleteAccount = async (): Promise<{ error: string | null }> => {
     try {
-      // 1. Delete all user data from backend. If this fails we STOP — signing out
-      // anyway would tell the user their data was erased when it wasn't.
+      // 1. Delete all user data + the auth record on the backend. If this fails
+      // we STOP — signing out anyway would tell the user their data was erased
+      // when it wasn't.
       await api.deleteAccount();
     } catch (e: any) {
       return { error: e?.message || "Couldn't delete your data — check your connection and try again." };
     }
-    // 2. Sign out from Supabase
-    const { error } = await supabase.auth.signOut();
-    if (error) return { error: error.message };
+    // 2. Clear the local session. Scope 'local' only — the server-side session
+    // is already dead (the auth user was just deleted), so a server sign-out
+    // would fail and previously made a successful deletion LOOK broken.
+    try {
+      await supabase.auth.signOut({ scope: 'local' });
+    } catch {
+      // Local storage clear can't meaningfully fail; the gate flips on the
+      // auth listener either way.
+    }
     return { error: null };
   };
 

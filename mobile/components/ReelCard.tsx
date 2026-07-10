@@ -106,7 +106,7 @@ function ReelCardInner({ reel, index = 0, onDelete }: ReelCardProps) {
         {/* Content */}
         <View style={styles.content}>
           <Text style={styles.title} numberOfLines={2}>
-            {reel.title || 'Untitled'}
+            {reel.title || (isPending ? 'Saving…' : 'Untitled')}
           </Text>
 
           {isPending ? (

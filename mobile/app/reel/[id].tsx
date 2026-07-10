@@ -268,7 +268,9 @@ export default function ReelDetailScreen() {
             </>
           ) : null}
         </View>
-        <Text style={styles.title}>{reel.title || 'Untitled'}</Text>
+        <Text style={styles.title}>
+          {reel.title || (reel.summary_status === 'pending' ? 'Fetching details…' : 'Untitled')}
+        </Text>
       </View>
 
       {/* ── Summary card ─────────────────────────────── */}

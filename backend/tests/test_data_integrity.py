@@ -85,11 +85,18 @@ class TestCascadeDelete:
 
 
 class TestAccountDeletion:
-    def test_removes_reels_tasks_exercises_keeps_quota(self, env):
+    def test_removes_reels_tasks_exercises_keeps_quota(self, env, monkeypatch):
+        from app.routes import account as account_module
+        deleted_ids = []
+        monkeypatch.setattr(account_module, "_delete_auth_user",
+                            lambda uid: deleted_ids.append(uid) or True)
         client, Session = env
         r = client(USER_A).delete("/api/account")
         assert r.status_code == 200
         assert r.json()["reels_removed"] == 2
+        assert r.json()["auth_deleted"] is True
+        # the Supabase auth record is deleted for the right user
+        assert deleted_ids == [USER_A]
         db = Session()
         try:
             assert db.query(ReelDB).filter(ReelDB.user_id == USER_A).count() == 0
@@ -103,11 +110,41 @@ class TestAccountDeletion:
         finally:
             db.close()
 
-    def test_no_trailing_slash_needed(self, env):
+    def test_no_trailing_slash_needed(self, env, monkeypatch):
+        from app.routes import account as account_module
+        monkeypatch.setattr(account_module, "_delete_auth_user", lambda uid: True)
         client, _ = env
         # DELETE /api/account must work directly (307 redirects can drop auth headers)
         r = client(USER_B).delete("/api/account")
         assert r.status_code == 200
+
+    def test_auth_deletion_failure_reported_honestly(self, env, monkeypatch):
+        """Data wipe succeeds but the auth record can't be removed → the response
+        must say so instead of claiming the account is gone."""
+        from app.routes import account as account_module
+        monkeypatch.setattr(account_module, "_delete_auth_user", lambda uid: False)
+        client, _ = env
+        r = client(USER_A).delete("/api/account")
+        assert r.status_code == 200
+        body = r.json()
+        assert body["deleted"] is True
+        assert body["auth_deleted"] is False
+        assert "contact support" in body["message"]
+
+    def test_delete_auth_user_handles_http_errors(self, monkeypatch):
+        """The admin call must never raise — a Supabase outage can't 500 the wipe."""
+        from app.routes.account import _delete_auth_user
+        import httpx
+
+        class FakeResp:
+            status_code = 500
+        monkeypatch.setattr(httpx, "delete", lambda *a, **k: FakeResp())
+        assert _delete_auth_user("u1") is False
+
+        def boom(*a, **k):
+            raise httpx.ConnectError("no network")
+        monkeypatch.setattr(httpx, "delete", boom)
+        assert _delete_auth_user("u1") is False
 
 
 class TestUsageEndpoint:

@@ -15,14 +15,12 @@ import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { Landing } from '../components/Landing';
+import { LibraryBackdrop } from '../components/LibraryBackdrop';
+import { hasEnteredLibrary, markEnteredLibrary } from '../services/sessionFlags';
 import { colors, spacing, font, radius, gradients, shadow, typeface, categoryMeta, CATEGORY_OPTIONS } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
 const PAGE = 24;
-
-// Module-level so the landing screen is skipped for the rest of the session once
-// entered (a remount of the home screen must not bounce the user back to it).
-let enteredSession = false;
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -41,7 +39,9 @@ export default function HomeScreen() {
   const [searchResults, setSearchResults] = useState<Reel[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [entered, setEntered] = useState(enteredSession);
+  // Session-scoped (services/sessionFlags): remounts don't bounce back to the
+  // landing, but a sign-out/sign-in resets it so new users start at Landing.
+  const [entered, setEntered] = useState(hasEnteredLibrary());
   // Hairline under the header once content scrolls beneath it (iOS pattern).
   const [scrolled, setScrolled] = useState(false);
 
@@ -135,11 +135,15 @@ export default function HomeScreen() {
     : displayList;
 
   if (!entered) {
-    return <Landing onEnter={() => { enteredSession = true; setEntered(true); }} />;
+    return <Landing onEnter={() => { markEnteredLibrary(); setEntered(true); }} />;
   }
 
   return (
     <View style={styles.container}>
+      {/* Warm ambient backdrop: lively when the library is empty, whisper-quiet
+          behind a populated grid so thumbnails stay the hero. */}
+      <LibraryBackdrop mode={!loading && displayList.length === 0 ? 'full' : 'ambient'} />
+
       {/* ── Header — flat, iOS large-title ───────────────────── */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }, scrolled && styles.headerScrolled]}>
         <MotiView
@@ -351,7 +355,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
     gap: spacing.md,
-    backgroundColor: colors.background,
+    // Transparent so the ambient backdrop glows through; the container still
+    // paints colors.background underneath everything.
+    backgroundColor: 'transparent',
   },
   headerScrolled: { borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

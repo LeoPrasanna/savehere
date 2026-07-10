@@ -143,6 +143,22 @@ Each prompt is self-contained. Do them one at a time, verify (§3), update TODO.
 > to map it, and the `Usage` type in `mobile/services/api.ts`. Do NOT invent
 > billing — the RevenueCat webhook stamps the tier at launch. Add quota tests.
 
+## 4.4 Instant save & account deletion (2026-07-10) — how they work now
+
+- **Save is a two-phase flow.** `/save` returns a `pending` card in one DB
+  round-trip; `_extract_and_summarize` (routes/reels.py) extracts, fills the
+  card, charges the quota, then summarizes — all in one background chain.
+  If you touch it: failures must degrade to a retryable bookmark (`failed`),
+  never delete the card, and the quota charge stays BEFORE the Claude call.
+  Clients poll `GET /api/reels/{id}` while `summary_status == 'pending'`.
+- **Account deletion** wipes data, then deletes the Supabase Auth user via the
+  Admin API (`_delete_auth_user`, service-role key). Mobile signs out with
+  `scope: 'local'` — the server session is already invalid at that point, so a
+  server-scope signOut FAILS; don't "fix" it back.
+- **New-user flow:** onboarding storage is keyed per user id and only renders
+  with a session; `services/sessionFlags.ts` resets on SIGNED_IN/SIGNED_OUT so
+  every fresh sign-in starts at the Landing screen.
+
 ## 4.5 UI system (branch `revamp/ui-refresh`) — rules for any UI work
 
 The app's identity is **"Ember on Ink"** — warm ink-black surfaces, ONE
