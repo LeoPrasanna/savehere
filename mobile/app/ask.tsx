@@ -22,23 +22,25 @@ export default function AskScreen() {
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AskResponse | null>(null);
+  const [streamingText, setStreamingText] = useState('');   // grows token-by-token
   const [error, setError] = useState('');
 
   const ask = async (question: string) => {
     const text = question.trim();
     if (text.length < 3) { setError('Ask a real question — a few words at least.'); return; }
-    setQ(text); setLoading(true); setError(''); setResult(null);
+    setQ(text); setLoading(true); setError(''); setResult(null); setStreamingText('');
     try {
-      const res = await api.ask(text);
+      // Stream the answer so the first words appear in ~1.4s instead of a ~3s
+      // wall of silence. onToken fires with the full answer text as it grows.
+      const res = await api.askStream(text, { onToken: setStreamingText });
       setResult(res);
     } catch (e: any) {
-      let msg = 'Something went wrong. Try again.';
-      try { msg = JSON.parse(e.message)?.detail ?? e.message; } catch {}
-      if (e.name === 'AbortError' || e.message?.includes('timed out')) msg = 'That took too long — try again.';
-      if (e.message?.includes('fetch') || e.message?.includes('Network')) msg = "Can't reach the server. Make sure the backend is running.";
+      let msg = e?.message || 'Something went wrong. Try again.';
+      try { const d = JSON.parse(e.message)?.detail; if (d) msg = d; } catch {}
       setError(msg);
     } finally {
       setLoading(false);
+      setStreamingText('');
     }
   };
 
@@ -85,12 +87,27 @@ export default function AskScreen() {
             </View>
           ) : null}
 
-          {loading && (
+          {/* Before the first token: a brief "searching" state. Once text starts
+              streaming, show it live in the answer card with a caret. */}
+          {loading && !streamingText && (
             <View style={styles.thinking}>
               <ActivityIndicator color={colors.accent} />
               <Text style={styles.thinkingText}>Searching your library…</Text>
             </View>
           )}
+
+          {loading && streamingText ? (
+            <View style={styles.answerCard}>
+              <View style={styles.answerHeader}>
+                <Icon name="sparkles" size={15} color={colors.accent} />
+                <Text style={styles.answerLabel}>Answer</Text>
+              </View>
+              <Text style={styles.answerText}>
+                {streamingText}
+                <Text style={styles.caret}>▍</Text>
+              </Text>
+            </View>
+          ) : null}
 
           {result && !loading && (
             <>
@@ -166,6 +183,7 @@ const styles = StyleSheet.create({
   answerHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   answerLabel: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
   answerText: { color: colors.textPrimary, fontSize: font.md, lineHeight: 23 },
+  caret: { color: colors.accent, fontWeight: '800' },
 
   sourcesLabel: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '800', letterSpacing: 1, marginTop: spacing.xs },
   sourceRow: {
