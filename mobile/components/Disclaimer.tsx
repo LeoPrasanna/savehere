@@ -10,8 +10,11 @@ import { colors, spacing, radius, font } from '../constants/theme';
  *  - fitness   : AI workout — not professional fitness/medical advice.
  *  - recipe    : AI recipe — verify ingredients/quantities/allergens.
  *  - ownership : we store links + summaries for personal reference; content is the creator's.
+ *  - medical   : content flagged as medical/high-stakes advice — reference only,
+ *                we're not responsible; consult a professional. (Tasks/workout
+ *                are disabled for these saves, enforced server-side.)
  */
-export type DisclaimerVariant = 'ai' | 'fitness' | 'recipe' | 'ownership';
+export type DisclaimerVariant = 'ai' | 'fitness' | 'recipe' | 'ownership' | 'medical';
 
 const VARIANTS: Record<DisclaimerVariant, { icon: string; color: string; text: string }> = {
   ai: {
@@ -33,6 +36,11 @@ const VARIANTS: Record<DisclaimerVariant, { icon: string; color: string; text: s
     icon: 'information-circle',
     color: colors.textTertiary,
     text: 'SaveHere stores links and AI summaries for personal reference only. Saved content belongs to its original creators.',
+  },
+  medical: {
+    icon: 'shield',
+    color: colors.danger,
+    text: 'This content appears to contain medical or other sensitive advice. SaveHere keeps it for your reference only and is not responsible for how it\'s used — always consult a qualified professional before acting on it. Action plans are disabled for this save.',
   },
 };
 

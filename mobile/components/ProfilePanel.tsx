@@ -9,7 +9,8 @@ import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { GlassCard } from './GlassCard';
 import { useAuth } from '../contexts/AuthContext';
-import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { colors, spacing, font, radius, gradients, shadow, accentThemes, activeAccentKey, ACCENT_STORAGE_KEY } from '../constants/theme';
 
 const APP_VERSION = '1.0.0';
 
@@ -92,6 +93,56 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
         <Icon name={icon} size={18} color={colors.textSecondary} />
         <Text style={styles.rowLabel}>{label}</Text>
         <View style={styles.soon}><Text style={styles.soonText}>Soon</Text></View>
+      </View>
+    </MotiView>
+  );
+
+  // Persist the accent, then reload so every module-level StyleSheet rebuilds
+  // with the new tokens (see constants/theme.ts — a live swap would half-theme).
+  const chooseAccent = async (key: string) => {
+    if (key === activeAccentKey) return;
+    try { await AsyncStorage.setItem(ACCENT_STORAGE_KEY, key); } catch {}
+    if (Platform.OS === 'web') {
+      try { window.localStorage.setItem(ACCENT_STORAGE_KEY, key); } catch {}
+      window.location.reload();
+    } else {
+      // Native can't re-read storage synchronously at boot yet (needs a sync
+      // store) — be honest instead of pretending it applied.
+      Alert.alert('', 'Saved. The new color will apply once theme reload lands on mobile — it already works on web.');
+    }
+  };
+
+  const AppearanceRow = ({ delay = 0 }: { delay?: number }) => (
+    <MotiView
+      from={{ opacity: 0, translateX: 20 }}
+      animate={{ opacity: 1, translateX: 0 }}
+      transition={{ type: 'timing', delay, duration: 300 }}
+    >
+      <View style={[styles.row, styles.appearanceRow]}>
+        <View style={styles.appearanceHeader}>
+          <Icon name="settings" size={18} color={colors.textSecondary} />
+          <Text style={styles.rowLabel}>Appearance</Text>
+        </View>
+        <View style={styles.swatchRow}>
+          {accentThemes.map(t => {
+            const active = t.key === activeAccentKey;
+            return (
+              <Pressable
+                key={t.key}
+                onPress={() => chooseAccent(t.key)}
+                hitSlop={6}
+                scaleTo={0.85}
+                style={[styles.swatch, { backgroundColor: t.accent }, active && styles.swatchActive]}
+              >
+                {active && <Icon name="checkmark" size={12} color="#FFF" />}
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.swatchHint}>
+          {accentThemes.find(t => t.key === activeAccentKey)?.label ?? 'Ember'}
+          {activeAccentKey === 'ember' ? ' (default)' : ''}
+        </Text>
       </View>
     </MotiView>
   );
@@ -236,7 +287,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
         <Text style={styles.sectionLabel}>SETTINGS</Text>
         <View style={styles.menu}>
           <NavRow icon="create" label="Edit profile" path="/profile" delay={800} />
-          <Row icon="settings" label="Appearance" delay={900} />
+          <AppearanceRow delay={900} />
           <Row icon="bell" label="Notifications" delay={1000} />
           <Row icon="download" label="Export data" delay={1100} />
         </View>
@@ -376,6 +427,17 @@ const styles = StyleSheet.create({
   rowLabel: { flex: 1, color: colors.textPrimary, fontSize: font.md, fontWeight: '600' },
   soon: { backgroundColor: colors.accent + '22', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
   soonText: { color: colors.accentLight, fontSize: 10, fontWeight: '800' },
+
+  appearanceRow: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm },
+  appearanceHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  swatchRow: { flexDirection: 'row', gap: spacing.sm + 2, paddingLeft: 26 },
+  swatch: {
+    width: 26, height: 26, borderRadius: radius.full,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: 'transparent',
+  },
+  swatchActive: { borderColor: '#FFF' },
+  swatchHint: { color: colors.textTertiary, fontSize: font.xs, paddingLeft: 26 },
 
   dangerRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,

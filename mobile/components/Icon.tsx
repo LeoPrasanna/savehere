@@ -9,7 +9,7 @@ import {
   BookOpen, Code, PenLine, Search, Phone, Target, Brain, Wrench, Palette, Leaf,
   PartyPopper, Eye, EyeOff, Scissors, Mail, KeyRound,
   Menu, UserRound, Settings, Bell, Download, LogIn, ChevronRight, Bookmark, Layers, Shield,
-  MessageCircle, Compass, ArrowLeft, Send,
+  MessageCircle, Compass, ArrowLeft, Send, Brush,
 } from 'lucide-react-native';
 
 // One icon family for the whole app (Lucide). Platform brand logos are the only
@@ -33,7 +33,7 @@ const MAP: Record<string, any> = {
   // ── Categories ──
   fitness: Dumbbell, cooking: ChefHat, tech: Cpu, motivation: Flame,
   education: GraduationCap, entertainment: Clapperboard, fashion: Shirt,
-  travel: Plane, business: Briefcase, news: Newspaper, health: HeartPulse,
+  beauty: Brush, travel: Plane, business: Briefcase, news: Newspaper, health: HeartPulse,
   finance: Wallet, general: Sparkles, other: Tag, all: Globe,
 
   // ── Workout muscles / types ──

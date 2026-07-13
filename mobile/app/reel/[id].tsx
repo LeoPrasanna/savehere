@@ -1,13 +1,14 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View, Text, Image, ScrollView, StyleSheet,
-  ActivityIndicator, Alert, Platform, TextInput, Linking, Modal,
+  ActivityIndicator, Alert, Platform, TextInput, Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from '../../components/Icon';
 import { api, Reel, Task, TaskListResponse, thumbUrl } from '../../services/api';
+import { openSourceLink } from '../../services/openLink';
 import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
 import { goHome } from '../../components/HomeButton';
@@ -32,6 +33,22 @@ export default function ReelDetailScreen() {
   const [hasWorkout, setHasWorkout] = useState(false);
   const [generatingWorkout, setGeneratingWorkout] = useState(false);
   const [categoryModal, setCategoryModal] = useState(false);
+  // Shown before the FIRST workout generation: sets expectations that the plan
+  // is a generic template, not personalized coaching.
+  const [workoutModal, setWorkoutModal] = useState(false);
+  // Web ghost-click guard: a double-click's second click (or a stray tap) lands
+  // on the just-mounted overlay and closed the modal instantly. Overlay presses
+  // within 350ms of opening are ignored; card presses never dismiss (see
+  // stopPropagation on the card pressables).
+  const modalOpenedAt = useRef(0);
+  const openModal = (setter: (v: boolean) => void) => {
+    modalOpenedAt.current = Date.now();
+    setter(true);
+  };
+  const dismissModal = (setter: (v: boolean) => void) => {
+    if (Date.now() - modalOpenedAt.current < 350) return;
+    setter(false);
+  };
   const [savingCategory, setSavingCategory] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -224,20 +241,29 @@ export default function ReelDetailScreen() {
   const isSummarizing = (reel.summary_status === 'pending' && !pendingStalled) || summarizing;
   const isCooking = (reel.category || '').toLowerCase() === 'cooking';
   const loginWalled = reel.platform === 'linkedin' || reel.platform === 'facebook';
+  // Medical/high-stakes content: reference only — no tasks, no workout, show the
+  // disclaimer instead. The backend refuses generation for these too; hiding the
+  // buttons here just keeps the UI honest.
+  const isSensitive = !!reel.is_sensitive;
   const TASKS_LIMIT = 1;   // tasks/steps are AI-generated once; then edited by hand
   const WORKOUT_LIMIT = 3;
   const workoutLimitReached = (reel.workout_count ?? 0) >= WORKOUT_LIMIT;
   const aiTasksUsed = (reel.tasks_count ?? 0) >= TASKS_LIMIT;
   const hasTasksContent = !!(taskList && taskList.tasks.length > 0);
-  const showTasksCard = !!taskList && (hasTasksContent || aiTasksUsed);
-  const showTasksAction = reel.category !== 'fitness' && !aiTasksUsed;
-  const showActionsSection = reel.category === 'fitness' || showTasksAction;
+  const showTasksCard = !!taskList && (hasTasksContent || aiTasksUsed) && !isSensitive;
+  // No "Turn into Action" for content with nothing actionable: entertainment,
+  // and anything outside a known category (other/unset). Recategorizing the
+  // reel (e.g. a DIY save stuck in "other" → tech/education) re-enables it.
+  const NO_ACTION_CATEGORIES = new Set(['entertainment', 'other', 'general', '']);
+  const actionableCategory = !NO_ACTION_CATEGORIES.has((reel.category || '').toLowerCase());
+  const showTasksAction = actionableCategory && reel.category !== 'fitness' && !aiTasksUsed;
+  const showActionsSection = (reel.category === 'fitness' || showTasksAction) && !isSensitive;
 
   return (
     <View style={styles.screen}>
       <ScrollView style={styles.container} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      {/* ── Hero ─────────────────────────────────────── */}
-      <View style={styles.hero}>
+      {/* ── Hero — tap opens the original reel ───────── */}
+      <Pressable style={styles.hero} onPress={() => openSourceLink(reel.url)} scaleTo={0.99}>
         {reel.thumbnail_url ? (
           <Image source={{ uri: thumbUrl(reel.thumbnail_url) }} style={styles.heroImg} resizeMode="cover" />
         ) : (
@@ -251,12 +277,16 @@ export default function ReelDetailScreen() {
           <Ionicons name={platform.icon as any} size={13} color="#FFF" />
           <Text style={styles.platformChipText}>{platform.label}</Text>
         </View>
-      </View>
+        <View style={styles.watchChip}>
+          <Icon name="play" size={12} color="#FFF" />
+          <Text style={styles.watchChipText}>Watch</Text>
+        </View>
+      </Pressable>
 
       {/* ── Title + meta ─────────────────────────────── */}
       <View style={styles.titleBlock}>
         <View style={styles.catRow}>
-          <Pressable style={[styles.catPill, { borderColor: cat.color + '66' }]} onPress={() => setCategoryModal(true)}>
+          <Pressable style={[styles.catPill, { borderColor: cat.color + '66' }]} onPress={() => openModal(setCategoryModal)}>
             <Icon name={cat.icon} size={12} color={cat.color} />
             <Text style={[styles.catText, { color: cat.color }]}>{reel.category || 'set category'}</Text>
             {savingCategory ? <ActivityIndicator size="small" color={cat.color} /> : <Icon name="create" size={11} color={colors.textTertiary} />}
@@ -319,7 +349,9 @@ export default function ReelDetailScreen() {
                 <Text style={styles.bulletText}>{point}</Text>
               </View>
             ))}
-            <Disclaimer variant="ai" style={{ marginTop: spacing.sm }} />
+            {/* Sensitive saves get the stronger medical disclaimer instead of
+                stacking it on top of the generic AI one. */}
+            <Disclaimer variant={isSensitive ? 'medical' : 'ai'} style={{ marginTop: spacing.sm }} />
           </>
         ) : (reel.summary_status === 'failed' || pendingStalled) ? (
           <View style={styles.emptySummary}>
@@ -403,7 +435,7 @@ export default function ReelDetailScreen() {
             {reel.category === 'fitness' && (
               <Pressable
                 style={styles.actionBtnWrap}
-                onPress={hasWorkout ? () => router.push(`/workout/${id}`) : handleGenerateWorkout}
+                onPress={hasWorkout ? () => router.push(`/workout/${id}`) : () => openModal(setWorkoutModal)}
                 disabled={generatingWorkout || (!hasWorkout && workoutLimitReached)}
               >
                 <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
@@ -481,7 +513,7 @@ export default function ReelDetailScreen() {
       )}
 
       {/* ── Source + delete ──────────────────────────── */}
-      <Pressable style={styles.urlRow} onPress={() => Linking.openURL(reel.url)}>
+      <Pressable style={styles.urlRow} onPress={() => openSourceLink(reel.url)}>
         <Icon name="open-outline" size={15} color={colors.accent} />
         <Text style={styles.url} numberOfLines={1}>{reel.url}</Text>
       </Pressable>
@@ -492,9 +524,43 @@ export default function ReelDetailScreen() {
       </Pressable>
       </ScrollView>
 
+      {/* Expectation-setting before the first workout build: generic template,
+          not personalized coaching — beginners adapt at their own pace. */}
+      <Modal visible={workoutModal} transparent animationType="fade" onRequestClose={() => setWorkoutModal(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => dismissModal(setWorkoutModal)} scaleTo={1}>
+          {/* Card swallows its own presses so reading/clicking inside never
+              bubbles up to the close-on-press overlay (react-native-web). */}
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()} scaleTo={1}>
+            <View style={styles.cardTitleRow}>
+              <Icon name="barbell" size={16} color={colors.warning} />
+              <Text style={styles.modalTitle}>A starting template — not a coaching plan</Text>
+            </View>
+            <Text style={styles.modalBody}>
+              This builds a general workout inspired by the reel, not a plan tailored to you.
+              If you're a beginner, start lighter and move at your own pace — you can edit
+              every set, rep and rest time after it's built.
+            </Text>
+            <Disclaimer variant="fitness" />
+            <View style={styles.modalBtnRow}>
+              <Pressable style={styles.modalBtnGhost} onPress={() => setWorkoutModal(false)}>
+                <Text style={styles.modalBtnGhostText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={styles.modalBtnWrap}
+                onPress={() => { setWorkoutModal(false); handleGenerateWorkout(); }}
+              >
+                <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.modalBtn}>
+                  <Text style={styles.modalBtnText}>Got it — build it</Text>
+                </LinearGradient>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <Modal visible={categoryModal} transparent animationType="fade" onRequestClose={() => setCategoryModal(false)}>
-        <Pressable style={styles.modalOverlay} onPress={() => setCategoryModal(false)} scaleTo={1}>
-          <View style={styles.modalCard}>
+        <Pressable style={styles.modalOverlay} onPress={() => dismissModal(setCategoryModal)} scaleTo={1}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()} scaleTo={1}>
             <Text style={styles.modalTitle}>Choose a category</Text>
             <Text style={styles.modalHint}>Pick one — it replaces the auto-assigned category.</Text>
             <View style={styles.catGrid}>
@@ -513,7 +579,7 @@ export default function ReelDetailScreen() {
                 );
               })}
             </View>
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
     </View>
@@ -537,6 +603,14 @@ const styles = StyleSheet.create({
     borderRadius: radius.full, ...shadow.sm,
   },
   platformChipText: { color: '#FFF', fontSize: font.xs, fontWeight: '800' },
+  watchChip: {
+    position: 'absolute', right: spacing.md, bottom: spacing.md,
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    paddingHorizontal: spacing.sm + 2, paddingVertical: 5,
+    borderRadius: radius.full, backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+  },
+  watchChipText: { color: '#FFF', fontSize: font.xs, fontWeight: '800' },
 
   titleBlock: { gap: spacing.xs },
   catRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
@@ -559,8 +633,22 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface, borderRadius: radius.lg,
     borderWidth: 1, borderColor: colors.border, padding: spacing.lg, gap: spacing.sm,
   },
-  modalTitle: { color: colors.textPrimary, fontSize: font.lg, fontWeight: '800' },
+  modalTitle: { color: colors.textPrimary, fontSize: font.lg, fontWeight: '800', flex: 1, flexWrap: 'wrap' },
   modalHint: { color: colors.textSecondary, fontSize: font.xs, marginBottom: spacing.xs },
+  modalBody: { color: colors.textSecondary, fontSize: font.sm, lineHeight: 21 },
+  modalBtnRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  modalBtnGhost: {
+    flex: 1, alignItems: 'center', justifyContent: 'center',
+    paddingVertical: spacing.sm + 4, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  modalBtnGhostText: { color: colors.textSecondary, fontSize: font.sm, fontWeight: '700' },
+  modalBtnWrap: { flex: 1.4, borderRadius: radius.md, ...shadow.sm },
+  modalBtn: {
+    alignItems: 'center', justifyContent: 'center',
+    paddingVertical: spacing.sm + 4, borderRadius: radius.md,
+  },
+  modalBtnText: { color: '#FFF', fontSize: font.sm, fontWeight: '800' },
   catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   catOption: {
     flexDirection: 'row', alignItems: 'center', gap: 6,

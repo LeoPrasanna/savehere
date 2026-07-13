@@ -35,6 +35,9 @@ export interface Reel {
   summarize_count: number;
   tasks_count: number;
   workout_count: number;
+  // Flagged by the AI when the content is medical/high-stakes advice: the app
+  // shows a disclaimer and hides tasks/workout (the server refuses them too).
+  is_sensitive?: boolean;
   created_at: string;
 }
 

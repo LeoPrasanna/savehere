@@ -22,6 +22,19 @@ router = APIRouter(prefix="/api", tags=["workout"])
 TASKS_LIMIT = 1
 WORKOUT_LIMIT = 3
 
+# One message everywhere a sensitive reel is refused an action plan. Enforced
+# server-side (the client hides the buttons, but that's cosmetic).
+SENSITIVE_DETAIL = (
+    "This save looks like medical or other sensitive advice, so SaveHere won't "
+    "turn it into an action plan. The summary is for reference only — please "
+    "consult a qualified professional."
+)
+
+
+def _reject_if_sensitive(reel: ReelDB) -> None:
+    if bool(reel.is_sensitive):
+        raise HTTPException(status_code=422, detail=SENSITIVE_DETAIL)
+
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -109,6 +122,7 @@ def _build_plan_response(reel_id: str, exercises: list[WorkoutExerciseDB]) -> Wo
 @router.post("/reels/{reel_id}/workout", response_model=WorkoutPlanResponse, dependencies=[Depends(rate_limit(10, 60, "workout"))])
 def generate_workout(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     reel = _get_reel_or_404(reel_id, user, db)
+    _reject_if_sensitive(reel)
 
     if (reel.workout_count or 0) >= WORKOUT_LIMIT:
         raise HTTPException(
@@ -215,6 +229,7 @@ def update_exercise(exercise_id: str, body: UpdateExerciseRequest,
 @router.post("/reels/{reel_id}/tasks", response_model=TaskListResponse, dependencies=[Depends(rate_limit(15, 60, "tasks"))])
 def generate_tasks(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     reel = _get_reel_or_404(reel_id, user, db)
+    _reject_if_sensitive(reel)
 
     if (reel.tasks_count or 0) >= TASKS_LIMIT:
         raise HTTPException(

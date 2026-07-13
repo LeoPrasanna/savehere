@@ -92,6 +92,7 @@ export const categoryMeta: Record<string, { icon: string; color: string }> = {
   education: { icon: 'education', color: '#71C787' },
   entertainment: { icon: 'entertainment', color: '#C98BFF' },
   fashion: { icon: 'fashion', color: '#FF9BB1' },
+  beauty: { icon: 'beauty', color: '#E48BD2' },
   travel: { icon: 'travel', color: '#5FB9E8' },
   business: { icon: 'business', color: '#D9B36B' },
   news: { icon: 'news', color: '#A29C90' },
@@ -104,11 +105,66 @@ export const categoryMeta: Record<string, { icon: string; color: string }> = {
 export const categoryFor = (c?: string | null) =>
   categoryMeta[(c || 'other').toLowerCase()] ?? categoryMeta.other;
 
+/* ── Accent themes (Appearance) ──────────────────────────────────────────────
+ * Five accent palettes; "ember" is the default brand look. Because screens bake
+ * `colors.accent` into module-level StyleSheet.create calls, a switch is applied
+ * by MUTATING the token objects at module init (below) and RELOADING the app —
+ * not by re-rendering. The choice is stored under ACCENT_STORAGE_KEY.
+ *
+ * Platform note: the boot read is synchronous localStorage, so this fully works
+ * on web (current dev surface). On native the pick persists to AsyncStorage but
+ * can't be read synchronously at module init — native keeps the default until a
+ * sync store (e.g. MMKV) is added. Deliberate: an async apply after import would
+ * restyle only inline styles and leave frozen StyleSheets half-themed.
+ */
+export const ACCENT_STORAGE_KEY = '@savehere:accent:v1';
+
+export interface AccentTheme {
+  key: string;
+  label: string;
+  accent: string;
+  accentDark: string;
+  accentLight: string;
+  ramp: readonly [string, string];   // primary-action gradient
+}
+
+export const accentThemes: readonly AccentTheme[] = [
+  { key: 'ember',  label: 'Ember',  accent: '#FF6B3D', accentDark: '#E4501F', accentLight: '#FF9770', ramp: ['#FF7A45', '#E4501F'] },
+  { key: 'iris',   label: 'Iris',   accent: '#8B7CFF', accentDark: '#6A55E8', accentLight: '#B0A6FF', ramp: ['#9C8CFF', '#6A55E8'] },
+  { key: 'ocean',  label: 'Ocean',  accent: '#3DA9FF', accentDark: '#1E7FE0', accentLight: '#7CC4FF', ramp: ['#55B4FF', '#1E7FE0'] },
+  { key: 'forest', label: 'Forest', accent: '#3DD68C', accentDark: '#21B473', accentLight: '#7BE5B3', ramp: ['#52DC99', '#21B473'] },
+  { key: 'rose',   label: 'Rose',   accent: '#FF5C8A', accentDark: '#E43D6F', accentLight: '#FF92B2', ramp: ['#FF6F97', '#E43D6F'] },
+];
+
+function applyAccentTheme(t: AccentTheme) {
+  colors.accent = t.accent;
+  colors.accentDark = t.accentDark;
+  colors.accentLight = t.accentLight;
+  colors.neonViolet = t.accent;               // legacy alias follows the accent
+  const g = gradients as Record<string, readonly string[]>;
+  g.primary = t.ramp;
+  g.hologram = t.ramp;                        // legacy aliases → brand ramp
+  g.neon = t.ramp;
+  categoryMeta.all.color = t.accent;
+}
+
+// Boot read — web only (sync). Runs BEFORE `shadow` below so the accent glow
+// and every StyleSheet.create in the app pick up the stored palette.
+let _storedAccent: string | null = null;
+if (Platform.OS === 'web') {
+  try { _storedAccent = window.localStorage.getItem(ACCENT_STORAGE_KEY); } catch {}
+}
+export const activeAccentKey =
+  accentThemes.some(t => t.key === _storedAccent) ? (_storedAccent as string) : 'ember';
+if (activeAccentKey !== 'ember') {
+  applyAccentTheme(accentThemes.find(t => t.key === activeAccentKey)!);
+}
+
 /** The categories a reel can be assigned to (auto or user-picked). Excludes the
  *  'all' filter pseudo-category. Keep in sync with backend ALLOWED_CATEGORIES. */
 export const CATEGORY_OPTIONS = [
   'fitness', 'cooking', 'tech', 'motivation', 'education', 'entertainment',
-  'fashion', 'travel', 'business', 'news', 'health', 'finance', 'other',
+  'fashion', 'beauty', 'travel', 'business', 'news', 'health', 'finance', 'other',
 ] as const;
 
 export const spacing = {

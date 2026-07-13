@@ -95,20 +95,27 @@ export function OnboardingModal() {
   const slideX = useRef(new Animated.Value(0)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
 
-  // Keyed per user: each newly signed-in account sees the tour once, right
-  // after their first sign-in (never over the login screen — no session, no
-  // check). Behind the modal the app sits at the Landing screen, so closing
-  // the tour lands them there.
+  // Shown only to a NEWLY CREATED account, once. The local storage key alone
+  // isn't enough: storage is per-device/per-origin, so an existing user signing
+  // in on a new device (or a new dev-server port) used to get the tour replayed
+  // on every login. The "new user" signal is the Supabase account age — only an
+  // account created minutes ago sees the tour; anyone older gets the key
+  // stamped silently so it can never resurface.
   const userId = session?.user?.id;
+  const createdAt = session?.user?.created_at;
   const storageKey = userId ? `${ONBOARDING_KEY}:${userId}` : null;
+  const isFreshAccount =
+    !!createdAt && Date.now() - new Date(createdAt).getTime() < 15 * 60 * 1000;
 
   useEffect(() => {
     if (!storageKey) { setChecked(false); setVisible(false); return; }
     AsyncStorage.getItem(storageKey).then((val) => {
-      if (!val) {
+      if (!val && isFreshAccount) {
         setVisible(true);
         setStep(0);
         Animated.timing(fadeIn, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+      } else if (!val) {
+        AsyncStorage.setItem(storageKey, 'completed');
       }
       setChecked(true);
     });

@@ -1,6 +1,5 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func, cast, String
 import uuid
 import re
 import time
@@ -11,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeou
 from app.database import get_db, SessionLocal, ReelDB, ExtractionCacheDB, TaskDB, WorkoutExerciseDB
 from app.models.reel import ReelSaveRequest, ReelNotesRequest, ReelCategoryRequest, ReelResponse, ReelListResponse
 from app.services import extractor, transcriber, summarizer
+from app.services import search as smart_search
 from app.ratelimit import rate_limit
 from app.quota import charge_ai_action
 from app.entitlements import entitlements_for
@@ -19,9 +19,10 @@ from app.auth import get_current_user, AuthUser
 logger = logging.getLogger(__name__)
 
 # The single set of categories a reel can belong to (auto-assigned or user-picked).
+# Keep in sync with the summarizer prompt and mobile CATEGORY_OPTIONS (theme.ts).
 ALLOWED_CATEGORIES = {
     "fitness", "cooking", "tech", "motivation", "education", "entertainment",
-    "fashion", "travel", "business", "news", "health", "finance", "other",
+    "fashion", "beauty", "travel", "business", "news", "health", "finance", "other",
 }
 
 # Bigger pool so a few slow extractions can't starve every other save. A hung
@@ -287,24 +288,23 @@ def list_reels(
 @router.get("/search", response_model=ReelListResponse)
 def search_reels(q: str = "", limit: int = 24, offset: int = 0,
                  user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Full-library search across title, notes, summary, and tags."""
+    """Smart full-library search: tokenized query, category + synonym matching,
+    relevance-ranked (see services/search.py). Scored in Python over the user's
+    own reels — fine at personal-library scale; embeddings are the scale step."""
     q = q.strip()
     if not q:
         return ReelListResponse(total=0, items=[])
     limit = max(1, min(limit, 100))
     offset = max(0, offset)
-    term = f"%{q.lower()}%"
-    query = db.query(ReelDB).filter(
-        ReelDB.user_id == user.id,
-        or_(
-            func.lower(ReelDB.title).like(term),
-            func.lower(ReelDB.notes).like(term),
-            func.lower(cast(ReelDB.summary, String)).like(term),
-            func.lower(cast(ReelDB.tags, String)).like(term),
-        )
-    ).order_by(ReelDB.created_at.desc())
-    total = query.count()
-    page = query.offset(offset).limit(limit).all()
+    rows = (
+        db.query(ReelDB)
+        .filter(ReelDB.user_id == user.id)
+        .order_by(ReelDB.created_at.desc())
+        .all()
+    )
+    ranked = smart_search.rank(q, rows)
+    total = len(ranked)
+    page = ranked[offset:offset + limit]
     return ReelListResponse(total=total, items=[_to_response(r) for r in page])
 
 
@@ -357,6 +357,7 @@ def resummarize_reel(reel_id: str, user: AuthUser = Depends(get_current_user), d
     reel.summary = ai["summary"]
     reel.tags = ai["tags"]
     reel.category = ai["category"]
+    reel.is_sensitive = bool(ai.get("sensitive", False))
     if _weak_title(reel.title) and ai.get("title"):
         reel.title = ai["title"]
     reel.summarize_count = (reel.summarize_count or 0) + 1
@@ -534,6 +535,7 @@ def _to_response(reel: ReelDB) -> ReelResponse:
         summarize_count=reel.summarize_count or 0,
         tasks_count=reel.tasks_count or 0,
         workout_count=reel.workout_count or 0,
+        is_sensitive=bool(getattr(reel, "is_sensitive", False)),
         created_at=reel.created_at,
     )
 
@@ -573,6 +575,7 @@ def _summarize_reel(reel_id: str) -> None:
         ai = summarizer.summarize(platform=reel.platform, title=reel.title or "", text=text)
         reel.summary = ai["summary"]
         reel.tags = ai["tags"]
+        reel.is_sensitive = bool(ai.get("sensitive", False))
         if ai.get("category"):
             reel.category = ai["category"]
         # Replace a weak extracted title with the AI one (LinkedIn "Day352:-" etc.).
