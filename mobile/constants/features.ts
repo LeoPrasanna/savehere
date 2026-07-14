@@ -1,9 +1,10 @@
-import { categoryMeta, colors } from './theme';
+import { categoryMeta, colors, themed } from './theme';
 
 export type Feature = { icon: string; color: string; title: string; desc: string; detail: string };
 
-// Everything SaveHere can do — shown on the landing FAQ and the "What you can do" tab.
-export const FEATURES: Feature[] = [
+// Everything SaveHere can do — shown on the landing FAQ and the "What you can do"
+// tab. themed(): two entries bake in the accent, which is switchable at runtime.
+export const FEATURES: Feature[] = themed(() => [
   {
     icon: 'fitness',
     color: categoryMeta.fitness.color,
@@ -53,4 +54,4 @@ export const FEATURES: Feature[] = [
     desc: 'AI summary, tags & your notes.',
     detail: 'Every save gets a concise AI summary of the key points, smart tags for filtering, and a Notes field for your own thoughts. Not happy with a summary? Re-summarize or edit it anytime — you’re always in control.',
   },
-];
+]);

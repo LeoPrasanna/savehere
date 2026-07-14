@@ -10,7 +10,7 @@ import { api, WorkoutExercise, WorkoutPlan } from '../../../services/api';
 import { Pressable } from '../../../components/Pressable';
 import { FloatingHomeButton, goHome } from '../../../components/HomeButton';
 import { Disclaimer } from '../../../components/Disclaimer';
-import { colors, spacing, font, radius, gradients, shadow } from '../../../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, themed } from '../../../constants/theme';
 
 type Phase = 'loading' | 'ready' | 'exercise' | 'rest' | 'complete';
 
@@ -313,7 +313,7 @@ function GradientButton({ icon, label, gradient, onPress, glow }: {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   center: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
 
@@ -398,4 +398,4 @@ const styles = StyleSheet.create({
   statValue: { color: colors.textPrimary, fontSize: font.xl, fontWeight: '800' },
   statLabel: { color: colors.textSecondary, fontSize: 10, letterSpacing: 1, fontWeight: '700' },
   completeBtnWrap: { width: '100%' },
-});
+}));

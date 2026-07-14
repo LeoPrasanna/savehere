@@ -7,19 +7,19 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, WorkoutExercise, WorkoutPlan } from '../../services/api';
 import { Pressable } from '../../components/Pressable';
 import { Disclaimer } from '../../components/Disclaimer';
-import { colors, spacing, font, radius, gradients, shadow } from '../../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, themed } from '../../constants/theme';
 
 const MUSCLE_ICON: Record<string, string> = {
   chest: 'fitness', legs: 'fitness', back: 'fitness', core: 'motivation',
   shoulders: 'fitness', arms: 'fitness', full_body: 'analyze', cardio: 'cardio',
 };
 
-const TYPE_COLOR: Record<string, string> = {
+const TYPE_COLOR: Record<string, string> = themed(() => ({
   strength: colors.accent,
   cardio: '#FF8A5B',
   core: '#FF5C7A',
   flexibility: '#3DD68C',
-};
+}));
 
 const DIFFICULTY_COLOR: Record<string, string> = {
   beginner: '#3DD68C',
@@ -155,7 +155,7 @@ export default function WorkoutPlanScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.md, paddingBottom: 110, gap: spacing.sm },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, gap: spacing.md },
@@ -224,4 +224,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.md, padding: spacing.md, minHeight: 56,
   },
   startBtnText: { color: '#FFF', fontSize: font.lg, fontWeight: '800' },
-});
+}));

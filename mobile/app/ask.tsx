@@ -9,7 +9,7 @@ import { api, AskResponse } from '../services/api';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { Disclaimer } from '../components/Disclaimer';
-import { colors, spacing, font, radius, gradients, categoryFor } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, categoryFor, themed } from '../constants/theme';
 
 const SUGGESTIONS = [
   'What recipes have I saved?',
@@ -146,7 +146,7 @@ export default function AskScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
   sub: { color: colors.textSecondary, fontSize: font.sm, lineHeight: 20 },
@@ -193,4 +193,4 @@ const styles = StyleSheet.create({
   },
   sourceIcon: { width: 30, height: 30, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
   sourceTitle: { flex: 1, color: colors.textPrimary, fontSize: font.sm, fontWeight: '600' },
-});
+}));

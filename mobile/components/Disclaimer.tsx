@@ -1,6 +1,6 @@
 import { View, Text, StyleSheet, StyleProp, ViewStyle } from 'react-native';
 import { Icon } from './Icon';
-import { colors, spacing, radius, font } from '../constants/theme';
+import { colors, spacing, radius, font, themed } from '../constants/theme';
 
 /**
  * Small, consistent disclaimer chip. One place to tune the legal/safety copy that
@@ -16,7 +16,7 @@ import { colors, spacing, radius, font } from '../constants/theme';
  */
 export type DisclaimerVariant = 'ai' | 'fitness' | 'recipe' | 'ownership' | 'medical';
 
-const VARIANTS: Record<DisclaimerVariant, { icon: string; color: string; text: string }> = {
+const VARIANTS: Record<DisclaimerVariant, { icon: string; color: string; text: string }> = themed(() => ({
   ai: {
     icon: 'sparkles',
     color: colors.accentLight,
@@ -42,7 +42,7 @@ const VARIANTS: Record<DisclaimerVariant, { icon: string; color: string; text: s
     color: colors.danger,
     text: 'This content appears to contain medical or other sensitive advice. SaveHere keeps it for your reference only and is not responsible for how it\'s used — always consult a qualified professional before acting on it. Action plans are disabled for this save.',
   },
-};
+}));
 
 export function Disclaimer({ variant, style }: { variant: DisclaimerVariant; style?: StyleProp<ViewStyle> }) {
   const v = VARIANTS[variant];

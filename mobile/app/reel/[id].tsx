@@ -14,7 +14,7 @@ import { Pressable } from '../../components/Pressable';
 import { goHome } from '../../components/HomeButton';
 import { TaskList } from '../../components/TaskList';
 import { Disclaimer } from '../../components/Disclaimer';
-import { colors, spacing, font, radius, gradients, shadow, typeface, platformMeta, categoryFor, categoryMeta, CATEGORY_OPTIONS } from '../../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, typeface, platformMeta, categoryFor, categoryMeta, CATEGORY_OPTIONS, themed } from '../../constants/theme';
 
 export default function ReelDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -586,7 +586,7 @@ export default function ReelDetailScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1, backgroundColor: 'transparent' },
   content: { padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.md, maxWidth: 720, width: '100%', alignSelf: 'center' },
@@ -738,4 +738,4 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.danger + '44',
   },
   deleteText: { color: colors.danger, fontSize: font.sm, fontWeight: '700' },
-});
+}));

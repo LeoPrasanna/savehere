@@ -16,8 +16,8 @@ import { Icon } from '../components/Icon';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { Landing } from '../components/Landing';
 import { LibraryBackdrop } from '../components/LibraryBackdrop';
-import { hasEnteredLibrary, markEnteredLibrary } from '../services/sessionFlags';
-import { colors, spacing, font, radius, gradients, shadow, typeface, categoryMeta, CATEGORY_OPTIONS } from '../constants/theme';
+import { hasEnteredLibrary, markEnteredLibrary, consumeReopenPanel } from '../services/sessionFlags';
+import { colors, spacing, font, radius, gradients, shadow, typeface, categoryMeta, CATEGORY_OPTIONS, themed } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
 const PAGE = 24;
@@ -38,7 +38,10 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Reel[] | null>(null);
   const [searching, setSearching] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
+  // Reopens automatically after an accent switch remounts the tree (one-shot
+  // flag). Only consume it when THIS screen owns the visible panel — on the
+  // Landing branch, Landing renders its own panel and consumes the flag itself.
+  const [menuOpen, setMenuOpen] = useState(hasEnteredLibrary() ? consumeReopenPanel() : false);
   // Session-scoped (services/sessionFlags): remounts don't bounce back to the
   // landing, but a sign-out/sign-in resets it so new users start at Landing.
   const [entered, setEntered] = useState(hasEnteredLibrary());
@@ -337,7 +340,7 @@ export default function HomeScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
   banner: {
@@ -439,4 +442,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
     alignItems: 'center', justifyContent: 'center',
   },
-});
+}));

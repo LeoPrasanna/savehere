@@ -11,7 +11,7 @@ import {
 } from 'lucide-react-native';
 import { Pressable } from './Pressable';
 import { GlassCard } from './GlassCard';
-import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 
 const ONBOARDING_KEY = '@savehere:onboarding:v1';
@@ -26,7 +26,7 @@ interface OnboardingStep {
   accent: string;
 }
 
-const STEPS: OnboardingStep[] = [
+const STEPS: OnboardingStep[] = themed(() => [
   {
     title: 'Welcome to SaveHere',
     subtitle: 'Your AI-powered second brain',
@@ -81,7 +81,7 @@ const STEPS: OnboardingStep[] = [
     gradient: gradients.success,
     accent: colors.success,
   },
-];
+]);
 
 export function OnboardingModal() {
   const [visible, setVisible] = useState(false);
@@ -297,7 +297,7 @@ export function OnboardingModal() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   backdrop: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     zIndex: 1,
@@ -460,4 +460,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xs,
   },
-});
+}));

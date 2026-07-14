@@ -1,5 +1,5 @@
 import { View, StyleSheet } from 'react-native';
-import { colors, radius, shadow } from '../constants/theme';
+import { colors, radius, shadow, themed } from '../constants/theme';
 
 /**
  * GlassCard — now a flat, quietly elevated card (the glassmorphism look is
@@ -14,12 +14,12 @@ interface GlassCardProps {
   intensity?: 'low' | 'medium' | 'high';
 }
 
-const BORDER_MAP = {
+const BORDER_MAP = themed(() => ({
   violet: colors.accent + '2E',
   cyan: '#5FC9BD2E',
   pink: '#FF6B8A2E',
   none: colors.border,
-};
+}));
 
 export function GlassCard({ children, style, tint = 'none', intensity = 'medium' }: GlassCardProps) {
   const bg = intensity === 'high' ? colors.cardElevated : colors.card;

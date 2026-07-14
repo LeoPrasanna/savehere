@@ -9,8 +9,8 @@ import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { GlassCard } from './GlassCard';
 import { useAuth } from '../contexts/AuthContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { colors, spacing, font, radius, gradients, shadow, accentThemes, activeAccentKey, ACCENT_STORAGE_KEY } from '../constants/theme';
+import { markReopenPanel } from '../services/sessionFlags';
+import { colors, spacing, font, radius, gradients, shadow, themed, accentThemes, getAccentKey, setAccentTheme } from '../constants/theme';
 
 const APP_VERSION = '1.0.0';
 
@@ -97,19 +97,14 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
     </MotiView>
   );
 
-  // Persist the accent, then reload so every module-level StyleSheet rebuilds
-  // with the new tokens (see constants/theme.ts — a live swap would half-theme).
-  const chooseAccent = async (key: string) => {
-    if (key === activeAccentKey) return;
-    try { await AsyncStorage.setItem(ACCENT_STORAGE_KEY, key); } catch {}
-    if (Platform.OS === 'web') {
-      try { window.localStorage.setItem(ACCENT_STORAGE_KEY, key); } catch {}
-      window.location.reload();
-    } else {
-      // Native can't re-read storage synchronously at boot yet (needs a sync
-      // store) — be honest instead of pretending it applied.
-      Alert.alert('', 'Saved. The new color will apply once theme reload lands on mobile — it already works on web.');
-    }
+  // Live switch: setAccentTheme mutates the tokens, regenerates themed()
+  // sheets and remounts the tree (see constants/theme.ts) — instant, no page
+  // reload. The session flag reopens this panel after the remount so the user
+  // can keep trying colors.
+  const chooseAccent = (key: string) => {
+    if (key === getAccentKey()) return;
+    markReopenPanel();
+    setAccentTheme(key);
   };
 
   const AppearanceRow = ({ delay = 0 }: { delay?: number }) => (
@@ -125,7 +120,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
         </View>
         <View style={styles.swatchRow}>
           {accentThemes.map(t => {
-            const active = t.key === activeAccentKey;
+            const active = t.key === getAccentKey();
             return (
               <Pressable
                 key={t.key}
@@ -140,8 +135,8 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
           })}
         </View>
         <Text style={styles.swatchHint}>
-          {accentThemes.find(t => t.key === activeAccentKey)?.label ?? 'Ember'}
-          {activeAccentKey === 'ember' ? ' (default)' : ''}
+          {accentThemes.find(t => t.key === getAccentKey())?.label ?? 'Ember'}
+          {getAccentKey() === 'ember' ? ' (default)' : ''}
         </Text>
       </View>
     </MotiView>
@@ -348,7 +343,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
   panelWrap: { position: 'absolute', top: 0, bottom: 0, right: 0, ...shadow.md },
   panel: {
@@ -498,4 +493,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   confirmDeleteText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
-});
+}));

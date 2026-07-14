@@ -13,7 +13,7 @@ import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { FloatingParticleField } from './FloatingParticleField';
 import * as haptics from '../services/haptics';
-import { colors, spacing, font, radius, gradients, shadow, typeface } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, typeface, themed } from '../constants/theme';
 
 type Mode = 'signin' | 'signup';
 type FieldName = 'first' | 'last' | 'nick' | 'email' | 'password';
@@ -325,7 +325,7 @@ export function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   inner: { flexGrow: 1, justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
 
@@ -402,4 +402,4 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
   },
   legalStrong: { color: colors.textSecondary, fontWeight: '700' },
-});
+}));

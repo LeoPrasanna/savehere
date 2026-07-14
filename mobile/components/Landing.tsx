@@ -10,8 +10,9 @@ import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { AuroraBackground } from './AuroraBackground';
 import { ProfilePanel } from './ProfilePanel';
-import { colors, spacing, font, radius, gradients, shadow, typeface } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, typeface, themed } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
+import { consumeReopenPanel } from '../services/sessionFlags';
 import { FEATURES, Feature } from '../constants/features';
 
 const ASK_MIN_REELS = 3;
@@ -25,7 +26,8 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
   const [selected, setSelected] = useState<Feature | null>(null);
-  const [menuOpen, setMenuOpen] = useState(false);
+  // Reopens after an accent switch remounts the tree (one-shot session flag).
+  const [menuOpen, setMenuOpen] = useState(consumeReopenPanel());
 
   useFocusEffect(
     useCallback(() => {
@@ -176,7 +178,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { flexGrow: 1, paddingHorizontal: spacing.lg, gap: spacing.lg },
 
@@ -245,4 +247,4 @@ const styles = StyleSheet.create({
   modalBtnWrap: { width: '100%', borderRadius: radius.md, marginTop: spacing.sm },
   modalBtn: { borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
   modalBtnText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
-});
+}));

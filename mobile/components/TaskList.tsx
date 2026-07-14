@@ -4,7 +4,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from './Icon';
 import { Task, api } from '../services/api';
 import { Pressable } from './Pressable';
-import { colors, spacing, font, radius, gradients } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, themed } from '../constants/theme';
 
 interface Props {
   tasks: Task[];
@@ -195,7 +195,7 @@ export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tas
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   container: { gap: spacing.sm },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
   progressBar: { flex: 1, height: 8, backgroundColor: colors.border, borderRadius: radius.full, overflow: 'hidden' },
@@ -244,4 +244,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
   addBtnDisabled: { backgroundColor: colors.border },
-});
+}));

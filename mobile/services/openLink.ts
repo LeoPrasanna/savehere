@@ -28,18 +28,37 @@ export async function openSourceLink(url?: string | null): Promise<boolean> {
     notifyFailure();
     return false;
   }
-  try {
-    if (Platform.OS === 'web') {
-      // No feature string here: passing 'noopener' makes window.open return
-      // null EVEN ON SUCCESS (per spec), which made this false-alarm on every
-      // working click. Open plain (null only means genuinely blocked), then
-      // sever the opener reference ourselves.
-      const win = window.open(url, '_blank');
-      if (!win) throw new Error('popup blocked');
-      win.opener = null;
-      return true;
+
+  if (Platform.OS === 'web') {
+    // Do NOT gate on window.open()'s return value. react-native-web's Pressable
+    // dispatches onPress ASYNCHRONOUSLY (through its responder system), so the
+    // synchronous user-activation the popup blocker requires is already gone by
+    // the time we run — window.open() then returns null even for a real click,
+    // which made us false-alarm "couldn't open this link" on every working tap.
+    // An anchor click is the reliable pattern: it opens the tab and hands us no
+    // null to misread, and rel="noopener" covers the security concern via the
+    // attribute (no fragile cross-origin `win.opener = null`, which throws in
+    // some browsers). We can't detect a genuinely-blocked open here, but a false
+    // failure popup on every successful click is the far worse bug — and real
+    // failures on web (deleted/private post) open a tab that shows the
+    // platform's own error, which we couldn't detect anyway.
+    try {
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } catch {
+      try { window.open(url, '_blank'); } catch {}
     }
-    // canOpenURL is false when nothing on the device handles the scheme.
+    return true;
+  }
+
+  // Native: canOpenURL IS a real signal (nothing handles the scheme), so keep
+  // the honest failure popup here.
+  try {
     const supported = await Linking.canOpenURL(url);
     if (!supported) throw new Error('no handler');
     await Linking.openURL(url);

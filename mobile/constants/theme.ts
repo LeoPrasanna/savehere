@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * SaveHere design system — "Ember on Ink".
@@ -106,16 +107,16 @@ export const categoryFor = (c?: string | null) =>
   categoryMeta[(c || 'other').toLowerCase()] ?? categoryMeta.other;
 
 /* ── Accent themes (Appearance) ──────────────────────────────────────────────
- * Five accent palettes; "ember" is the default brand look. Because screens bake
- * `colors.accent` into module-level StyleSheet.create calls, a switch is applied
- * by MUTATING the token objects at module init (below) and RELOADING the app —
- * not by re-rendering. The choice is stored under ACCENT_STORAGE_KEY.
+ * Five accent palettes; "ember" is the default brand look. Switching is LIVE:
+ * `setAccentTheme()` mutates the token objects, regenerates every style sheet
+ * created through `themed()` (module-level StyleSheet.create freezes values,
+ * so those sheets are wrapped in factories that re-run on change), then
+ * notifies subscribers — the root layout bumps a remount key and the whole
+ * tree re-renders with the new palette in one frame. No page reload.
  *
- * Platform note: the boot read is synchronous localStorage, so this fully works
- * on web (current dev surface). On native the pick persists to AsyncStorage but
- * can't be read synchronously at module init — native keeps the default until a
- * sync store (e.g. MMKV) is added. Deliberate: an async apply after import would
- * restyle only inline styles and leave frozen StyleSheets half-themed.
+ * Boot: web reads the stored key synchronously (localStorage) so the first
+ * paint is already themed; native applies right after the root layout's
+ * AsyncStorage read (see app/_layout.tsx) — a brief default-color first frame.
  */
 export const ACCENT_STORAGE_KEY = '@savehere:accent:v1';
 
@@ -148,16 +149,81 @@ function applyAccentTheme(t: AccentTheme) {
   categoryMeta.all.color = t.accent;
 }
 
-// Boot read — web only (sync). Runs BEFORE `shadow` below so the accent glow
-// and every StyleSheet.create in the app pick up the stored palette.
+// Derived token objects (shadow.glow / glass / glow) captured colors.accent at
+// their own module init. Only called from setAccentTheme at runtime — at boot
+// they don't exist yet (declared below) and self-initialize from the already-
+// mutated colors.
+function refreshDerivedTokens(t: AccentTheme) {
+  const sg = shadow.glow as Record<string, unknown>;
+  if ('shadowColor' in sg) sg.shadowColor = t.accent;         // iOS branch only
+  (glass.neonBorder as { borderColor: string }).borderColor = t.accent + '33';
+  (glow.violet as { shadowColor: string }).shadowColor = t.accent;
+}
+
+// Two-phase notify: style sheets must be regenerated BEFORE React subscribers
+// re-render, or the remounted tree would still read the old sheets.
+const _sheetRegens = new Set<() => void>();
+const _accentSubs = new Set<() => void>();
+
+/** Subscribe to accent changes (used by the root layout to remount the tree).
+ *  Returns an unsubscribe function. */
+export function onAccentChange(fn: () => void): () => void {
+  _accentSubs.add(fn);
+  return () => { _accentSubs.delete(fn); };
+}
+
+/**
+ * Wrap any module-level object whose values bake in accent tokens — a
+ * StyleSheet.create(...) call, a color map, a steps array. The factory re-runs
+ * on every accent change and the returned proxy always forwards to the latest
+ * result, so `styles.foo` at render time is never stale.
+ *
+ *   const styles = themed(() => StyleSheet.create({ ... }));
+ */
+export function themed<T extends object>(factory: () => T): T {
+  let current = factory();
+  _sheetRegens.add(() => { current = factory(); });
+  return new Proxy({} as T, {
+    get: (_, prop) => (current as Record<PropertyKey, unknown>)[prop as never],
+    has: (_, prop) => prop in current,
+    ownKeys: () => Reflect.ownKeys(current),
+    getOwnPropertyDescriptor: (_, prop) => Object.getOwnPropertyDescriptor(current, prop),
+  });
+}
+
+/** Switch the accent LIVE: mutate tokens → regenerate themed() sheets → notify
+ *  subscribers (root remounts) → persist. Works on web and native. */
+export function setAccentTheme(key: string, opts?: { persist?: boolean }) {
+  const t = accentThemes.find(x => x.key === key);
+  if (!t || key === _activeKey) return;
+  _activeKey = key;
+  applyAccentTheme(t);
+  refreshDerivedTokens(t);
+  _sheetRegens.forEach(fn => fn());
+  _accentSubs.forEach(fn => fn());
+  if (opts?.persist !== false) {
+    if (Platform.OS === 'web') {
+      try { window.localStorage.setItem(ACCENT_STORAGE_KEY, key); } catch {}
+    }
+    AsyncStorage.setItem(ACCENT_STORAGE_KEY, key).catch(() => {});
+  }
+}
+
+// Boot read — web only (sync localStorage), so the first paint is themed. On
+// native app/_layout.tsx reads AsyncStorage after mount and calls setAccentTheme.
 let _storedAccent: string | null = null;
 if (Platform.OS === 'web') {
   try { _storedAccent = window.localStorage.getItem(ACCENT_STORAGE_KEY); } catch {}
 }
-export const activeAccentKey =
+let _activeKey: string =
   accentThemes.some(t => t.key === _storedAccent) ? (_storedAccent as string) : 'ember';
-if (activeAccentKey !== 'ember') {
-  applyAccentTheme(accentThemes.find(t => t.key === activeAccentKey)!);
+if (_activeKey !== 'ember') {
+  applyAccentTheme(accentThemes.find(t => t.key === _activeKey)!);
+}
+
+/** The currently applied accent key (live — reflects setAccentTheme). */
+export function getAccentKey(): string {
+  return _activeKey;
 }
 
 /** The categories a reel can be assigned to (auto or user-picked). Excludes the
