@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * SaveHere design system — "Ember on Ink".
@@ -92,6 +93,7 @@ export const categoryMeta: Record<string, { icon: string; color: string }> = {
   education: { icon: 'education', color: '#71C787' },
   entertainment: { icon: 'entertainment', color: '#C98BFF' },
   fashion: { icon: 'fashion', color: '#FF9BB1' },
+  beauty: { icon: 'beauty', color: '#E48BD2' },
   travel: { icon: 'travel', color: '#5FB9E8' },
   business: { icon: 'business', color: '#D9B36B' },
   news: { icon: 'news', color: '#A29C90' },
@@ -104,11 +106,131 @@ export const categoryMeta: Record<string, { icon: string; color: string }> = {
 export const categoryFor = (c?: string | null) =>
   categoryMeta[(c || 'other').toLowerCase()] ?? categoryMeta.other;
 
+/* ── Accent themes (Appearance) ──────────────────────────────────────────────
+ * Five accent palettes; "ember" is the default brand look. Switching is LIVE:
+ * `setAccentTheme()` mutates the token objects, regenerates every style sheet
+ * created through `themed()` (module-level StyleSheet.create freezes values,
+ * so those sheets are wrapped in factories that re-run on change), then
+ * notifies subscribers — the root layout bumps a remount key and the whole
+ * tree re-renders with the new palette in one frame. No page reload.
+ *
+ * Boot: web reads the stored key synchronously (localStorage) so the first
+ * paint is already themed; native applies right after the root layout's
+ * AsyncStorage read (see app/_layout.tsx) — a brief default-color first frame.
+ */
+export const ACCENT_STORAGE_KEY = '@savehere:accent:v1';
+
+export interface AccentTheme {
+  key: string;
+  label: string;
+  accent: string;
+  accentDark: string;
+  accentLight: string;
+  ramp: readonly [string, string];   // primary-action gradient
+}
+
+export const accentThemes: readonly AccentTheme[] = [
+  { key: 'ember',  label: 'Ember',  accent: '#FF6B3D', accentDark: '#E4501F', accentLight: '#FF9770', ramp: ['#FF7A45', '#E4501F'] },
+  { key: 'iris',   label: 'Iris',   accent: '#8B7CFF', accentDark: '#6A55E8', accentLight: '#B0A6FF', ramp: ['#9C8CFF', '#6A55E8'] },
+  { key: 'ocean',  label: 'Ocean',  accent: '#3DA9FF', accentDark: '#1E7FE0', accentLight: '#7CC4FF', ramp: ['#55B4FF', '#1E7FE0'] },
+  { key: 'forest', label: 'Forest', accent: '#3DD68C', accentDark: '#21B473', accentLight: '#7BE5B3', ramp: ['#52DC99', '#21B473'] },
+  { key: 'rose',   label: 'Rose',   accent: '#FF5C8A', accentDark: '#E43D6F', accentLight: '#FF92B2', ramp: ['#FF6F97', '#E43D6F'] },
+];
+
+function applyAccentTheme(t: AccentTheme) {
+  colors.accent = t.accent;
+  colors.accentDark = t.accentDark;
+  colors.accentLight = t.accentLight;
+  colors.neonViolet = t.accent;               // legacy alias follows the accent
+  const g = gradients as Record<string, readonly string[]>;
+  g.primary = t.ramp;
+  g.hologram = t.ramp;                        // legacy aliases → brand ramp
+  g.neon = t.ramp;
+  categoryMeta.all.color = t.accent;
+}
+
+// Derived token objects (shadow.glow / glass / glow) captured colors.accent at
+// their own module init. Only called from setAccentTheme at runtime — at boot
+// they don't exist yet (declared below) and self-initialize from the already-
+// mutated colors.
+function refreshDerivedTokens(t: AccentTheme) {
+  const sg = shadow.glow as Record<string, unknown>;
+  if ('shadowColor' in sg) sg.shadowColor = t.accent;         // iOS branch only
+  (glass.neonBorder as { borderColor: string }).borderColor = t.accent + '33';
+  (glow.violet as { shadowColor: string }).shadowColor = t.accent;
+}
+
+// Two-phase notify: style sheets must be regenerated BEFORE React subscribers
+// re-render, or the remounted tree would still read the old sheets.
+const _sheetRegens = new Set<() => void>();
+const _accentSubs = new Set<() => void>();
+
+/** Subscribe to accent changes (used by the root layout to remount the tree).
+ *  Returns an unsubscribe function. */
+export function onAccentChange(fn: () => void): () => void {
+  _accentSubs.add(fn);
+  return () => { _accentSubs.delete(fn); };
+}
+
+/**
+ * Wrap any module-level object whose values bake in accent tokens — a
+ * StyleSheet.create(...) call, a color map, a steps array. The factory re-runs
+ * on every accent change and the returned proxy always forwards to the latest
+ * result, so `styles.foo` at render time is never stale.
+ *
+ *   const styles = themed(() => StyleSheet.create({ ... }));
+ */
+export function themed<T extends object>(factory: () => T): T {
+  let current = factory();
+  _sheetRegens.add(() => { current = factory(); });
+  return new Proxy({} as T, {
+    get: (_, prop) => (current as Record<PropertyKey, unknown>)[prop as never],
+    has: (_, prop) => prop in current,
+    ownKeys: () => Reflect.ownKeys(current),
+    getOwnPropertyDescriptor: (_, prop) => Object.getOwnPropertyDescriptor(current, prop),
+  });
+}
+
+/** Switch the accent LIVE: mutate tokens → regenerate themed() sheets → notify
+ *  subscribers (root remounts) → persist. Works on web and native. */
+export function setAccentTheme(key: string, opts?: { persist?: boolean }) {
+  const t = accentThemes.find(x => x.key === key);
+  if (!t || key === _activeKey) return;
+  _activeKey = key;
+  applyAccentTheme(t);
+  refreshDerivedTokens(t);
+  _sheetRegens.forEach(fn => fn());
+  _accentSubs.forEach(fn => fn());
+  if (opts?.persist !== false) {
+    if (Platform.OS === 'web') {
+      try { window.localStorage.setItem(ACCENT_STORAGE_KEY, key); } catch {}
+    }
+    AsyncStorage.setItem(ACCENT_STORAGE_KEY, key).catch(() => {});
+  }
+}
+
+// Boot read — web only (sync localStorage), so the first paint is themed. On
+// native app/_layout.tsx reads AsyncStorage after mount and calls setAccentTheme.
+let _storedAccent: string | null = null;
+if (Platform.OS === 'web') {
+  try { _storedAccent = window.localStorage.getItem(ACCENT_STORAGE_KEY); } catch {}
+}
+let _activeKey: string =
+  accentThemes.some(t => t.key === _storedAccent) ? (_storedAccent as string) : 'ember';
+if (_activeKey !== 'ember') {
+  applyAccentTheme(accentThemes.find(t => t.key === _activeKey)!);
+}
+
+/** The currently applied accent key (live — reflects setAccentTheme). */
+export function getAccentKey(): string {
+  return _activeKey;
+}
+
 /** The categories a reel can be assigned to (auto or user-picked). Excludes the
  *  'all' filter pseudo-category. Keep in sync with backend ALLOWED_CATEGORIES. */
 export const CATEGORY_OPTIONS = [
   'fitness', 'cooking', 'tech', 'motivation', 'education', 'entertainment',
-  'fashion', 'travel', 'business', 'news', 'health', 'finance', 'other',
+  'fashion', 'beauty', 'travel', 'business', 'news', 'health', 'finance', 'other',
 ] as const;
 
 export const spacing = {

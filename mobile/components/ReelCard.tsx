@@ -7,7 +7,7 @@ import { Icon } from './Icon';
 import { Reel, api, thumbUrl } from '../services/api';
 import * as haptics from '../services/haptics';
 import { Pressable } from './Pressable';
-import { colors, spacing, radius, font, shadow, typeface, platformMeta, categoryFor } from '../constants/theme';
+import { colors, spacing, radius, font, shadow, typeface, platformMeta, categoryFor, themed } from '../constants/theme';
 
 interface ReelCardProps {
   reel: Reel;
@@ -149,7 +149,7 @@ export const ReelCard = memo(ReelCardInner, (prev, next) =>
   prev.reel.tags[0] === next.reel.tags[0]
 );
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   wrap: { flex: 1, marginBottom: spacing.sm },
   card: {
     flex: 1,
@@ -220,4 +220,4 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   tagText: { color: colors.textTertiary, fontSize: 10, flex: 1, textAlign: 'right' },
-});
+}));

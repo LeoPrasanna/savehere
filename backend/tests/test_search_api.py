@@ -125,6 +125,23 @@ class TestSearch:
     def test_no_match_is_empty(self, client):
         assert client.get("/api/reels/search?q=zzzznope").json()["total"] == 0
 
+    def test_natural_phrase_matches_category(self, client):
+        # "any videos on Fitness": a2 is category=fitness but the word "fitness"
+        # appears nowhere in its title/summary/notes — the old LIKE search
+        # returned nothing here.
+        body = client.get("/api/reels/search?q=any%20videos%20on%20Fitness").json()
+        assert {i["id"] for i in body["items"]} == {"a2"}
+
+    def test_synonym_matches(self, client):
+        # "gym" should find the fitness reel via the synonym group.
+        body = client.get("/api/reels/search?q=gym").json()
+        assert {i["id"] for i in body["items"]} == {"a2"}
+
+    def test_prefix_typeahead(self, client):
+        # Mid-typing prefix already surfaces results (old LIKE behavior kept).
+        body = client.get("/api/reels/search?q=budg").json()
+        assert {i["id"] for i in body["items"]} == {"a3"}
+
 
 class TestPerUserIsolation:
     def test_list_only_shows_own_reels(self, make_client):

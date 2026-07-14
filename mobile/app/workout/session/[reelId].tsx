@@ -10,13 +10,14 @@ import { api, WorkoutExercise, WorkoutPlan } from '../../../services/api';
 import { Pressable } from '../../../components/Pressable';
 import { FloatingHomeButton, goHome } from '../../../components/HomeButton';
 import { Disclaimer } from '../../../components/Disclaimer';
-import { colors, spacing, font, radius, gradients, shadow } from '../../../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, themed } from '../../../constants/theme';
 
 type Phase = 'loading' | 'ready' | 'exercise' | 'rest' | 'complete';
 
+// Distinct glyph per muscle group — keep in sync with app/workout/[reelId].tsx.
 const MUSCLE_ICON: Record<string, string> = {
-  chest: 'fitness', legs: 'fitness', back: 'fitness', core: 'motivation',
-  shoulders: 'fitness', arms: 'fitness', full_body: 'analyze', cardio: 'cardio',
+  chest: 'fitness', legs: 'footsteps', back: 'body', core: 'flame',
+  shoulders: 'muscle', arms: 'muscle', full_body: 'body', cardio: 'cardio',
 };
 
 const MOTIVATION: string[] = [
@@ -313,7 +314,7 @@ function GradientButton({ icon, label, gradient, onPress, glow }: {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.lg },
   center: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
 
@@ -398,4 +399,4 @@ const styles = StyleSheet.create({
   statValue: { color: colors.textPrimary, fontSize: font.xl, fontWeight: '800' },
   statLabel: { color: colors.textSecondary, fontSize: 10, letterSpacing: 1, fontWeight: '700' },
   completeBtnWrap: { width: '100%' },
-});
+}));

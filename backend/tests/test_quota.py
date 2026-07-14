@@ -12,7 +12,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.quota import enforce_daily_ai_quota, charge_ai_action, tier_for, daily_limit_for
+from app.quota import enforce_daily_ai_quota, charge_ai_action, tier_for, daily_limit_for, _utc_today
 from app.database import Base, AiUsageDB, get_db
 from app.config import settings
 from app.auth import get_current_user, AuthUser
@@ -51,8 +51,10 @@ class TestQuotaHelper:
         assert exc.value.status_code == 429
 
     def test_nothing_charged_on_rejection(self, db):
+        # The quota keys rows on the UTC day — local date.today() diverges from
+        # it for a window every day (e.g. 00:00–05:30 IST) and made this flake.
         enforce_daily_ai_quota(db, USER_A, limit=1)
-        today = date.today()
+        today = _utc_today()
         assert _count(db, USER_A, today) == 1
         with pytest.raises(HTTPException):
             enforce_daily_ai_quota(db, USER_A, limit=1)
@@ -87,7 +89,7 @@ class TestQuotaHelper:
         with pytest.raises(HTTPException) as exc:
             enforce_daily_ai_quota(db, USER_A, limit=0)
         assert exc.value.status_code == 429
-        assert _count(db, USER_A, date.today()) == 0
+        assert _count(db, USER_A, _utc_today()) == 0
 
     def test_increment_never_exceeds_limit(self, db):
         # The cap is enforced by a single conditional UPDATE (count < limit), so the
@@ -97,7 +99,7 @@ class TestQuotaHelper:
                 enforce_daily_ai_quota(db, USER_A, limit=3)
             except HTTPException:
                 pass
-        assert _count(db, USER_A, date.today()) == 3
+        assert _count(db, USER_A, _utc_today()) == 3
 
 
 class TestTierResolution:

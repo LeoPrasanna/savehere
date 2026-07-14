@@ -32,6 +32,9 @@ class ReelResponse(BaseModel):
     summarize_count: int
     tasks_count: int = 0
     workout_count: int = 0
+    # True when the summarizer flagged the content as medical/high-stakes advice —
+    # the app shows a disclaimer and hides the tasks/workout actions.
+    is_sensitive: bool = False
     created_at: datetime
 
     class Config:

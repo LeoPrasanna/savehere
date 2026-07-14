@@ -9,7 +9,8 @@ import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { GlassCard } from './GlassCard';
 import { useAuth } from '../contexts/AuthContext';
-import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
+import { markReopenPanel } from '../services/sessionFlags';
+import { colors, spacing, font, radius, gradients, shadow, themed, accentThemes, getAccentKey, setAccentTheme } from '../constants/theme';
 
 const APP_VERSION = '1.0.0';
 
@@ -92,6 +93,51 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
         <Icon name={icon} size={18} color={colors.textSecondary} />
         <Text style={styles.rowLabel}>{label}</Text>
         <View style={styles.soon}><Text style={styles.soonText}>Soon</Text></View>
+      </View>
+    </MotiView>
+  );
+
+  // Live switch: setAccentTheme mutates the tokens, regenerates themed()
+  // sheets and remounts the tree (see constants/theme.ts) — instant, no page
+  // reload. The session flag reopens this panel after the remount so the user
+  // can keep trying colors.
+  const chooseAccent = (key: string) => {
+    if (key === getAccentKey()) return;
+    markReopenPanel();
+    setAccentTheme(key);
+  };
+
+  const AppearanceRow = ({ delay = 0 }: { delay?: number }) => (
+    <MotiView
+      from={{ opacity: 0, translateX: 20 }}
+      animate={{ opacity: 1, translateX: 0 }}
+      transition={{ type: 'timing', delay, duration: 300 }}
+    >
+      <View style={[styles.row, styles.appearanceRow]}>
+        <View style={styles.appearanceHeader}>
+          <Icon name="settings" size={18} color={colors.textSecondary} />
+          <Text style={styles.rowLabel}>Appearance</Text>
+        </View>
+        <View style={styles.swatchRow}>
+          {accentThemes.map(t => {
+            const active = t.key === getAccentKey();
+            return (
+              <Pressable
+                key={t.key}
+                onPress={() => chooseAccent(t.key)}
+                hitSlop={6}
+                scaleTo={0.85}
+                style={[styles.swatch, { backgroundColor: t.accent }, active && styles.swatchActive]}
+              >
+                {active && <Icon name="checkmark" size={12} color="#FFF" />}
+              </Pressable>
+            );
+          })}
+        </View>
+        <Text style={styles.swatchHint}>
+          {accentThemes.find(t => t.key === getAccentKey())?.label ?? 'Ember'}
+          {getAccentKey() === 'ember' ? ' (default)' : ''}
+        </Text>
       </View>
     </MotiView>
   );
@@ -236,7 +282,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
         <Text style={styles.sectionLabel}>SETTINGS</Text>
         <View style={styles.menu}>
           <NavRow icon="create" label="Edit profile" path="/profile" delay={800} />
-          <Row icon="settings" label="Appearance" delay={900} />
+          <AppearanceRow delay={900} />
           <Row icon="bell" label="Notifications" delay={1000} />
           <Row icon="download" label="Export data" delay={1100} />
         </View>
@@ -297,7 +343,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   root: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
   panelWrap: { position: 'absolute', top: 0, bottom: 0, right: 0, ...shadow.md },
   panel: {
@@ -377,6 +423,17 @@ const styles = StyleSheet.create({
   soon: { backgroundColor: colors.accent + '22', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
   soonText: { color: colors.accentLight, fontSize: 10, fontWeight: '800' },
 
+  appearanceRow: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm },
+  appearanceHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  swatchRow: { flexDirection: 'row', gap: spacing.sm + 2, paddingLeft: 26 },
+  swatch: {
+    width: 26, height: 26, borderRadius: radius.full,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 2, borderColor: 'transparent',
+  },
+  swatchActive: { borderColor: '#FFF' },
+  swatchHint: { color: colors.textTertiary, fontSize: font.xs, paddingLeft: 26 },
+
   dangerRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     backgroundColor: colors.danger + '12', borderRadius: radius.md,
@@ -436,4 +493,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
   },
   confirmDeleteText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
-});
+}));

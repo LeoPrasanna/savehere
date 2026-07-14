@@ -9,7 +9,8 @@ import {
   BookOpen, Code, PenLine, Search, Phone, Target, Brain, Wrench, Palette, Leaf,
   PartyPopper, Eye, EyeOff, Scissors, Mail, KeyRound,
   Menu, UserRound, Settings, Bell, Download, LogIn, ChevronRight, Bookmark, Layers, Shield,
-  MessageCircle, Compass, ArrowLeft, Send,
+  MessageCircle, Compass, ArrowLeft, Send, Brush,
+  Rocket, BicepsFlexed, PersonStanding, Trophy,
 } from 'lucide-react-native';
 
 // One icon family for the whole app (Lucide). Platform brand logos are the only
@@ -29,15 +30,18 @@ const MAP: Record<string, any> = {
   login: LogIn, 'chevron-right': ChevronRight, bookmark: Bookmark, layers: Layers, shield: Shield,
   ask: MessageCircle, rediscover: Compass, back: ArrowLeft, send: Send,
   barbell: Dumbbell, 'barbell-outline': Dumbbell, trash: Trash2,
+  search: Search, trophy: Trophy, flame: Flame,
 
   // ── Categories ──
-  fitness: Dumbbell, cooking: ChefHat, tech: Cpu, motivation: Flame,
+  // motivation is Rocket (not Flame) so it never collides with the 'cook' step icon.
+  fitness: Dumbbell, cooking: ChefHat, tech: Cpu, motivation: Rocket,
   education: GraduationCap, entertainment: Clapperboard, fashion: Shirt,
-  travel: Plane, business: Briefcase, news: Newspaper, health: HeartPulse,
+  beauty: Brush, travel: Plane, business: Briefcase, news: Newspaper, health: HeartPulse,
   finance: Wallet, general: Sparkles, other: Tag, all: Globe,
 
   // ── Workout muscles / types ──
   strength: Dumbbell, cardio: HeartPulse, flexibility: Activity, fitness_repeat: Repeat,
+  muscle: BicepsFlexed, body: PersonStanding,
 
   // ── Recipe / task step semantics ──
   gather: ShoppingCart, prep: Scissors, mix: CookingPot, cook: Flame, wait: Timer,
@@ -71,6 +75,11 @@ interface Props {
   size?: number;
   color?: string;
   strokeWidth?: number;
+  /** Fill the glyph's interior (e.g. active tab/chip states). Works best on
+      simple solid shapes — Bookmark, Flame, Play — not detailed line icons. */
+  fill?: string;
+  /** Bump stroke weight for selected/active states without hand-tuning sizes. */
+  emphasis?: boolean;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -82,7 +91,8 @@ function strokeFor(size: number): number {
   return 2;
 }
 
-export function Icon({ name, size = 18, color = '#FFF', strokeWidth, style }: Props) {
+export function Icon({ name, size = 18, color = '#FFF', strokeWidth, fill = 'none', emphasis = false, style }: Props) {
   const C = resolve(name);
-  return <C size={size} color={color} strokeWidth={strokeWidth ?? strokeFor(size)} style={style} />;
+  const stroke = strokeWidth ?? (strokeFor(size) + (emphasis ? 0.4 : 0));
+  return <C size={size} color={color} strokeWidth={stroke} fill={fill} style={style} />;
 }

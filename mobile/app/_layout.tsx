@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router/stack';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFonts, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
 import { Fraunces_700Bold, Fraunces_900Black } from '@expo-google-fonts/fraunces';
 import { HeaderHomeButton } from '../components/HomeButton';
@@ -9,7 +11,7 @@ import { LoginScreen } from '../components/LoginScreen';
 import { Confetti } from '../components/Confetti';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { OnboardingModal } from '../components/OnboardingModal';
-import { colors, font, typeface } from '../constants/theme';
+import { colors, font, typeface, onAccentChange, setAccentTheme, ACCENT_STORAGE_KEY } from '../constants/theme';
 
 function AppStack() {
   return (
@@ -46,6 +48,22 @@ function Gate() {
   // body text stays on the system face. We don't block the gate on them — RN
   // falls back to system until they're ready.
   useFonts({ Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold, Fraunces_700Bold, Fraunces_900Black });
+
+  // Accent switching: bumping the epoch remounts the navigator so every screen
+  // re-renders against the freshly regenerated themed() sheets — instant, no
+  // page reload. On web the current route survives (it's URL-driven).
+  const [accentEpoch, setAccentEpoch] = useState(0);
+  useEffect(() => onAccentChange(() => setAccentEpoch(e => e + 1)), []);
+
+  // Native boot: localStorage isn't readable at module init there, so apply the
+  // stored accent right after mount (one default-colored first frame, then themed).
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+    AsyncStorage.getItem(ACCENT_STORAGE_KEY)
+      .then(k => { if (k) setAccentTheme(k, { persist: false }); })
+      .catch(() => {});
+  }, []);
+
   return (
     <>
       {loading ? (
@@ -53,7 +71,7 @@ function Gate() {
           <ActivityIndicator color={colors.accent} size="large" />
         </View>
       ) : session ? (
-        <AppStack />
+        <AppStack key={accentEpoch} />
       ) : (
         <LoginScreen />
       )}

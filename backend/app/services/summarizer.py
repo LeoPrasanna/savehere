@@ -17,7 +17,8 @@ Return a JSON object:
   "summary": ["insight 1", "insight 2", ...],
   "tags": ["tag1", "tag2", ...],
   "category": "one category",
-  "low_content": false
+  "low_content": false,
+  "sensitive": false
 }}
 
 TITLE RULE:
@@ -51,10 +52,18 @@ LOW CONTENT RULE:
 - If the text is only hashtags, a title, or generic phrases with no real information, set "low_content": true and return "summary": [].
 - Do NOT invent or guess specific facts that are not present in the text.
 
+SENSITIVE FLAG:
+- Set "sensitive": true ONLY when the content gives high-stakes personal health or safety advice where following it wrongly could cause real harm: medical treatments, medication/dosage, diagnosis, disease cures, mental-health or self-harm guidance, pregnancy/infant care advice, supplements/steroids, or extreme dieting (fasting protocols, "lose X kg in Y days").
+- General fitness routines, everyday recipes/nutrition, and lifestyle content are NOT sensitive.
+
 TAGS RULES:
 - 3 to 8 lowercase English tags describing the specific topic, not the format
 
-CATEGORY: pick one from: fitness, cooking, tech, motivation, education, entertainment, fashion, travel, business, news, health, finance, other
+CATEGORY: pick one from: fitness, cooking, tech, motivation, education, entertainment, fashion, beauty, travel, business, news, health, finance, other
+- beauty = makeup, skincare, haircare, grooming routines.
+- fashion = outfits, clothing, styling (clothes — not makeup).
+- travel = trips, destinations, itineraries, AND outdoor adventures: trekking, hiking, biking, camping.
+- fitness = workouts and exercise technique (a biking/trekking TRIP is travel, not fitness).
 
 Respond ONLY with the JSON object, no extra text."""
 
@@ -75,6 +84,7 @@ def summarize(platform: str, title: str, text: str) -> dict:
             "tags": [],
             "category": "other",
             "low_content": True,
+            "sensitive": False,
         }
 
     message = client.messages.create(
@@ -101,6 +111,7 @@ def summarize(platform: str, title: str, text: str) -> dict:
             "tags": [],
             "category": "other",
             "low_content": True,
+            "sensitive": False,
         }
 
     return {
@@ -109,4 +120,5 @@ def summarize(platform: str, title: str, text: str) -> dict:
         "tags": result.get("tags", []),
         "category": result.get("category", "other"),
         "low_content": result.get("low_content", False) or len(result.get("summary", [])) == 0,
+        "sensitive": bool(result.get("sensitive", False)),
     }

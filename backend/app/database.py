@@ -49,6 +49,11 @@ class ReelDB(Base):
     summarize_count = Column(Integer, nullable=False, default=0)
     tasks_count = Column(Integer, nullable=False, default=0)        # AI task/recipe generations
     workout_count = Column(Integer, nullable=False, default=0)      # AI workout generations
+    # Flagged by the summarizer when the content is medical/high-stakes health or
+    # safety advice. Sensitive reels keep thumbnail+summary+notes but are never
+    # turned into tasks/workouts (enforced server-side in routes/workout.py) and
+    # the app shows a "not responsible" disclaimer.
+    is_sensitive = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -167,6 +172,7 @@ def create_tables():
             "ALTER TABLE reels ADD COLUMN summary_status TEXT NOT NULL DEFAULT 'ready'",
             "ALTER TABLE reels ADD COLUMN user_id TEXT",
             "CREATE INDEX IF NOT EXISTS ix_reels_user_id ON reels (user_id)",
+            "ALTER TABLE reels ADD COLUMN is_sensitive BOOLEAN NOT NULL DEFAULT 0",
             "ALTER TABLE tasks ADD COLUMN kind TEXT DEFAULT 'task'",
             "ALTER TABLE tasks ADD COLUMN source TEXT DEFAULT 'content'",
         ]:

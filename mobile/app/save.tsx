@@ -13,7 +13,7 @@ import { api } from '../services/api';
 import * as haptics from '../services/haptics';
 import { Pressable } from '../components/Pressable';
 import { GlassCard } from '../components/GlassCard';
-import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
 
 const STEPS = [
   { icon: 'link', text: 'Checking the link…' },
@@ -305,7 +305,7 @@ export default function SaveScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   inner: { flexGrow: 1, padding: spacing.lg, justifyContent: 'center', gap: spacing.md },
 
@@ -389,4 +389,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.md, padding: spacing.md, minHeight: 54,
   },
   buttonText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
-});
+}));

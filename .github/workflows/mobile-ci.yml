@@ -1,0 +1,43 @@
+# Typechecks the mobile app on every push/PR touching mobile code.
+# A `launch-prep` branch once shipped commits where app/index.tsx didn't even
+# parse (the home screen was broken); this 1-2 min job catches that class of
+# break before it reaches develop. Separate from the backend workflow so a
+# mobile-only change doesn't run the Python suite (and vice versa).
+name: Mobile CI
+
+on:
+  push:
+    branches: [develop]
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-ci.yml"
+  pull_request:
+    paths:
+      - "mobile/**"
+      - ".github/workflows/mobile-ci.yml"
+
+jobs:
+  mobile-typecheck:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        # `npm ci` installs exactly from the committed lockfile (reproducible, no
+        # surprise upgrades). Fails loudly if package.json and the lock disagree.
+        run: npm ci
+
+      - name: Typecheck
+        # Uses the package.json script: tsc --noEmit with a bumped stack size —
+        # plain tsc overflows on this app's heavy type graph (expected, not a bug).
+        run: npm run typecheck

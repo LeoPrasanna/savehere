@@ -35,6 +35,9 @@ export interface Reel {
   summarize_count: number;
   tasks_count: number;
   workout_count: number;
+  // Flagged by the AI when the content is medical/high-stakes advice: the app
+  // shows a disclaimer and hides tasks/workout (the server refuses them too).
+  is_sensitive?: boolean;
   created_at: string;
 }
 
@@ -140,6 +143,65 @@ async function request<T>(path: string, options?: RequestInit, timeoutMs = 55000
   }
 }
 
+// Must match the backend's SOURCES_MARKER (app/routes/ask.py) — separates the
+// streamed answer prose from the trailing sources JSON.
+const SOURCES_MARKER = '\n␞__SRC__␞';
+
+export interface AskStreamHandlers {
+  onToken: (answerSoFar: string) => void;  // called with the full answer text each time it grows
+  signal?: AbortSignal;
+}
+
+/**
+ * Streaming "ask your library" — the answer renders token-by-token as Claude
+ * writes it. Uses XMLHttpRequest (not fetch): its incremental `responseText`
+ * surfaces the same way on React Native native AND web, so one path works on
+ * both. Resolves with the final {answer, sources} once the stream completes.
+ */
+async function askStream(question: string, handlers: AskStreamHandlers): Promise<AskResponse> {
+  const token = await getAccessToken();
+  return new Promise<AskResponse>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${BASE_URL}/api/ask/stream`);
+    xhr.setRequestHeader('Content-Type', 'application/json');
+    if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+
+    const split = (raw: string) => {
+      const i = raw.indexOf(SOURCES_MARKER);
+      return i === -1
+        ? { answer: raw, sources: null as Reel[] | null }
+        : { answer: raw.slice(0, i), sources: safeParse(raw.slice(i + SOURCES_MARKER.length)) };
+    };
+    const safeParse = (s: string): Reel[] | null => {
+      try { return JSON.parse(s) as Reel[]; } catch { return null; }
+    };
+
+    xhr.onprogress = () => {
+      // responseText holds everything received so far; show the answer portion,
+      // hiding the sources sentinel if it's already arrived.
+      handlers.onToken(split(xhr.responseText).answer);
+    };
+    xhr.onload = () => {
+      if (xhr.status < 200 || xhr.status >= 300) {
+        let msg = xhr.responseText || `Request failed: ${xhr.status}`;
+        try { const d = JSON.parse(xhr.responseText)?.detail; if (typeof d === 'string' && d) msg = d; } catch {}
+        reject(new Error(msg));
+        return;
+      }
+      const { answer, sources } = split(xhr.responseText);
+      resolve({ answer: answer.trim(), sources: sources ?? [] });
+    };
+    xhr.onerror = () => reject(new Error("Can't reach the server. Make sure the backend is running."));
+    xhr.ontimeout = () => reject(new Error('That took too long — try again.'));
+    xhr.timeout = 55000;
+
+    if (handlers.signal) {
+      handlers.signal.addEventListener('abort', () => xhr.abort());
+    }
+    xhr.send(JSON.stringify({ question }));
+  });
+}
+
 export const api = {
   // ── Reels ────────────────────────────────────────────────
   saveReel: (url: string) =>
@@ -188,6 +250,8 @@ export const api = {
 
   ask: (question: string) =>
     request<AskResponse>('/api/ask', { method: 'POST', body: JSON.stringify({ question }) }),
+
+  askStream,
 
   // ── Workout ──────────────────────────────────────────────
   generateWorkout: (reelId: string) =>

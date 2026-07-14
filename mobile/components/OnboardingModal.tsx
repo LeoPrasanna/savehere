@@ -11,7 +11,7 @@ import {
 } from 'lucide-react-native';
 import { Pressable } from './Pressable';
 import { GlassCard } from './GlassCard';
-import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 
 const ONBOARDING_KEY = '@savehere:onboarding:v1';
@@ -26,7 +26,7 @@ interface OnboardingStep {
   accent: string;
 }
 
-const STEPS: OnboardingStep[] = [
+const STEPS: OnboardingStep[] = themed(() => [
   {
     title: 'Welcome to SaveHere',
     subtitle: 'Your AI-powered second brain',
@@ -81,7 +81,7 @@ const STEPS: OnboardingStep[] = [
     gradient: gradients.success,
     accent: colors.success,
   },
-];
+]);
 
 export function OnboardingModal() {
   const [visible, setVisible] = useState(false);
@@ -95,20 +95,27 @@ export function OnboardingModal() {
   const slideX = useRef(new Animated.Value(0)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
 
-  // Keyed per user: each newly signed-in account sees the tour once, right
-  // after their first sign-in (never over the login screen — no session, no
-  // check). Behind the modal the app sits at the Landing screen, so closing
-  // the tour lands them there.
+  // Shown only to a NEWLY CREATED account, once. The local storage key alone
+  // isn't enough: storage is per-device/per-origin, so an existing user signing
+  // in on a new device (or a new dev-server port) used to get the tour replayed
+  // on every login. The "new user" signal is the Supabase account age — only an
+  // account created minutes ago sees the tour; anyone older gets the key
+  // stamped silently so it can never resurface.
   const userId = session?.user?.id;
+  const createdAt = session?.user?.created_at;
   const storageKey = userId ? `${ONBOARDING_KEY}:${userId}` : null;
+  const isFreshAccount =
+    !!createdAt && Date.now() - new Date(createdAt).getTime() < 15 * 60 * 1000;
 
   useEffect(() => {
     if (!storageKey) { setChecked(false); setVisible(false); return; }
     AsyncStorage.getItem(storageKey).then((val) => {
-      if (!val) {
+      if (!val && isFreshAccount) {
         setVisible(true);
         setStep(0);
         Animated.timing(fadeIn, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+      } else if (!val) {
+        AsyncStorage.setItem(storageKey, 'completed');
       }
       setChecked(true);
     });
@@ -290,7 +297,7 @@ export function OnboardingModal() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   backdrop: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     zIndex: 1,
@@ -453,4 +460,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: spacing.xs,
   },
-});
+}));
