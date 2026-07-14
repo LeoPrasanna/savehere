@@ -14,9 +14,10 @@ import { colors, spacing, font, radius, gradients, shadow } from '../../../const
 
 type Phase = 'loading' | 'ready' | 'exercise' | 'rest' | 'complete';
 
+// Distinct glyph per muscle group — keep in sync with app/workout/[reelId].tsx.
 const MUSCLE_ICON: Record<string, string> = {
-  chest: 'fitness', legs: 'fitness', back: 'fitness', core: 'motivation',
-  shoulders: 'fitness', arms: 'fitness', full_body: 'analyze', cardio: 'cardio',
+  chest: 'fitness', legs: 'footsteps', back: 'body', core: 'flame',
+  shoulders: 'muscle', arms: 'muscle', full_body: 'body', cardio: 'cardio',
 };
 
 const MOTIVATION: string[] = [

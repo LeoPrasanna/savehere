@@ -9,9 +9,10 @@ import { Pressable } from '../../components/Pressable';
 import { Disclaimer } from '../../components/Disclaimer';
 import { colors, spacing, font, radius, gradients, shadow } from '../../constants/theme';
 
+// Distinct glyph per muscle group (was: dumbbell for almost everything).
 const MUSCLE_ICON: Record<string, string> = {
-  chest: 'fitness', legs: 'fitness', back: 'fitness', core: 'motivation',
-  shoulders: 'fitness', arms: 'fitness', full_body: 'analyze', cardio: 'cardio',
+  chest: 'fitness', legs: 'footsteps', back: 'body', core: 'flame',
+  shoulders: 'muscle', arms: 'muscle', full_body: 'body', cardio: 'cardio',
 };
 
 const TYPE_COLOR: Record<string, string> = {

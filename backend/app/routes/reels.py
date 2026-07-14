@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
 from app.database import get_db, SessionLocal, ReelDB, ExtractionCacheDB, TaskDB, WorkoutExerciseDB
-from app.models.reel import ReelSaveRequest, ReelNotesRequest, ReelCategoryRequest, ReelResponse, ReelListResponse
+from app.routes.models.reel import ReelSaveRequest, ReelNotesRequest, ReelCategoryRequest, ReelResponse, ReelListResponse
 from app.services import extractor, transcriber, summarizer
 from app.services import search as smart_search
 from app.ratelimit import rate_limit
@@ -314,18 +314,12 @@ def get_reel(reel_id: str, user: AuthUser = Depends(get_current_user), db: Sessi
     return _to_response(reel)
 
 
-RESUMMARIZE_LIMIT = 3
-
-
 @router.post("/{reel_id}/resummarize", response_model=ReelResponse, dependencies=[Depends(rate_limit(10, 60, "resummarize"))])
 def resummarize_reel(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    """No per-reel retry cap: every call charges the per-user daily AI quota
+    (the real cost ceiling), and the per-IP burst guard stops loops. The old
+    3-per-reel limit was a redundant second guard from before the quota existed."""
     reel = _get_owned_reel_or_404(reel_id, user, db)
-
-    if reel.summarize_count >= RESUMMARIZE_LIMIT:
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Re-summarize limit of {RESUMMARIZE_LIMIT} reached for this reel."
-        )
 
     # Combine the extracted text with the user's notes so notes they deliberately
     # add always shape the re-summary — raw_text alone used to shadow them entirely,
