@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from app.database import get_db, ReelDB, WorkoutExerciseDB, TaskDB
-from app.models.workout import (
+from app.routes.models.workout import (
     WorkoutPlanResponse, WorkoutExerciseResponse,
     UpdateExerciseRequest, TaskResponse, TaskListResponse,
     ToggleTaskRequest, UpdateTaskRequest, CreateTaskRequest,

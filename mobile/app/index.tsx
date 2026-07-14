@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, FlatList, StyleSheet, ActivityIndicator,
   RefreshControl, TextInput, useWindowDimensions, Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -170,26 +171,23 @@ export default function HomeScreen() {
               </Text>
             </View>
           </Pressable>
-          <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)} scaleTo={0.9}>
-            <Icon name="menu" size={20} color={colors.textPrimary} />
-          </Pressable>
-        </MotiView>
-
-        <View style={styles.search}>
-          <Search size={15} color={colors.textTertiary} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search your saves…"
-            placeholderTextColor={colors.textTertiary}
-            value={search}
-            onChangeText={setSearch}
-          />
-          {search.length > 0 && (
-            <Pressable onPress={() => setSearch('')} hitSlop={8}>
-              <XCircle size={15} color={colors.textTertiary} />
+          {/* Save is the primary action — it lives top-right now that search
+              docks at the bottom (iOS pattern) and the FAB is gone. */}
+          <View style={styles.headerActions}>
+            <Pressable style={styles.saveBtnWrap} onPress={() => router.push('/save')} scaleTo={0.9}>
+              <LinearGradient
+                colors={gradients.primary}
+                start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+                style={styles.saveBtn}
+              >
+                <Plus size={20} color="#FFF" />
+              </LinearGradient>
             </Pressable>
-          )}
-        </View>
+            <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)} scaleTo={0.9}>
+              <Icon name="menu" size={20} color={colors.textPrimary} />
+            </Pressable>
+          </View>
+        </MotiView>
       </View>
 
       {/* ── Category chips ──────────────────────────── */}
@@ -216,7 +214,7 @@ export default function HomeScreen() {
                 ]}
                 onPress={() => onCategoryChange(item)}
               >
-                <Icon name={meta.icon} size={12} color={active ? meta.color : colors.textTertiary} />
+                <Icon name={meta.icon} size={12} color={active ? meta.color : colors.textTertiary} emphasis={active} />
                 <Text style={[styles.categoryText, active && { color: meta.color, fontWeight: '700' }]}>
                   {item}
                 </Text>
@@ -326,14 +324,30 @@ export default function HomeScreen() {
         </>
       )}
 
-      {/* ── Save FAB ─────────────────────────────────── */}
-      <View style={[styles.fab, { bottom: insets.bottom + spacing.lg }]}>
-        <Pressable onPress={() => router.push('/save')} scaleTo={0.92}>
-          <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.fabInner}>
-            <Plus size={28} color="#FFF" />
-          </LinearGradient>
-        </Pressable>
-      </View>
+      {/* ── Bottom search bar — iOS pattern (Safari/App Store) ── */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.bottomBarWrap}
+        pointerEvents="box-none"
+      >
+        <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.sm }]}>
+          <View style={styles.search}>
+            <Search size={15} color={colors.textTertiary} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search your saves…"
+              placeholderTextColor={colors.textTertiary}
+              value={search}
+              onChangeText={setSearch}
+            />
+            {search.length > 0 && (
+              <Pressable onPress={() => setSearch('')} hitSlop={8}>
+                <XCircle size={15} color={colors.textTertiary} />
+              </Pressable>
+            )}
+          </View>
+        </View>
+      </KeyboardAvoidingView>
 
       <ProfilePanel visible={menuOpen} onClose={() => setMenuOpen(false)} reels={reels} total={total} />
     </View>
@@ -364,6 +378,12 @@ const styles = themed(() => StyleSheet.create({
   },
   headerScrolled: { borderBottomWidth: 1, borderBottomColor: colors.border },
   headerTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  saveBtnWrap: { borderRadius: radius.full, ...shadow.glow },
+  saveBtn: {
+    width: 38, height: 38, borderRadius: radius.full,
+    alignItems: 'center', justifyContent: 'center',
+  },
   menuBtn: {
     width: 38, height: 38, borderRadius: radius.full,
     backgroundColor: colors.card,
@@ -378,6 +398,16 @@ const styles = themed(() => StyleSheet.create({
   brand: { color: colors.textPrimary, fontFamily: typeface.display, fontSize: font.xxl, fontWeight: '800', letterSpacing: -0.7, lineHeight: 32 },
   brandSub: { color: colors.textTertiary, fontSize: font.xs, fontWeight: '500', marginTop: -2 },
 
+  // Docked at the bottom — consistent with iOS search placement (Safari, App
+  // Store). The wrap is pointerEvents:box-none so the grid scrolls beneath it.
+  bottomBarWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
+  bottomBar: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+  },
   search: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -385,9 +415,9 @@ const styles = themed(() => StyleSheet.create({
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: radius.md,
+    borderRadius: radius.full,
     paddingHorizontal: spacing.md,
-    height: 42,
+    height: 44,
   },
   searchInput: { flex: 1, color: colors.textPrimary, fontSize: font.md },
 
@@ -408,7 +438,8 @@ const styles = themed(() => StyleSheet.create({
 
   grid: { flex: 1 },
   ghost: { flex: 1 },
-  list: { padding: spacing.md, paddingTop: spacing.xs, paddingBottom: spacing.xxl },
+  // Extra bottom padding keeps the last row + disclaimer clear of the docked search bar.
+  list: { padding: spacing.md, paddingTop: spacing.xs, paddingBottom: 120 },
   disclaimer: { color: colors.textSecondary, fontSize: 12, lineHeight: 18, textAlign: 'center', paddingHorizontal: spacing.md, paddingTop: spacing.lg },
   row: { gap: spacing.sm },
   loader: { marginTop: spacing.xxl },
@@ -429,17 +460,4 @@ const styles = themed(() => StyleSheet.create({
     borderRadius: radius.full, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm + 4,
   },
   emptyCtaText: { color: '#FFF', fontSize: font.sm, fontWeight: '700' },
-
-  fab: {
-    position: 'absolute',
-    right: spacing.lg,
-    width: 58, height: 58,
-    borderRadius: radius.full,
-    ...shadow.glow,
-  },
-  fabInner: {
-    width: 58, height: 58,
-    borderRadius: radius.full,
-    alignItems: 'center', justifyContent: 'center',
-  },
 }));

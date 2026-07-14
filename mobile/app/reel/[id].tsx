@@ -52,8 +52,6 @@ export default function ReelDetailScreen() {
   const [savingCategory, setSavingCategory] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const RESUMMARIZE_LIMIT = 3;
-
   // Load the reel; any failure (offline, server down) is caught and shown as a
   // retryable message instead of bubbling up as an uncaught "Failed to fetch".
   const loadReel = useCallback(() => {
@@ -105,7 +103,7 @@ export default function ReelDetailScreen() {
   };
 
   const handleResummarize = async () => {
-    if (!reel || reel.summarize_count >= RESUMMARIZE_LIMIT) return;
+    if (!reel) return;
     setResummarizing(true);
     try {
       // Flush any just-typed note first — the 1s auto-save debounce may not have
@@ -237,7 +235,6 @@ export default function ReelDetailScreen() {
 
   const platform = platformMeta[reel.platform] ?? platformMeta.unknown;
   const cat = categoryFor(reel.category);
-  const limitReached = reel.summarize_count >= RESUMMARIZE_LIMIT;
   const isSummarizing = (reel.summary_status === 'pending' && !pendingStalled) || summarizing;
   const isCooking = (reel.category || '').toLowerCase() === 'cooking';
   const loginWalled = reel.platform === 'linkedin' || reel.platform === 'facebook';
@@ -312,24 +309,21 @@ export default function ReelDetailScreen() {
           </View>
           {/* Only offer Re-summarize when there's no summary yet — once it's
               generated, the header stays clean (it can still be regenerated only
-              when empty, e.g. after pasting the post text into Notes). */}
+              when empty, e.g. after pasting the post text into Notes). No per-reel
+              retry cap: each run draws from the daily AI quota instead. */}
           {reel.summary.length === 0 && !isSummarizing && (
             <Pressable
-              style={[styles.pill, limitReached && styles.pillDisabled]}
+              style={styles.pill}
               onPress={handleResummarize}
-              disabled={limitReached || resummarizing}
+              disabled={resummarizing}
             >
               {resummarizing ? (
                 <ActivityIndicator size="small" color={colors.accent} />
               ) : (
-                <Ionicons
-                  name={limitReached ? 'lock-closed' : 'refresh'}
-                  size={13}
-                  color={limitReached ? colors.textTertiary : colors.accent}
-                />
+                <Ionicons name="refresh" size={13} color={colors.accent} />
               )}
-              <Text style={[styles.pillText, limitReached && styles.pillTextDisabled]}>
-                {resummarizing ? 'Re-summarizing…' : limitReached ? 'Limit reached' : `Re-summarize (${RESUMMARIZE_LIMIT - reel.summarize_count} left)`}
+              <Text style={styles.pillText}>
+                {resummarizing ? 'Re-summarizing…' : 'Re-summarize'}
               </Text>
             </Pressable>
           )}
@@ -366,6 +360,7 @@ export default function ReelDetailScreen() {
               {summarizing ? <ActivityIndicator size="small" color={colors.accent} /> : <Ionicons name="refresh" size={13} color={colors.accent} />}
               <Text style={styles.pillText}>{summarizing ? 'Summarizing…' : 'Try again'}</Text>
             </Pressable>
+            <Text style={styles.quotaNote}>Uses 1 AI action from your daily quota — your tier sets the cap.</Text>
           </View>
         ) : (
           <View style={styles.emptySummary}>
@@ -380,6 +375,7 @@ export default function ReelDetailScreen() {
                 ? 'Paste the post text into Notes below, then tap Re-summarize to generate a summary.'
                 : 'This reel uses on-screen text or visuals with no speech or description — we can\'t extract that yet. Paste the text in Notes and tap Re-summarize.'}
             </Text>
+            <Text style={styles.quotaNote}>Each re-summarize uses 1 AI action from your daily quota — your tier sets the cap.</Text>
           </View>
         )}
       </View>
@@ -573,7 +569,7 @@ export default function ReelDetailScreen() {
                     style={[styles.catOption, active && { backgroundColor: m.color, borderColor: m.color }]}
                     onPress={() => handleSelectCategory(c)}
                   >
-                    <Icon name={m.icon} size={15} color={active ? '#FFF' : m.color} />
+                    <Icon name={m.icon} size={15} color={active ? '#FFF' : m.color} emphasis={active} />
                     <Text style={[styles.catOptionText, active && styles.catOptionTextActive]}>{c}</Text>
                   </Pressable>
                 );
@@ -677,14 +673,13 @@ const styles = themed(() => StyleSheet.create({
     paddingHorizontal: spacing.sm + 2, paddingVertical: 6,
     borderRadius: radius.full, borderWidth: 1, borderColor: colors.accent,
   },
-  pillDisabled: { borderColor: colors.border },
   pillText: { color: colors.accent, fontSize: font.xs, fontWeight: '700' },
-  pillTextDisabled: { color: colors.textTertiary },
 
   emptySummary: { alignItems: 'center', paddingVertical: spacing.md, gap: spacing.xs },
   emptyEmoji: { fontSize: 30, marginBottom: spacing.xs },
   emptyTitle: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '700', textAlign: 'center' },
   emptyHint: { color: colors.textSecondary, fontSize: font.xs, lineHeight: 18, textAlign: 'center' },
+  quotaNote: { color: colors.textTertiary, fontSize: font.xs, lineHeight: 16, textAlign: 'center', marginTop: spacing.xs },
 
   bulletRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },
   bulletDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent, marginTop: 7 },

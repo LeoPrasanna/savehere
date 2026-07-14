@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.database import get_db, ReelDB
-from app.models.reel import ReelResponse
+from app.routes.models.reel import ReelResponse
 from app.services import librarian
 from app.routes.reels import _to_response
 from app.ratelimit import rate_limit

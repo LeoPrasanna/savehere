@@ -51,7 +51,7 @@ mobile/    Expo SDK 56 + expo-router + React Native (dev on web).
 
 - **Save pipeline**: yt-dlp + caption/description fallback + extraction cache. Card persists instantly in ~2 s; AI summary runs async in a BackgroundTask (`summary_status`: `pending → ready/skipped/failed`). Detail screen polls every 2.5 s.
 - **Library**: paginated (24/page, infinite scroll via FlatList `onEndReached`), full `total` count, offline banner (web `online`/`offline` events + error state retry).
-- Per-reel **AI caps**: tasks generated **once** then manual add/edit/delete; workout ×3; resummarize ×3.
+- Per-reel **AI caps**: tasks generated **once** then manual add/edit/delete; workout ×3. Resummarize is **uncapped per reel** (2026-07-14) — every run charges the per-user daily AI quota, which is the real ceiling; the per-IP burst guard stops loops. The UI notes the quota cost next to the button.
 - **Ask your library** — retrieval-based (only top-15 relevant saves sent to Claude).
 - **AI outputs show dual units**: °F/°C, lb/g, cup/ml across all 4 prompts (summary, tasks/recipe, workout).
 - **Smart search** (server-side, `app/services/search.py`): tokenized query + stopword stripping, **category** matching, synonym groups (gym ↔ fitness, recipe ↔ cooking), prefix type-ahead, relevance ranking. Lexical on purpose — search fires per keystroke, a Claude call per search would drain the quota. Embeddings = the semantic upgrade path.

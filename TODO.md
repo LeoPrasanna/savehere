@@ -156,7 +156,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 - [x] YouTube auto-caption extraction (VTT, all languages)
 - [x] Claude Haiku summarization with quality prompt
 - [x] Multi-language caption and summary support
-- [x] Re-summarize (max 3 per reel, refuses empty result)
+- [x] Re-summarize (refuses empty result; per-reel 3-try cap removed 2026-07-14 — the per-user daily AI quota is the cost ceiling, UI shows a quota notice)
 - [x] Auto-saved personal notes (1-second debounce)
 - [x] Dark minimal UI with Expo Router
 - [x] 2-column responsive grid home screen
