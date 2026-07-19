@@ -5,6 +5,7 @@ Used as a FastAPI dependency on cost-sensitive endpoints. It's process-local —
 fine for a single uvicorn instance. For multiple instances/workers in production,
 swap the store for Redis (the dependency interface stays the same).
 """
+import os
 import time
 import threading
 from fastapi import Request, HTTPException
@@ -12,12 +13,35 @@ from fastapi import Request, HTTPException
 _store: dict[str, list[float]] = {}
 _lock = threading.Lock()
 
+# How many trusted reverse proxies sit in front of the app.
+#   0 = no proxy (local dev, or the app is exposed directly) — never trust XFF.
+#   1 = one platform load balancer (Render / Railway) — the default.
+#   2 = e.g. Cloudflare in front of the platform LB.
+# Anything a CLIENT puts in X-Forwarded-For is appended to from the left, so only
+# the entries our own proxies appended (counted from the RIGHT) can be trusted.
+_TRUSTED_PROXY_HOPS = int(os.getenv("TRUSTED_PROXY_HOPS", "1"))
+
 
 def _client_ip(request: Request) -> str:
-    # Behind a proxy (Railway/Render/etc.) the real client is in X-Forwarded-For.
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
+    """The caller's IP, resolved so a client can't forge it.
+
+    X-Forwarded-For is a client-appendable list: each proxy APPENDS the peer it
+    received the connection from, so the header looks like
+    `<anything the client made up>, <real client>, <proxy1>, ...`.
+    Taking the leftmost entry (the old behavior) let any caller send
+    `X-Forwarded-For: <random>` and land in a fresh rate-limit bucket on every
+    request, nullifying the limiter. We instead index from the right, past the
+    hops we actually trust — that entry was written by our own proxy and cannot
+    be spoofed. Falls back to the socket peer whenever the header is absent,
+    shorter than expected (a forged short list can't gain anything), or when no
+    proxy is configured.
+    """
+    if _TRUSTED_PROXY_HOPS > 0:
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            parts = [p.strip() for p in xff.split(",") if p.strip()]
+            if len(parts) >= _TRUSTED_PROXY_HOPS:
+                return parts[-_TRUSTED_PROXY_HOPS]
     return request.client.host if request.client else "unknown"
 
 
