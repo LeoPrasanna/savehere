@@ -36,9 +36,31 @@ def test_separate_ips_have_separate_budgets():
         dep(_Req(host="10.0.0.1"))  # first IP is now over its limit
 
 
-def test_x_forwarded_for_is_used_when_present():
+def test_x_forwarded_for_identifies_the_client_behind_a_proxy():
     dep = rate_limit(1, 60, "t_xff")
+    # One trusted hop: our proxy APPENDS the real peer, so it is the last entry.
     dep(_Req(host="127.0.0.1", xff="203.0.113.5, 10.0.0.1"))
     with pytest.raises(HTTPException):
-        # Same forwarded client IP → counted together despite proxy host.
-        dep(_Req(host="127.0.0.1", xff="203.0.113.5"))
+        # Same real client (10.0.0.1) → counted together despite the proxy host
+        # and despite a different forged prefix.
+        dep(_Req(host="127.0.0.1", xff="198.51.100.9, 10.0.0.1"))
+
+
+def test_forged_x_forwarded_for_cannot_buy_a_fresh_bucket():
+    """The security property: a caller who makes up X-Forwarded-For values must
+    NOT escape their limit. Our proxy appends the real peer on the right, so
+    everything the client invented to the left of it is ignored."""
+    dep = rate_limit(1, 60, "t_xff_spoof")
+    dep(_Req(host="127.0.0.1", xff="1.2.3.4, 10.0.0.7"))
+    with pytest.raises(HTTPException):
+        # Same real client, brand-new invented prefix — must still be blocked.
+        dep(_Req(host="127.0.0.1", xff="9.9.9.9, 10.0.0.7"))
+
+
+def test_untrusted_entries_never_shadow_the_real_peer():
+    """Two genuinely different clients must keep separate budgets even when both
+    forge the same leading value."""
+    dep = rate_limit(1, 60, "t_xff_distinct")
+    dep(_Req(host="127.0.0.1", xff="203.0.113.5, 10.0.0.1"))
+    # Different real client (right-most differs) → its own budget.
+    dep(_Req(host="127.0.0.1", xff="203.0.113.5, 10.0.0.2"))

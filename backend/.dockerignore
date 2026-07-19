@@ -1,0 +1,45 @@
+# Build context excludes. Keeps secrets, local data and build junk OUT of the
+# image layers — anything copied in is recoverable from the image even if a later
+# layer deletes it, so this file is a security control, not just a size tweak.
+
+# Secrets — never bake a key into an image.
+.env
+.env.*
+!.env.example
+
+# Local data — SQLite is dev-only; production uses DATABASE_URL (Postgres).
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# VCS / CI
+.git
+.gitignore
+.github
+
+# Python build + cache artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Tests and local dev entrypoints aren't needed in the runtime image.
+tests/
+conftest.py
+dev_server.py
+
+# Editor / OS noise
+.vscode/
+.idea/
+.DS_Store
