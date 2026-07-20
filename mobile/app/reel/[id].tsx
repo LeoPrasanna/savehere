@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from '../../components/Icon';
-import { api, Reel, Task, TaskListResponse, ItineraryResponse, thumbUrl } from '../../services/api';
+import { api, Reel, Task, TaskListResponse, ItineraryResponse, Usage, thumbUrl } from '../../services/api';
 import { openSourceLink } from '../../services/openLink';
 import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
@@ -35,6 +35,10 @@ export default function ReelDetailScreen() {
   const [itin, setItin] = useState<ItineraryResponse | null>(null);
   const [generatingItin, setGeneratingItin] = useState(false);
   const [itinError, setItinError] = useState('');
+  // Drives the locked-Pro button states. The server enforces the gates with
+  // 403s regardless — this only decides what the button LOOKS like, so a failed
+  // fetch just falls back to the normal (unlocked) rendering.
+  const [usage, setUsage] = useState<Usage | null>(null);
   const [categoryModal, setCategoryModal] = useState(false);
   // Shown before the FIRST workout generation: sets expectations that the plan
   // is a generic template, not personalized coaching.
@@ -72,6 +76,7 @@ export default function ReelDetailScreen() {
     api.getTasks(id).then(setTaskList).catch(() => {});
     api.getWorkout(id).then((plan) => setHasWorkout(plan.exercises.length > 0)).catch(() => {});
     api.getItinerary(id).then(setItin).catch(() => {});
+    api.getUsage().then(setUsage).catch(() => {});
   }, [id]);
 
   // The summary is generated in the background after save, so poll until it lands.
@@ -286,6 +291,13 @@ export default function ReelDetailScreen() {
   const showTasksAction = actionableCategory && reel.category !== 'fitness' && !isTravel && !aiTasksUsed;
   const showActionsSection = (reel.category === 'fitness' || showTasksAction) && !isSensitive;
   const itinerary = itin?.itinerary ?? null;
+  // Pro locks. Absent `features` (older server / failed fetch) = treat as
+  // unlocked; the server's 403 remains the real gate either way. Cooking tasks
+  // are the Recipe feature and are never gated.
+  const feat = usage?.features;
+  const itineraryLocked = feat ? !feat.itinerary : false;
+  const tasksLocked = feat && !isCooking ? !feat.tasks : false;
+  const PRO_HINT = 'Available on Pro. Your free plan keeps saves, summaries, recipes and workouts.';
   const itinRegensLeft = itin?.regenerations_left ?? 3;
   const showItinerarySection = isTravel && !isSensitive;
 
@@ -461,7 +473,18 @@ export default function ReelDetailScreen() {
             <Text style={styles.cardTitle}>Trip Itinerary</Text>
           </View>
 
-          {!itinerary && (
+          {!itinerary && itineraryLocked && (
+            <>
+              <View style={styles.lockedBtn}>
+                <Icon name="lock-closed" size={18} color={colors.textTertiary} />
+                <Text style={styles.lockedBtnText}>Create Itinerary</Text>
+                <View style={styles.proTag}><Text style={styles.proTagText}>PRO</Text></View>
+              </View>
+              <Text style={styles.actionHint}>{PRO_HINT}</Text>
+            </>
+          )}
+
+          {!itinerary && !itineraryLocked && (
             <>
               <Pressable
                 style={styles.actionBtnWrap}
@@ -565,7 +588,15 @@ export default function ReelDetailScreen() {
               </Pressable>
             )}
 
-            {showTasksAction && (
+            {showTasksAction && tasksLocked && (
+              <View style={styles.lockedBtn}>
+                <Icon name="lock-closed" size={18} color={colors.textTertiary} />
+                <Text style={styles.lockedBtnText}>Get Action Steps</Text>
+                <View style={styles.proTag}><Text style={styles.proTagText}>PRO</Text></View>
+              </View>
+            )}
+
+            {showTasksAction && !tasksLocked && (
               <Pressable style={styles.actionBtnWrap} onPress={handleGenerateTasks} disabled={generatingTasks}>
                 <LinearGradient colors={gradients.cool} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
                   {generatingTasks
@@ -579,7 +610,9 @@ export default function ReelDetailScreen() {
             )}
           </View>
           {showTasksAction && (
-            <Text style={styles.actionHint}>Generated once with AI — after that you can add, edit, or delete by hand.</Text>
+            <Text style={styles.actionHint}>
+              {tasksLocked ? PRO_HINT : 'Generated once with AI — after that you can add, edit, or delete by hand.'}
+            </Text>
           )}
           {taskError ? (
             <View style={styles.inlineError}>
@@ -839,6 +872,22 @@ const styles = themed(() => StyleSheet.create({
     padding: spacing.sm, marginTop: spacing.xs,
   },
   inlineErrorText: { color: colors.danger, fontSize: font.xs, lineHeight: 16, flex: 1 },
+
+  // Locked (Pro) variant of an action button: unmistakably inert — no gradient,
+  // dashed border, muted text — so it reads as "not yet yours", not "broken".
+  lockedBtn: {
+    flex: 1, minWidth: 140,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    borderRadius: radius.md, paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
+  },
+  lockedBtnText: { color: colors.textSecondary, fontSize: font.sm, fontWeight: '800' },
+  proTag: {
+    backgroundColor: colors.accent + '22', borderRadius: radius.sm,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  proTagText: { color: colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
 
   itinTripName: {
     color: colors.textPrimary, fontSize: font.md, fontWeight: '800',

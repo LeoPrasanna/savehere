@@ -261,7 +261,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                     <Icon name="bookmark" size={13} color={colors.accentLight} />
                     <Text style={styles.planText}>
                       Saves used: <Text style={styles.planStrong}>{usage.saves.used} of {usage.saves.limit}</Text>
-                      {'  ·  Pro removes the caps'}
+                      {'  ·  A Pro subscription unlocks more'}
                     </Text>
                   </View>
                 )}
@@ -284,7 +284,6 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
           <NavRow icon="create" label="Edit profile" path="/profile" delay={800} />
           <AppearanceRow delay={900} />
           <Row icon="bell" label="Notifications" delay={1000} />
-          <Row icon="download" label="Export data" delay={1100} />
         </View>
 
         {/* Danger zone */}

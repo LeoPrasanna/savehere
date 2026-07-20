@@ -91,7 +91,7 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
                 status_code=403,
                 detail=(
                     f"Your free library is full ({ent.save_limit} saves). "
-                    "Delete a save to make room — or Pro removes the cap."
+                    "Delete a save to make room — or a Pro subscription unlocks more."
                 ),
             )
 
