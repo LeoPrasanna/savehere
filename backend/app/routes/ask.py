@@ -58,7 +58,7 @@ def ask(body: AskRequest, user: AuthUser = Depends(get_current_user), db: Sessio
     _require_ask(user, db)
 
     # Per-user daily AI budget (shared across all AI actions). Charged before the call.
-    charge_ai_action(db, user)
+    charge_ai_action(db, user, action="ask", label=q)
 
     reels = (
         db.query(ReelDB)
@@ -95,7 +95,7 @@ def ask_stream(body: AskRequest, user: AuthUser = Depends(get_current_user), db:
 
     # Charged before streaming starts — a quota 429 is returned as JSON, not
     # halfway through a half-written answer.
-    charge_ai_action(db, user)
+    charge_ai_action(db, user, action="ask", label=q)
 
     reels = (
         db.query(ReelDB)

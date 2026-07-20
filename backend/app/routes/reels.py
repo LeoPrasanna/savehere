@@ -112,7 +112,7 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
         reel = _reel_from_info(user.id, canonical_url, info)
         _apply_duration_guard(reel)
         should_summarize = reel.summary_status == "pending"
-        if should_summarize and not _try_charge(db, user):
+        if should_summarize and not _try_charge(db, user, reel.title or canonical_url):
             reel.summary_status = "failed"   # over budget — retryable after reset
             should_summarize = False
         db.add(reel)
@@ -185,10 +185,10 @@ def _apply_duration_guard(reel: ReelDB) -> None:
         reel.raw_text = None
 
 
-def _try_charge(db: Session, user: AuthUser) -> bool:
+def _try_charge(db: Session, user: AuthUser, label: str | None = None) -> bool:
     """Charge one AI action; False when today's budget is spent (never raises)."""
     try:
-        charge_ai_action(db, user)
+        charge_ai_action(db, user, action="summary", label=label)
         return True
     except HTTPException as e:
         if e.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
@@ -238,7 +238,7 @@ def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
             logger.info(f"[EXTRACT-BG] {reel_id} filled — no summary needed")
             return
 
-        if user is not None and not _try_charge(db, user):
+        if user is not None and not _try_charge(db, user, reel.title or reel.url):
             reel.summary_status = "failed"
             db.commit()
             return
@@ -334,7 +334,7 @@ def resummarize_reel(reel_id: str, user: AuthUser = Depends(get_current_user), d
         )
 
     # Per-user daily AI budget (shared across all AI actions). Charged before the call.
-    charge_ai_action(db, user)
+    charge_ai_action(db, user, action="resummarize", label=reel.title or reel.url)
 
     ai = summarizer.summarize(
         platform=reel.platform,
@@ -394,7 +394,7 @@ def summarize_now(reel_id: str, user: AuthUser = Depends(get_current_user), db: 
 
     # Per-user daily AI budget — only charged when we actually run the summary (a
     # reel already 'ready' returned above without spending a unit).
-    charge_ai_action(db, user)
+    charge_ai_action(db, user, action="summary", label=reel.title or reel.url)
 
     _summarize_reel(reel.id)        # own session; commits the result
     db.refresh(reel)                # pull the freshly-committed row into this session

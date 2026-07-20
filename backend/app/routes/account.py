@@ -6,9 +6,9 @@ import logging
 from datetime import datetime, timedelta
 
 from app.config import settings
-from app.database import get_db, ReelDB, TaskDB, WorkoutExerciseDB, ProfileDB
+from app.database import get_db, ReelDB, TaskDB, WorkoutExerciseDB, ProfileDB, AiActionLogDB
 from app.auth import get_current_user, AuthUser
-from app.quota import usage_today
+from app.quota import usage_today, _utc_today
 from app.entitlements import entitlements_for
 
 logger = logging.getLogger(__name__)
@@ -77,6 +77,52 @@ def get_usage(user: AuthUser = Depends(get_current_user), db: Session = Depends(
     }
 
 
+# Human-readable labels for the action codes written by charge_ai_action.
+_ACTION_LABELS = {
+    "summary": "Summarised",
+    "resummarize": "Re-summarised",
+    "tasks": "Action steps",
+    "recipe": "Recipe",
+    "workout": "Workout",
+    "itinerary": "Trip itinerary",
+    "ask": "Asked your library",
+    "ai": "AI action",
+}
+
+
+@router.get("/usage/log")
+def get_usage_log(user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    """What today's AI actions were actually spent on — the drill-down behind
+    the "N of M left" meter. Read-only; never charges.
+
+    Short-lived by design (see AI_LOG_RETENTION_DAYS): this is a UI convenience,
+    not an audit trail. Actions charged before the log existed simply won't
+    appear, so `logged` can be < the meter's `used` — the client should say
+    "recent" rather than claim completeness."""
+    day = _utc_today()
+    rows = (
+        db.query(AiActionLogDB)
+        .filter(AiActionLogDB.user_id == user.id, AiActionLogDB.day == day)
+        .order_by(AiActionLogDB.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    return {
+        "day": day.isoformat(),
+        "used": usage_today(db, user.id),          # the meter's number
+        "logged": len(rows),                        # how many we can describe
+        "items": [
+            {
+                "action": r.action,
+                "action_label": _ACTION_LABELS.get(r.action, "AI action"),
+                "label": r.label,
+                "at": (r.created_at.isoformat() + "Z") if r.created_at else None,
+            }
+            for r in rows
+        ],
+    }
+
+
 # Registered on both "" and "/" so DELETE /api/account works without a 307
 # redirect (some HTTP clients drop the Authorization header on redirects).
 @router.delete("")
@@ -107,6 +153,9 @@ def delete_account(user: AuthUser = Depends(get_current_user), db: Session = Dep
         .filter(ReelDB.user_id == user_id)
         .delete(synchronize_session=False)
     )
+    # The AI action log is per-user descriptive data — goes with the account.
+    # (ai_usage counters stay: deleting them would reset the daily quota.)
+    db.query(AiActionLogDB).filter(AiActionLogDB.user_id == user_id).delete(synchronize_session=False)
     # Profile (trial clock) goes with the account. trial_grants stays: it holds
     # only a hash of the normalized email and exists precisely so that deleting
     # the account can't mint a fresh trial (fraud-prevention, no readable PII).

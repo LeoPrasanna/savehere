@@ -157,6 +157,25 @@ class AiUsageDB(Base):
     count = Column(Integer, nullable=False, default=0)
 
 
+class AiActionLogDB(Base):
+    """One row per successfully charged AI action — the human-readable companion
+    to `ai_usage`'s bare counter, so "95 of 100 left" can be expanded into WHAT
+    those actions were.
+
+    Deliberately short-lived: rows are pruned past `AI_LOG_RETENTION_DAYS` (see
+    app/quota.py). This is a UI convenience, not an audit trail — never make
+    anything depend on old rows being here. Written best-effort AFTER the charge
+    succeeds, so a logging failure can never block or refund an AI action."""
+    __tablename__ = "ai_action_log"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, nullable=False, index=True)
+    day = Column(Date, nullable=False, index=True)      # UTC day, matches ai_usage
+    action = Column(String, nullable=False)             # summary | tasks | workout | itinerary | ask …
+    label = Column(String, nullable=True)               # reel title / question snippet (truncated)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -182,6 +201,7 @@ def create_tables():
             "ALTER TABLE reels ADD COLUMN itinerary JSON",
             "ALTER TABLE tasks ADD COLUMN kind TEXT DEFAULT 'task'",
             "ALTER TABLE tasks ADD COLUMN source TEXT DEFAULT 'content'",
+            "CREATE INDEX IF NOT EXISTS ix_ai_action_log_user_day ON ai_action_log (user_id, day)",
         ]:
             try:
                 conn.execute(text(stmt))

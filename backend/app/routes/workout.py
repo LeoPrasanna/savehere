@@ -138,7 +138,7 @@ def generate_workout(reel_id: str, user: AuthUser = Depends(get_current_user), d
 
     # Per-user daily AI budget (shared across all AI actions). Charged after the
     # free checks, before the Claude call.
-    charge_ai_action(db, user)
+    charge_ai_action(db, user, action="workout", label=reel.title or reel.url)
 
     result = workout_extractor.extract_workout(
         platform=reel.platform,
@@ -270,7 +270,7 @@ def generate_itinerary(reel_id: str, user: AuthUser = Depends(get_current_user),
 
     # Per-user daily AI budget (shared across all AI actions). Charged after the
     # free checks, before the Claude call.
-    charge_ai_action(db, user)
+    charge_ai_action(db, user, action="itinerary", label=reel.title or reel.url)
 
     result = workout_extractor.extract_itinerary(
         platform=reel.platform,
@@ -326,7 +326,8 @@ def generate_tasks(reel_id: str, user: AuthUser = Depends(get_current_user), db:
         )
 
     # Per-user daily AI budget (shared across all AI actions). Charged before the call.
-    charge_ai_action(db, user)
+    charge_ai_action(db, user, action="recipe" if is_cooking else "tasks",
+                     label=reel.title or reel.url)
 
     result = workout_extractor.extract_tasks(
         platform=reel.platform,
