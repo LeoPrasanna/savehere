@@ -276,11 +276,15 @@ export default function ReelDetailScreen() {
   // reel (e.g. a DIY save stuck in "other" → tech/education) re-enables it.
   const NO_ACTION_CATEGORIES = new Set(['entertainment', 'other', 'general', '']);
   const actionableCategory = !NO_ACTION_CATEGORIES.has((reel.category || '').toLowerCase());
-  const showTasksAction = actionableCategory && reel.category !== 'fitness' && !aiTasksUsed;
-  const showActionsSection = (reel.category === 'fitness' || showTasksAction) && !isSensitive;
   // Trip Itinerary — travel reels only (server enforces the category with a 422
   // and Pro-only with a 403; this just decides what to render).
   const isTravel = (reel.category || '').toLowerCase() === 'travel';
+  // A category with its own specialised generator does NOT also get the generic
+  // "Get Action Steps": fitness → workout, travel → itinerary. Two AI buttons on
+  // one card means two charges for overlapping output, and generic steps on a
+  // trip reel ("Research flights") are strictly worse than the day plan.
+  const showTasksAction = actionableCategory && reel.category !== 'fitness' && !isTravel && !aiTasksUsed;
+  const showActionsSection = (reel.category === 'fitness' || showTasksAction) && !isSensitive;
   const itinerary = itin?.itinerary ?? null;
   const itinRegensLeft = itin?.regenerations_left ?? 3;
   const showItinerarySection = isTravel && !isSensitive;
