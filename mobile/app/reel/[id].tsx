@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from '../../components/Icon';
-import { api, Reel, Task, TaskListResponse, thumbUrl } from '../../services/api';
+import { api, Reel, Task, TaskListResponse, ItineraryResponse, thumbUrl } from '../../services/api';
 import { openSourceLink } from '../../services/openLink';
 import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
@@ -32,6 +32,9 @@ export default function ReelDetailScreen() {
   const [taskError, setTaskError] = useState('');
   const [hasWorkout, setHasWorkout] = useState(false);
   const [generatingWorkout, setGeneratingWorkout] = useState(false);
+  const [itin, setItin] = useState<ItineraryResponse | null>(null);
+  const [generatingItin, setGeneratingItin] = useState(false);
+  const [itinError, setItinError] = useState('');
   const [categoryModal, setCategoryModal] = useState(false);
   // Shown before the FIRST workout generation: sets expectations that the plan
   // is a generic template, not personalized coaching.
@@ -68,6 +71,7 @@ export default function ReelDetailScreen() {
     navigation.setOptions({ title: '' });
     api.getTasks(id).then(setTaskList).catch(() => {});
     api.getWorkout(id).then((plan) => setHasWorkout(plan.exercises.length > 0)).catch(() => {});
+    api.getItinerary(id).then(setItin).catch(() => {});
   }, [id]);
 
   // The summary is generated in the background after save, so poll until it lands.
@@ -116,7 +120,7 @@ export default function ReelDetailScreen() {
     } catch (e: any) {
       haptics.error();
       let msg = 'Re-summarize failed.';
-      try { msg = JSON.parse(e.message)?.detail ?? e.message; } catch {}
+      if (e?.message) msg = e.message;   // api.ts already extracted the server detail
       notify(msg);
     } finally {
       setResummarizing(false);
@@ -132,7 +136,7 @@ export default function ReelDetailScreen() {
       setReel(updated);
     } catch (e: any) {
       let msg = 'Summarize failed.';
-      try { msg = JSON.parse(e.message)?.detail ?? e.message; } catch {}
+      if (e?.message) msg = e.message;   // api.ts already extracted the server detail
       notify(msg);
     } finally {
       setSummarizing(false);
@@ -164,10 +168,29 @@ export default function ReelDetailScreen() {
       let msg = isCooking
         ? "Couldn't read a recipe from this content. Try adding the dish name in Notes and tapping again."
         : "Couldn't extract steps from this content.";
-      try { const detail = JSON.parse(e.message)?.detail; if (detail) msg = detail; } catch {}
+      if (e?.message) msg = e.message;   // api.ts already extracted the server detail
       setTaskError(msg);
     } finally {
       setGeneratingTasks(false);
+    }
+  };
+
+  const handleGenerateItinerary = async () => {
+    setGeneratingItin(true);
+    setItinError('');
+    try {
+      // Flush any just-typed note first (same reason as re-summarize): the note
+      // can steer the itinerary (e.g. "we only have 3 days").
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (notes.trim()) { try { await api.updateNotes(id, notes); } catch {} }
+      const res = await api.generateItinerary(id);
+      setItin(res);
+      haptics.success();
+    } catch (e: any) {
+      haptics.error();
+      setItinError(e?.message || 'Could not build an itinerary from this reel.');
+    } finally {
+      setGeneratingItin(false);
     }
   };
 
@@ -180,7 +203,7 @@ export default function ReelDetailScreen() {
       router.push(`/workout/${id}`);
     } catch (e: any) {
       let msg = 'Could not extract workout plan.';
-      try { msg = JSON.parse(e.message)?.detail ?? e.message; } catch {}
+      if (e?.message) msg = e.message;   // api.ts already extracted the server detail
       notify(msg);
     } finally {
       setGeneratingWorkout(false);
@@ -195,7 +218,7 @@ export default function ReelDetailScreen() {
       setReel(updated);
     } catch (e: any) {
       let msg = 'Could not update category.';
-      try { msg = JSON.parse(e.message)?.detail ?? e.message; } catch {}
+      if (e?.message) msg = e.message;   // api.ts already extracted the server detail
       notify(msg);
     } finally {
       setSavingCategory(false);
@@ -255,6 +278,12 @@ export default function ReelDetailScreen() {
   const actionableCategory = !NO_ACTION_CATEGORIES.has((reel.category || '').toLowerCase());
   const showTasksAction = actionableCategory && reel.category !== 'fitness' && !aiTasksUsed;
   const showActionsSection = (reel.category === 'fitness' || showTasksAction) && !isSensitive;
+  // Trip Itinerary — travel reels only (server enforces the category with a 422
+  // and Pro-only with a 403; this just decides what to render).
+  const isTravel = (reel.category || '').toLowerCase() === 'travel';
+  const itinerary = itin?.itinerary ?? null;
+  const itinRegensLeft = itin?.regenerations_left ?? 3;
+  const showItinerarySection = isTravel && !isSensitive;
 
   return (
     <View style={styles.screen}>
@@ -419,6 +448,93 @@ export default function ReelDetailScreen() {
           textAlignVertical="top"
         />
       </View>
+
+      {/* ── Trip Itinerary (travel reels) ─────────────── */}
+      {showItinerarySection && (
+        <View style={styles.actionsSection}>
+          <View style={styles.cardTitleRow}>
+            <Icon name="travel" size={15} color={colors.warning} />
+            <Text style={styles.cardTitle}>Trip Itinerary</Text>
+          </View>
+
+          {!itinerary && (
+            <>
+              <Pressable
+                style={styles.actionBtnWrap}
+                onPress={handleGenerateItinerary}
+                disabled={generatingItin || itinRegensLeft <= 0}
+              >
+                <LinearGradient colors={gradients.sunset} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
+                  {generatingItin
+                    ? <ActivityIndicator size="small" color="#FFF" />
+                    : <Icon name="travel" size={20} color="#FFF" />}
+                  <Text style={styles.actionBtnText}>
+                    {generatingItin ? 'Planning…' : itinRegensLeft <= 0 ? 'Limit reached' : 'Create Itinerary'}
+                  </Text>
+                </LinearGradient>
+              </Pressable>
+              <Text style={styles.actionHint}>Built only from what the reel mentions — nothing is invented. Uses 1 AI action.</Text>
+            </>
+          )}
+
+          {itinerary && (
+            <View style={styles.card}>
+              <Text style={styles.itinTripName}>
+                {itinerary.trip_name}
+                {itinerary.destination ? ` · ${itinerary.destination}` : ''}
+                {itinerary.duration_days ? ` · ${itinerary.duration_days} day${itinerary.duration_days > 1 ? 's' : ''}` : ''}
+              </Text>
+              {itinerary.structure_estimated && (
+                <View style={styles.disclaimer}>
+                  <Icon name="information-circle" size={14} color={colors.warning} />
+                  <Text style={styles.disclaimerText}>
+                    The reel didn't state a day-by-day plan, so the days were organized by AI. The places themselves come only from the reel.
+                  </Text>
+                </View>
+              )}
+              {itinerary.days.map((day, di) => (
+                <View key={di} style={styles.itinDay}>
+                  <Text style={styles.itinDayLabel}>{day.label}</Text>
+                  {day.items.map((it, ii) => (
+                    <View key={ii} style={styles.itinItemRow}>
+                      <Text style={styles.itinEmoji}>{it.emoji}</Text>
+                      <Text style={styles.itinItemText}>{it.text}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+              {itinerary.tips.length > 0 && (
+                <View style={styles.itinDay}>
+                  <Text style={styles.itinDayLabel}>Tips from the reel</Text>
+                  {itinerary.tips.map((t, i) => (
+                    <View key={i} style={styles.itinItemRow}>
+                      <Text style={styles.itinEmoji}>💡</Text>
+                      <Text style={styles.itinItemText}>{t}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {itinRegensLeft > 0 && (
+                <Pressable onPress={handleGenerateItinerary} disabled={generatingItin} style={styles.itinRebuildRow}>
+                  {generatingItin
+                    ? <ActivityIndicator size="small" color={colors.accent} />
+                    : <Icon name="refresh" size={13} color={colors.accent} />}
+                  <Text style={styles.itinRebuildText}>
+                    {generatingItin ? 'Rebuilding…' : `Rebuild itinerary (${itinRegensLeft} left)`}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
+          {itinError ? (
+            <View style={styles.inlineError}>
+              <Icon name="alert-circle" size={14} color={colors.danger} />
+              <Text style={styles.inlineErrorText}>{itinError}</Text>
+            </View>
+          ) : null}
+        </View>
+      )}
 
       {/* ── Actions ──────────────────────────────────── */}
       {showActionsSection && (
@@ -719,6 +835,27 @@ const styles = themed(() => StyleSheet.create({
     padding: spacing.sm, marginTop: spacing.xs,
   },
   inlineErrorText: { color: colors.danger, fontSize: font.xs, lineHeight: 16, flex: 1 },
+
+  itinTripName: {
+    color: colors.textPrimary, fontSize: font.md, fontWeight: '800',
+    marginBottom: spacing.xs,
+  },
+  itinDay: { marginTop: spacing.sm },
+  itinDayLabel: {
+    color: colors.accent, fontSize: font.sm, fontWeight: '800',
+    marginBottom: spacing.xs, letterSpacing: 0.3,
+  },
+  itinItemRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
+    paddingVertical: 3,
+  },
+  itinEmoji: { fontSize: font.sm, lineHeight: 20 },
+  itinItemText: { flex: 1, color: colors.textPrimary, fontSize: font.sm, lineHeight: 20 },
+  itinRebuildRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    marginTop: spacing.md, alignSelf: 'flex-start',
+  },
+  itinRebuildText: { color: colors.accent, fontSize: font.xs, fontWeight: '700' },
 
   urlRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,

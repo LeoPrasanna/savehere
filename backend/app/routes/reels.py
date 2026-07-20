@@ -343,10 +343,20 @@ def resummarize_reel(reel_id: str, user: AuthUser = Depends(get_current_user), d
     )
 
     if not ai["summary"]:
-        raise HTTPException(
-            status_code=422,
-            detail="Re-summarize found no meaningful content. The reel likely has no caption or transcript. Try adding your own notes instead."
+        # Message depends on WHY it's empty: if the user already added notes and
+        # it still came back empty, "add notes" is contradictory — the content is
+        # just thin (often pure entertainment with no takeaways). Only point them
+        # at notes when there genuinely are none.
+        had_notes = bool((reel.notes or "").strip())
+        detail = (
+            "Couldn't pull clear takeaways from this — it may just be "
+            "entertainment with no key insights to capture. Your note is still "
+            "saved on the card."
+            if had_notes else
+            "Re-summarize found no readable content — this reel has no caption or "
+            "transcript we can read. Add a note describing it, then re-summarize."
         )
+        raise HTTPException(status_code=422, detail=detail)
 
     reel.summary = ai["summary"]
     reel.tags = ai["tags"]

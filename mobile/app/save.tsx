@@ -37,21 +37,18 @@ const SAVE_NOTES = [
 ];
 
 function parseError(e: any): string {
-  try {
-    const parsed = JSON.parse(e.message);
-    const detail = parsed?.detail ?? e.message;
-    if (detail.includes('timed out')) return 'Took too long to fetch. YouTube may be slow right now — try again.';
-    if (detail.includes('minutes long')) return detail;
-    if (detail.includes('Could not extract')) return 'Could not read this URL. Check it\'s a public Reel, Short, or TikTok and try again.';
-    if (detail.includes('login') || detail.includes('private')) return 'This content is private or requires login. SaveHere can only save public content.';
-    return detail;
-  } catch {
-    if (e.message?.includes('timed out') || e.name === 'AbortError')
-      return 'Request timed out. The server is taking too long — restart the backend and try again.';
-    if (e.message?.includes('fetch') || e.message?.includes('Network'))
-      return 'Can\'t reach the server. Make sure the backend is running on port 8000.';
-    return e.message || 'Something went wrong. Try again.';
-  }
+  // api.ts already extracts FastAPI's `detail`, so e.message is the plain
+  // human-readable string (was previously JSON here — the old JSON.parse made
+  // this whole remap dead code, falling through to the raw detail).
+  const detail: string = e?.message || '';
+  if (e?.name === 'AbortError' || detail.includes('timed out'))
+    return 'Request timed out. The server is taking too long — try again.';
+  if (detail.includes('minutes long')) return detail;
+  if (detail.includes('Could not extract')) return 'Could not read this URL. Check it\'s a public Reel, Short, or TikTok and try again.';
+  if (detail.includes('login') || detail.includes('private')) return 'This content is private or requires login. SaveHere can only save public content.';
+  if (detail.includes('fetch') || detail.includes('Network'))
+    return 'Can\'t reach the server. Make sure the backend is running on port 8000.';
+  return detail || 'Something went wrong. Try again.';
 }
 
 export default function SaveScreen() {

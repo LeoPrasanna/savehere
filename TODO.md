@@ -146,7 +146,7 @@ Items are ordered by dependency — complete top sections before bottom ones.
 ## Nice to Have (post-launch)
 
 - [ ] **Android version** — Expo build for Google Play. Share Intent equivalent for Android.
-- [ ] **Push notifications** — re-engagement: "You saved 5 reels this week. Ready to review?"
+- [ ] **Biometric app-lock (Face ID / Touch ID) — opt-in, post-launch (decided 2026-07-20)** — a Settings toggle "Require Face ID to open SaveHere": `expo-local-authentication` gate over the persisted Supabase session in `_layout.tsx`. **Explicitly NOT a pre-launch item:** Sign in with Apple already delivers Face-ID *authentication* (the OS uses biometrics at the Apple sign-in step — zero code from us). This feature adds only the *reopen-the-app privacy gate*, which Apple login does NOT provide (sessions persist for weeks → app reopens with no prompt). For links+notes data that gate is low-value polish, not protection. Needs a real device + custom dev build (no Face ID on web/simulator), so it also can't be tested in the current web loop. Revisit only if the "unlocked phone → open library" scenario matters after launch.
 - [ ] **Collections / folders** — group saved items beyond category tags.
 - [ ] **Export** — download all saved summaries as PDF or Markdown.
 - [ ] **Analytics** — PostHog or Mixpanel (free tier) to understand which features are used.

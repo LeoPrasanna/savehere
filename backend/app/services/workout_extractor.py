@@ -154,9 +154,10 @@ EMOJI GUIDE: 📍 place/visit  🏔️ nature/trek  🏖️ beach  🍜 food/eat
 
 RULES:
 - Be FAITHFUL to the content: only places, activities, prices, timings, and names STATED in the text or the user's note. NEVER invent specifics — a made-up price or place name sends someone to the wrong spot. If a detail isn't mentioned, leave it out.
-- Structure MAY be organized: if the content lists places without a day plan, group them into sensible days — but then set "structure_estimated": true and "duration_days" to your grouping's length. If the content states its own day plan, follow it exactly and set "structure_estimated": false.
+- ANTI-PADDING (critical): if the content only NAMES places with no activities or details, output one honest stop per place ("Explore Kyoto") and stop there. NEVER pad the plan with famous attractions, restaurants, neighborhoods, or timings the content didn't mention — a plausible-sounding invented stop is worse than a short plan.
+- Structure MAY be organized: if the content lists places without a day plan, group them into sensible days labeled "Day N — Place" (e.g. "Day 1 — Tokyo") — but then set "structure_estimated": true and "duration_days" to your grouping's length. If the content states its own day plan, follow it exactly and set "structure_estimated": false.
 - "duration_days": the number stated in the content, or your grouping's length when estimating; null only if there are no day-like groupings at all (then put everything in one "Places" day).
-- Each item = ONE concrete action or stop, one concise sentence, verb-first (Visit, Trek, Eat at, Catch, Book...). Keep names/spellings exactly as the content gives them.
+- Each item = ONE concrete action or stop, one concise sentence, verb-first (Visit, Trek, Eat at, Catch, Book...). Use the standard spelling of a well-known real place if the content clearly misspells it ("Hiroahima" → "Hiroshima"); otherwise keep names exactly as the content gives them.
 - 1 to 14 days; 1 to 10 items per day; 0 to 6 tips. Tips only from the content (best season, what to carry, booking advice) — never generic filler.
 - If the content has ZERO usable trip information (no places, no activities), return {{"days": []}}.
 - Respond ONLY with the JSON object"""
