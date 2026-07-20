@@ -276,10 +276,13 @@ export default function ReelDetailScreen() {
   const aiTasksUsed = (reel.tasks_count ?? 0) >= TASKS_LIMIT;
   const hasTasksContent = !!(taskList && taskList.tasks.length > 0);
   const showTasksCard = !!taskList && (hasTasksContent || aiTasksUsed) && !isSensitive;
-  // No "Turn into Action" for content with nothing actionable: entertainment,
-  // and anything outside a known category (other/unset). Recategorizing the
-  // reel (e.g. a DIY save stuck in "other" → tech/education) re-enables it.
-  const NO_ACTION_CATEGORIES = new Set(['entertainment', 'other', 'general', '']);
+  // No "Turn into Action" for content with nothing genuinely actionable:
+  // entertainment, motivation, and anything outside a known category
+  // (other/unset). Motivation is here because it reliably yields generic filler
+  // ("Believe in yourself", "Wake up early") rather than steps specific to the
+  // reel — an AI action spent for no value. Recategorizing the reel (e.g. a DIY
+  // save stuck in "other" → tech/education) re-enables it.
+  const NO_ACTION_CATEGORIES = new Set(['entertainment', 'motivation', 'other', 'general', '']);
   const actionableCategory = !NO_ACTION_CATEGORIES.has((reel.category || '').toLowerCase());
   // Trip Itinerary — travel reels only (server enforces the category with a 422
   // and Pro-only with a 403; this just decides what to render).
