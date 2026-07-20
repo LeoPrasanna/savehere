@@ -49,6 +49,11 @@ class ReelDB(Base):
     summarize_count = Column(Integer, nullable=False, default=0)
     tasks_count = Column(Integer, nullable=False, default=0)        # AI task/recipe generations
     workout_count = Column(Integer, nullable=False, default=0)      # AI workout generations
+    itinerary_count = Column(Integer, nullable=False, default=0)    # AI itinerary generations (travel)
+    # Stored trip itinerary (travel reels, Pro feature). JSON blob rather than a
+    # child table: items aren't individually editable like tasks/exercises, so a
+    # single document is simpler and regenerates atomically.
+    itinerary = Column(JSON, nullable=True)
     # Flagged by the summarizer when the content is medical/high-stakes health or
     # safety advice. Sensitive reels keep thumbnail+summary+notes but are never
     # turned into tasks/workouts (enforced server-side in routes/workout.py) and
@@ -173,6 +178,8 @@ def create_tables():
             "ALTER TABLE reels ADD COLUMN user_id TEXT",
             "CREATE INDEX IF NOT EXISTS ix_reels_user_id ON reels (user_id)",
             "ALTER TABLE reels ADD COLUMN is_sensitive BOOLEAN NOT NULL DEFAULT 0",
+            "ALTER TABLE reels ADD COLUMN itinerary_count INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE reels ADD COLUMN itinerary JSON",
             "ALTER TABLE tasks ADD COLUMN kind TEXT DEFAULT 'task'",
             "ALTER TABLE tasks ADD COLUMN source TEXT DEFAULT 'content'",
         ]:

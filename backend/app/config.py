@@ -24,6 +24,10 @@ class Settings:
     )
     # Optional. Set to a Sentry DSN to enable error monitoring; empty = disabled.
     SENTRY_DSN: str = os.getenv("SENTRY_DSN", "")
+    # Shared secret the RevenueCat webhook must present (dashboard → webhook
+    # "Authorization header value"). Empty = the billing webhook rejects every
+    # call, so it's fail-closed until you configure it.
+    REVENUECAT_WEBHOOK_TOKEN: str = os.getenv("REVENUECAT_WEBHOOK_TOKEN", "")
     ENV: str = os.getenv("ENV", "development")
     # Comma-separated browser origins allowed in production (the deployed web app's
     # URL). "*" allows any origin — acceptable while there's no cookie-based auth.

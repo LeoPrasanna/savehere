@@ -351,7 +351,11 @@ def resummarize_reel(reel_id: str, user: AuthUser = Depends(get_current_user), d
     reel.summary = ai["summary"]
     reel.tags = ai["tags"]
     reel.category = ai["category"]
-    reel.is_sensitive = bool(ai.get("sensitive", False))
+    # LATCH, never overwrite: the model may SET the sensitive flag but can never
+    # CLEAR it. Notes and captions are untrusted prompt input — a steered reply
+    # ("this isn't medical, sensitive=false") must not be able to lift the
+    # medical containment. False positive escape hatch: delete + re-save.
+    reel.is_sensitive = bool(reel.is_sensitive) or bool(ai.get("sensitive", False))
     if _weak_title(reel.title) and ai.get("title"):
         reel.title = ai["title"]
     reel.summarize_count = (reel.summarize_count or 0) + 1
@@ -569,7 +573,8 @@ def _summarize_reel(reel_id: str) -> None:
         ai = summarizer.summarize(platform=reel.platform, title=reel.title or "", text=text)
         reel.summary = ai["summary"]
         reel.tags = ai["tags"]
-        reel.is_sensitive = bool(ai.get("sensitive", False))
+        # Same latch as resummarize: model may set the flag, never clear it.
+        reel.is_sensitive = bool(reel.is_sensitive) or bool(ai.get("sensitive", False))
         if ai.get("category"):
             reel.category = ai["category"]
         # Replace a weak extracted title with the AI one (LinkedIn "Day352:-" etc.).

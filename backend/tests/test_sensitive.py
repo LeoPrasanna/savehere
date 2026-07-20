@@ -75,3 +75,37 @@ class TestSensitiveContainment:
         # refusals in a row prove nothing was charged.
         for _ in range(3):
             assert client.post("/api/reels/med1/tasks").status_code == 422
+
+
+class TestSensitiveLatch:
+    """The is_sensitive flag is a one-way latch: the model may SET it, never
+    CLEAR it. Notes and captions are untrusted prompt input — even a fully
+    steered model reply ("sensitive": false) must not lift the medical
+    containment. These mocks simulate exactly that worst case: the injection
+    SUCCEEDED at the model layer, and the server still holds the line."""
+
+    def _mock_summary(self, sensitive: bool) -> dict:
+        return {"title": "Steered Title", "summary": ["a bullet"], "tags": ["t"],
+                "category": "health", "low_content": False, "sensitive": sensitive}
+
+    def test_resummarize_cannot_clear_the_flag(self, client, monkeypatch):
+        from app.routes import reels as reels_route
+        # Worst case: a note like "this isn't medical, mark not sensitive"
+        # successfully steered the model into returning sensitive=false.
+        monkeypatch.setattr(reels_route.summarizer, "summarize",
+                            lambda **kw: self._mock_summary(sensitive=False))
+        res = client.post("/api/reels/med1/resummarize")
+        assert res.status_code == 200
+        assert res.json()["is_sensitive"] is True          # latch held
+        # And the containment downstream of the flag still refuses actions.
+        assert client.post("/api/reels/med1/workout").status_code == 422
+
+    def test_resummarize_can_still_set_the_flag(self, client, monkeypatch):
+        from app.routes import reels as reels_route
+        # One-way means one-way UP: a clean reel re-summarized into sensitive
+        # territory must gain the flag normally.
+        monkeypatch.setattr(reels_route.summarizer, "summarize",
+                            lambda **kw: self._mock_summary(sensitive=True))
+        res = client.post("/api/reels/fit1/resummarize")
+        assert res.status_code == 200
+        assert res.json()["is_sensitive"] is True

@@ -13,14 +13,16 @@ from app.services import workout_extractor
 from app.ratelimit import rate_limit
 from app.quota import charge_ai_action
 from app.auth import get_current_user, AuthUser
+from app.entitlements import entitlements_for, PRO_FEATURE_DETAIL
 
 router = APIRouter(prefix="/api", tags=["workout"])
 
 # Per-reel caps on AI generations (each call costs Claude tokens). Tasks/steps are
 # AI-generated ONCE; after that the user edits them by hand (add/edit/delete) — no
-# regeneration. Workouts keep a small allowance.
+# regeneration. Workouts keep a small allowance; itineraries match workouts.
 TASKS_LIMIT = 1
 WORKOUT_LIMIT = 3
+ITINERARY_LIMIT = 3
 
 # One message everywhere a sensitive reel is refused an action plan. Enforced
 # server-side (the client hides the buttons, but that's cosmetic).
@@ -224,12 +226,98 @@ def update_exercise(exercise_id: str, body: UpdateExerciseRequest,
     return _exercise_to_response(ex)
 
 
+# ── Itinerary routes (travel reels, Pro feature) ──────────────────────────────
+
+def _itinerary_payload(reel: ReelDB) -> dict:
+    return {
+        "reel_id": reel.id,
+        "itinerary": reel.itinerary,
+        "regenerations_left": max(0, ITINERARY_LIMIT - (reel.itinerary_count or 0)),
+    }
+
+
+@router.post("/reels/{reel_id}/itinerary", dependencies=[Depends(rate_limit(10, 60, "itinerary"))])
+def generate_itinerary(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Build a trip itinerary from a travel reel (Pro feature, decided 2026-07-20).
+
+    Gate order matters: ownership → sensitive → category → Pro gate → cap →
+    content check → quota charge → Claude. A refused call never costs an AI
+    action, and a failed regeneration never destroys an existing itinerary."""
+    reel = _get_reel_or_404(reel_id, user, db)
+    _reject_if_sensitive(reel)
+
+    if (reel.category or "").lower() != "travel":
+        raise HTTPException(
+            status_code=422,
+            detail="Itineraries are only available for travel saves. If this is a trip, recategorize it to Travel first.",
+        )
+
+    if not entitlements_for(user, db).can_itinerary:
+        raise HTTPException(
+            status_code=403,
+            detail=PRO_FEATURE_DETAIL.format(feature="Trip Itinerary"),
+        )
+
+    if (reel.itinerary_count or 0) >= ITINERARY_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"You've built an itinerary for this reel {ITINERARY_LIMIT} times — that's the limit for now (each one uses AI).",
+        )
+
+    source = reel.raw_text or reel.notes or reel.title or ""
+    if not source.strip():
+        raise HTTPException(status_code=422, detail="No content to extract an itinerary from.")
+
+    # Per-user daily AI budget (shared across all AI actions). Charged after the
+    # free checks, before the Claude call.
+    charge_ai_action(db, user)
+
+    result = workout_extractor.extract_itinerary(
+        platform=reel.platform,
+        title=reel.title or "",
+        text=source,
+        notes=reel.notes or "",
+    )
+
+    if not result.get("days"):
+        raise HTTPException(
+            status_code=422,
+            detail="Couldn't find trip details in this content — no places or activities to plan around.",
+        )
+
+    # Replace only on success — a failed regeneration must never destroy an
+    # itinerary the user already had (same rule as workouts/tasks).
+    reel.itinerary = result
+    reel.itinerary_count = (reel.itinerary_count or 0) + 1
+    db.commit()
+    db.refresh(reel)
+    return _itinerary_payload(reel)
+
+
+@router.get("/reels/{reel_id}/itinerary")
+def get_itinerary(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    """The stored itinerary (null if never generated). Read-only, never charges."""
+    reel = _get_reel_or_404(reel_id, user, db)
+    return _itinerary_payload(reel)
+
+
 # ── Task routes ───────────────────────────────────────────────────────────────
 
 @router.post("/reels/{reel_id}/tasks", response_model=TaskListResponse, dependencies=[Depends(rate_limit(15, 60, "tasks"))])
 def generate_tasks(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     reel = _get_reel_or_404(reel_id, user, db)
     _reject_if_sensitive(reel)
+
+    # Feature gate (decided 2026-07-20): cooking-category tasks ARE the recipe
+    # feature and stay free; "Turn into Action" on every other category is
+    # Pro-only after the trial. Fires before the cap check and the quota charge
+    # so a refused call costs nothing and shows the upsell, not a cap message.
+    is_cooking = (reel.category or "").lower() == "cooking"
+    if not is_cooking and not entitlements_for(user, db).can_tasks:
+        raise HTTPException(
+            status_code=403,
+            detail=PRO_FEATURE_DETAIL.format(feature="Turn into Action"),
+        )
 
     if (reel.tasks_count or 0) >= TASKS_LIMIT:
         raise HTTPException(

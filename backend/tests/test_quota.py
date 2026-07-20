@@ -155,6 +155,13 @@ class TestQuotaWiredIntoAskRoute:
     @pytest.fixture
     def make_client(self, monkeypatch):
         monkeypatch.setattr(settings, "AI_DAILY_LIMIT", 3)
+        # These tests assert EXACT quota-429 semantics on /api/ask, but the
+        # route also carries a per-IP burst limiter whose store is process-
+        # global while TestClient presents a single IP — ask traffic from
+        # earlier test files can spill in and 429 for the wrong reason. Start
+        # from a clean bucket.
+        from app.ratelimit import _store as _ip_store
+        _ip_store.clear()
         # Stub the Claude call so the route never hits the network.
         monkeypatch.setattr(
             librarian, "ask_library",

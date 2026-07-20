@@ -61,6 +61,14 @@ def get_usage(user: AuthUser = Depends(get_current_user), db: Session = Depends(
         "tier": ent.tier,
         "trial_ends_at": ent.trial_ends_at.isoformat() + "Z" if ent.trial_ends_at else None,
         "saves": {"used": saves_used, "limit": ent.save_limit},   # limit null = unlimited
+        # Feature flags for the app's locked-button UI (server enforces with 403s
+        # regardless — these only decide what to RENDER). tasks refers to
+        # non-cooking "Turn into Action"; recipes and workouts are never gated.
+        "features": {
+            "ask": ent.can_ask,
+            "tasks": ent.can_tasks,
+            "itinerary": ent.can_itinerary,
+        },
         # Legacy top-level AI fields (older clients read these directly).
         "used": used,
         "limit": ent.ai_daily_limit,

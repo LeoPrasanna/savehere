@@ -99,12 +99,27 @@ def _get_or_create_profile(db: Session, user: AuthUser, *, now: datetime) -> Pro
     return db.query(ProfileDB).filter(ProfileDB.user_id == user.id).one()
 
 
+# One message everywhere a Pro-only feature is refused (403). `{feature}` is the
+# human-readable feature name. Kept here so routes and tests share one string.
+# Locked buttons in the app are cosmetic — THIS is the enforcement.
+PRO_FEATURE_DETAIL = (
+    "{feature} is a Pro feature. Your free plan keeps saving, your library, "
+    "summaries, recipes and workouts — upgrade to Pro to unlock {feature}."
+)
+
+
 @dataclass
 class Entitlements:
     tier: str                       # 'pro' | 'trial' | 'free' (effective)
     ai_daily_limit: int
     save_limit: int | None          # None = unlimited; gates NEW saves only
     trial_ends_at: datetime | None  # UTC; None for pro
+    # Feature gating (decided 2026-07-20): post-trial free keeps saves/library/
+    # search/auto-summaries + workout & recipe (cooking-category tasks); the rest
+    # is Pro-only. Trial keeps FULL access — it's the demo that converts.
+    can_ask: bool = True            # Ask-my-Library
+    can_tasks: bool = True          # "Turn into Action" tasks on NON-cooking reels
+    can_itinerary: bool = True      # Trip Itinerary on travel reels
 
 
 def entitlements_for(user: AuthUser, db: Session, *, now: datetime | None = None) -> Entitlements:
@@ -138,4 +153,7 @@ def entitlements_for(user: AuthUser, db: Session, *, now: datetime | None = None
         ai_daily_limit=settings.AI_FREE_DAILY_LIMIT,
         save_limit=settings.FREE_SAVE_LIMIT,
         trial_ends_at=trial_ends,
+        can_ask=False,
+        can_tasks=False,
+        can_itinerary=False,
     )
