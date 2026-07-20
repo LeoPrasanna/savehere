@@ -34,20 +34,29 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 
 - 🍳 **Recipes & checklists** — step-by-step instructions extracted from how-to / cooking content
 - 🏋️ **Workout plans** — exercises with sets/reps/rest, plus a guided session player
+- 🧳 **Trip itineraries** — travel saves become a day-by-day plan built **only** from places the reel actually mentions; when the reel states no day plan the grouping is AI-organised and labelled as such
 - ✍️ **Manual control** — AI generates once, then you add / edit / delete items yourself (no repeat AI cost)
 
 ### Find & rediscover
 
-- 🔍 **Search** across titles, tags, summaries, and notes
+- 🔍 **Smart search** across titles, tags, summaries, and notes — category-aware with synonym expansion ("any videos on Fitness" works), and **zero AI cost** by design since search fires per keystroke
 - 🧭 **Rediscover** — resurfaces older saves so they don't get forgotten
-- 💬 **Ask your library** — natural-language questions answered from your own saves, with sources
+- 💬 **Ask your library** — natural-language questions answered from your own saves, with sources, **streamed token-by-token** (first words in ~1.4 s instead of a 3 s wall of silence)
+
+### Accounts, tiers & safety
+
+- 🔐 **Supabase auth** — every route scoped to the caller; ownership 404s, JWT verified against JWKS (no shared secret)
+- 🎫 **Server-side tiers** — trial → free → pro, with a per-user **daily AI quota** that is atomic and race-safe, plus feature gating enforced with real 403s (the locked buttons in the app are cosmetic)
+- 🩺 **Sensitive-content containment** — the summarizer flags high-stakes medical/health advice; flagged saves keep their summary but never become action plans, and the flag is a **one-way latch** so a prompt-injected note or caption can't clear it
+- 🗑️ **True account deletion** — data wipe *and* the Supabase auth record, with honest failure reporting (Apple 5.1.1(v))
 
 ### Reliability & cost control
 
 - Extraction cache (re-saving is instant and never re-hits the platform) with TTL eviction
-- Per-IP rate limiting, per-reel AI caps, and a daily cap on the ask endpoint to bound API spend
+- Per-user daily AI quota (the real cost ceiling) + per-reel AI caps + per-IP burst guard
+- Usage drill-down — see exactly what today's AI actions were spent on
 - `/health` and `/health/extract` self-test endpoints; image proxy for CDN-blocked thumbnails
-- Backend test suite (pytest)
+- Backend test suite — **190 pytest tests** across 19 files
 
 ---
 
@@ -57,10 +66,12 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 | --- | --- |
 | Mobile | React Native + **Expo SDK 56** (expo-router), Reanimated, Moti, Lucide icons |
 | Backend | **FastAPI** (Python 3.12) + SQLAlchemy |
-| Database | SQLite (dev) → Supabase Postgres (planned for prod) |
+| Database | SQLite (dev) → **Supabase Postgres** (prod — migration pending, see [TODO.md](TODO.md)) |
+| Auth | **Supabase Auth** (email today; Apple + Google before launch) — ES256 JWTs verified via JWKS |
 | AI | Anthropic **Claude Haiku** (`claude-haiku-4-5-20251001`) |
 | Extraction | yt-dlp (+ WebVTT caption parser, JSON-LD / Open Graph fallback) |
-| Transcription | OpenAI Whisper (optional, audio fallback) |
+| Transcription | OpenAI Whisper (optional, audio fallback — **off unless `OPENAI_API_KEY` is set**) |
+| Billing | **RevenueCat** → Apple IAP (webhook sketched, not yet activated) |
 
 ---
 
@@ -110,10 +121,19 @@ Copy `.env.example` → `.env`. Only `ANTHROPIC_API_KEY` is required to run loca
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `ANTHROPIC_API_KEY` | **Yes** | Claude Haiku — summaries, tags, recipes, workouts, ask |
-| `OPENAI_API_KEY` | No | Whisper audio-transcription fallback (needs ffmpeg) |
-| `APIFY_API_KEY` | No | (future) LinkedIn scraping |
-| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | Prod (future) | Auth + Postgres, once built |
+| `ANTHROPIC_API_KEY` | **Yes** | Claude Haiku — summaries, tags, recipes, workouts, itineraries, ask |
+| `SUPABASE_URL` | For auth | Supabase project URL |
+| `SUPABASE_PUBLISHABLE_KEY` | For auth | Publishable/anon key (safe to ship in the app bundle) |
+| `SUPABASE_SERVICE_ROLE_KEY` | For auth | **Backend only — never expose.** Admin ops: account deletion, tier writes |
+| `SUPABASE_JWKS_URL` | No | Defaults to `$SUPABASE_URL/auth/v1/.well-known/jwks.json` |
+| `DATABASE_URL` | Prod | Postgres URL. **Unset = SQLite** — must be set in prod or Render's ephemeral disk loses the DB on every redeploy |
+| `OPENAI_API_KEY` | No | Whisper audio fallback (needs ffmpeg). ⚠️ Currently **uncapped** — see [TODO.md](TODO.md) before enabling |
+| `APIFY_API_KEY` | No | Optional managed-scraper fallback |
+| `SENTRY_DSN` | No | Error monitoring; empty = disabled |
+| `REVENUECAT_WEBHOOK_TOKEN` | Launch | Shared secret for the billing webhook (fail-closed when unset) |
+| `TRUSTED_PROXY_HOPS` | No | Trusted reverse proxies in front (default `1`; `0` = never trust `X-Forwarded-For`) |
+| `AI_DAILY_LIMIT` / `AI_FREE_DAILY_LIMIT` / `AI_PRO_DAILY_LIMIT` | No | Daily AI actions per tier (30 / 3 / 100) |
+| `TRIAL_DAYS` / `FREE_SAVE_LIMIT` | No | Trial length (10) and post-trial save cap (20) |
 | `ENV` | No | `development` (default) or `production` |
 
 ---
@@ -127,10 +147,14 @@ savehere/
 │   │   ├── main.py                # app, CORS, /health, /health/extract, thumbnail proxy
 │   │   ├── config.py              # settings (.env or env vars)
 │   │   ├── database.py            # SQLAlchemy models + lightweight migrations
-│   │   ├── ratelimit.py           # per-IP burst + daily rate limiting
-│   │   ├── routes/                # reels, workout (tasks/recipes + workouts), ask
-│   │   └── services/              # extractor, summarizer, workout_extractor, librarian, transcriber
-│   └── tests/                     # pytest suite
+│   │   ├── auth.py                # Supabase JWT verification (JWKS, ES256)
+│   │   ├── entitlements.py        # tier math — THE source of truth (trial/free/pro + feature flags)
+│   │   ├── quota.py               # atomic per-user daily AI quota + ai_action_log
+│   │   ├── ratelimit.py           # per-IP burst guard (proxy-aware)
+│   │   ├── routes/                # reels, workout (tasks/recipes/workouts/itineraries), ask, account, billing
+│   │   └── services/              # extractor, summarizer, workout_extractor, librarian, search, transcriber
+│   ├── scripts/                   # set_tier.py, dev_tier.py, enable_rls.sql
+│   └── tests/                     # pytest suite (190 tests)
 ├── mobile/                        # Expo Router app
 │   ├── app/                       # library, save, reel detail, ask, rediscover, help, workout
 │   ├── components/                # ReelCard, TaskList, Landing, ProfilePanel, Icon, …
@@ -148,22 +172,30 @@ savehere/
 
 ## 📡 API reference
 
+All `/api/*` routes require a Supabase `Bearer` token and are scoped to the caller (someone else's id returns **404**, never 403 — that would leak its existence).
+
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `POST` | `/api/reels/save` | Extract, summarize, and save a URL |
-| `GET` | `/api/reels` | List saved reels (filter by tag / category / platform) |
+| `POST` | `/api/reels/save` | Save a URL — returns instantly; extraction + summary run in the background |
+| `GET` | `/api/reels` | List saved reels (category filter, `limit`/`offset`, returns `total`) |
+| `GET` | `/api/reels/search?q=` | Smart search — category-aware, synonyms, ranked (no AI cost) |
 | `GET` | `/api/reels/{id}` | Get a single reel |
-| `POST` | `/api/reels/{id}/resummarize` | Re-run the AI summary (capped) |
-| `PATCH` | `/api/reels/{id}/notes` | Update personal notes |
-| `PATCH` | `/api/reels/{id}/category` | Set the category |
+| `POST` | `/api/reels/{id}/summarize` | Run/retry the first summary |
+| `POST` | `/api/reels/{id}/resummarize` | Re-run the AI summary (notes are folded in) |
+| `PATCH` | `/api/reels/{id}/notes` · `/category` | Update notes / set category |
 | `DELETE` | `/api/reels/{id}` | Delete a saved reel |
-| `POST` | `/api/reels/{id}/tasks` | Generate step-by-step tasks / recipe (AI, once) |
-| `POST` | `/api/reels/{id}/tasks/manual` | Add a task/step by hand |
+| `POST` `GET` | `/api/reels/{id}/tasks` | Generate (AI, once) / fetch tasks or a recipe |
+| `POST` | `/api/reels/{id}/tasks/manual` | Add a task/step by hand (no AI) |
 | `PATCH` / `DELETE` | `/api/tasks/{id}` | Toggle / edit / delete a task |
-| `POST` | `/api/reels/{id}/workout` | Generate a workout plan (capped) |
+| `POST` `GET` | `/api/reels/{id}/workout` | Generate (×3 max) / fetch a workout plan |
 | `PATCH` | `/api/exercises/{id}` | Edit an exercise |
-| `POST` | `/api/ask` | Ask a question answered from your library |
-| `GET` | `/health` · `/health/extract` | Service + extraction self-test |
+| `POST` `GET` | `/api/reels/{id}/itinerary` | Generate (×3 max) / fetch a trip itinerary — travel only, **Pro** |
+| `POST` | `/api/ask` | Ask a question answered from your library — **Pro** |
+| `POST` | `/api/ask/stream` | Same, streamed token-by-token + trailing sources — **Pro** |
+| `GET` | `/api/account/usage` | Tier, trial countdown, AI budget, save cap, feature flags |
+| `GET` | `/api/account/usage/log` | What today's AI actions were spent on |
+| `DELETE` | `/api/account` | Delete all data **and** the Supabase auth record |
+| `GET` | `/health` · `/health/extract` | Service + extraction self-test (`?live=1` runs a real probe) |
 
 ---
 
@@ -183,28 +215,59 @@ savehere/
 
 ## 💸 AI cost controls
 
-Every AI feature spends Claude tokens, so usage is bounded by design:
+Every AI feature spends Claude tokens, so spend is bounded in four independent layers:
 
-- **Per-reel caps** — recipes/tasks generate once (then edit by hand), workouts ×3, re-summarize ×3.
-- **Ask-your-library** sends only the most relevant saves to the model (retrieval), not the whole library.
-- **Rate limiting** — per-IP burst limit on all AI endpoints + a **daily cap** on `/api/ask`.
+1. **Per-user daily quota** — the real ceiling. Every AI action (summary, re-summary, recipe, workout, itinerary, ask) draws from one budget keyed on the Supabase user id. The charge is a single **atomic conditional `UPDATE`**, so concurrent requests can't overshoot; it's DB-backed, so it survives restarts and can't be reset by rotating IPs. Any new AI endpoint **must** call `charge_ai_action()`.
+2. **Tier limits** — trial 30/day, post-trial free 3/day, pro 100/day (all env-tunable).
+3. **Per-reel caps** — recipes/tasks generate once (then you edit by hand), workouts ×3, itineraries ×3.
+4. **Per-IP burst guard** — an anti-loop layer beneath the quota, proxy-aware (`X-Forwarded-For` is read from the right past `TRUSTED_PROXY_HOPS`, so a client can't forge it).
 
-> These are interim, per-IP guardrails. Per-user quotas (and the paywall tiers) arrive with authentication — see [TODO.md](TODO.md) and [docs/CONTEXT.md](docs/CONTEXT.md).
+Plus: **retrieval, not dumping** — ask sends only the most relevant saves to the model; **smart search is deliberately non-AI** (it fires per keystroke); and a **hard monthly cap** is set in the Anthropic console as the last-resort ceiling.
+
+> ⚠️ Two paths are **not** yet capped: the optional Whisper audio fallback and the (future) residential extraction proxy. Both are usage-priced with no per-user ceiling — see [TODO.md](TODO.md) before enabling either.
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-cd backend && python -m pytest tests/ -q     # backend unit tests
-cd mobile  && npm run typecheck              # mobile type check
+cd backend && python -m pytest tests/ -q     # 190 tests across 19 files
+cd mobile  && npm run typecheck              # mobile type check (uses --stack-size=16000)
+cd mobile  && npx expo export --platform web # validate the web build
 ```
+
+CI runs both on push/PR, path-scoped so a mobile-only change doesn't run the Python suite (`.github/workflows/ci.yml`, `mobile-ci.yml`).
+
+### Testing the tier system locally
+
+Tiers are computed server-side, so seeing the post-trial **free** experience otherwise means waiting out the trial:
+
+```bash
+cd backend
+python scripts/dev_tier.py status                # every local user + effective tier
+python scripts/dev_tier.py expire <user-id>      # → free   (applies on the next request)
+python scripts/dev_tier.py trial  <user-id>      # → trial
+python scripts/dev_tier.py resetquota <user-id>  # clear today's AI counter
+python scripts/set_tier.py <user-id> pro         # → pro — then sign out and back in
+```
+
+`dev_tier.py` refuses to run against a non-SQLite `DATABASE_URL`. **Pro behaves differently from the others**: it lives in the Supabase JWT claim, which caches for up to an hour — trial/free are recomputed from the DB on every request.
 
 ---
 
 ## 🗺️ Roadmap
 
-Authentication + per-user data, deployment, the iOS share extension, and subscription tiers are tracked in **[TODO.md](TODO.md)**. Architecture and the reasoning behind key decisions live in **[docs/CONTEXT.md](docs/CONTEXT.md)**.
+**Built:** auth + per-user scoping, the tier system (trial/free/pro) with server-side feature gating, per-user AI quota, smart search, ask streaming, trip itineraries, sensitive-content containment.
+
+**Next, in dependency order:**
+
+1. **Postgres migration** — ⚠️ the urgent one. Render's disk is ephemeral, so on SQLite **every redeploy wipes the database**. Also unblocks `enable_rls.sql`.
+2. **Environments** — dev / staging / prod (no PreProd: with one developer, staging *is* preprod).
+3. **Apple + Google sign-in** — Apple's guideline 4.8 makes the pair mandatory once Google is offered; also removes the SMTP blocker for signups.
+4. **iOS Share Extension** + Apple Developer account — the core capture flow.
+5. **RevenueCat / Apple IAP** — the webhook is written and tested but deliberately not registered yet.
+
+Full checklist in **[TODO.md](TODO.md)** — it's the release gate, and every decision above is recorded there with its reasoning. Architecture lives in **[docs/CONTEXT.md](docs/CONTEXT.md)**.
 
 ---
 
