@@ -27,6 +27,12 @@ services:
       # Secrets — set these in the Render dashboard (sync:false = not in git).
       - key: ANTHROPIC_API_KEY
         sync: false
+      # ⚠️ REQUIRED in prod. Unset = the app falls back to SQLite on Render's
+      # EPHEMERAL disk, which is wiped on every redeploy (total data loss). Use
+      # the Supabase SESSION POOLER string (port 5432, IPv4) — the direct string
+      # is IPv6-only and the transaction pooler (6543) breaks prepared statements.
+      - key: DATABASE_URL
+        sync: false
       - key: OPENAI_API_KEY        # optional (Whisper transcription)
         sync: false
       - key: APIFY_API_KEY         # optional (LinkedIn scraper)

@@ -174,6 +174,11 @@ export default function HomeScreen() {
           {/* Save is the primary action — it lives top-right now that search
               docks at the bottom (iOS pattern) and the FAB is gone. */}
           <View style={styles.headerActions}>
+            {/* Explicit way back to the landing/home view. Tapping the brand row
+                also works, but nothing signalled that it was tappable. */}
+            <Pressable style={styles.menuBtn} onPress={() => setEntered(false)} scaleTo={0.9}>
+              <Icon name="home" size={20} color={colors.textPrimary} />
+            </Pressable>
             <Pressable style={styles.saveBtnWrap} onPress={() => router.push('/save')} scaleTo={0.9}>
               <LinearGradient
                 colors={gradients.primary}

@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
-  Sparkles, Brain, Dumbbell, ChefHat, BookOpen, Zap, ArrowRight, X,
+  Sparkles, Brain, Dumbbell, ChefHat, BookOpen, Zap, ArrowRight,
 } from 'lucide-react-native';
 import { Pressable } from './Pressable';
 import { GlassCard } from './GlassCard';
@@ -198,13 +198,9 @@ export function OnboardingModal() {
                 {step + 1} / {STEPS.length}
               </Text>
             </View>
-
-            {!isLast && (
-              <Pressable style={styles.skipBtn} onPress={finish} scaleTo={0.95}>
-                <X size={18} color={colors.textSecondary} />
-                <Text style={styles.skipText}>Skip</Text>
-              </Pressable>
-            )}
+            {/* No Skip: first-run onboarding is shown once to a brand-new
+                account and must be seen in full — the only way out is stepping
+                through to "Get Started" (decided 2026-07-20). */}
           </View>
 
           {/* Card */}

@@ -12,6 +12,18 @@ from app.routes.reels import _to_response
 from app.ratelimit import rate_limit
 from app.quota import charge_ai_action
 from app.auth import get_current_user, AuthUser
+from app.entitlements import entitlements_for, PRO_FEATURE_DETAIL
+
+
+def _require_ask(user: AuthUser, db: Session) -> None:
+    """Ask-my-Library is Pro-only after the trial (decided 2026-07-20). Enforced
+    here — the app's locked button is cosmetic. Fires BEFORE the quota charge so
+    a refused call never costs an AI action."""
+    if not entitlements_for(user, db).can_ask:
+        raise HTTPException(
+            status_code=403,
+            detail=PRO_FEATURE_DETAIL.format(feature="Ask My Library"),
+        )
 
 # Sentinel that separates the streamed answer prose from the trailing sources
 # JSON. Chosen so it can never appear inside natural answer text.
@@ -43,8 +55,10 @@ def ask(body: AskRequest, user: AuthUser = Depends(get_current_user), db: Sessio
     if len(q) < 3:
         raise HTTPException(status_code=422, detail="Ask a real question — a few words at least.")
 
+    _require_ask(user, db)
+
     # Per-user daily AI budget (shared across all AI actions). Charged before the call.
-    charge_ai_action(db, user)
+    charge_ai_action(db, user, action="ask", label=q)
 
     reels = (
         db.query(ReelDB)
@@ -77,9 +91,11 @@ def ask_stream(body: AskRequest, user: AuthUser = Depends(get_current_user), db:
     if len(q) < 3:
         raise HTTPException(status_code=422, detail="Ask a real question — a few words at least.")
 
+    _require_ask(user, db)
+
     # Charged before streaming starts — a quota 429 is returned as JSON, not
     # halfway through a half-written answer.
-    charge_ai_action(db, user)
+    charge_ai_action(db, user, action="ask", label=q)
 
     reels = (
         db.query(ReelDB)

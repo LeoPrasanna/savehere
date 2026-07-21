@@ -13,8 +13,16 @@ import { colors, spacing, radius, font, themed } from '../constants/theme';
  *  - medical   : content flagged as medical/high-stakes advice — reference only,
  *                we're not responsible; consult a professional. (Tasks/workout
  *                are disabled for these saves, enforced server-side.)
+ *  - health    : HEALTH-category save that the AI did NOT flag as high-stakes.
+ *                Softer than `medical` (which is the flagged case and also
+ *                disables action plans) but still says "not medical advice".
+ *  - finance   : FINANCE-category save. Investment/tax/legal content carries
+ *                real consequences, so this one is deliberately explicit that
+ *                nothing here is financial advice and SaveHere isn't a licensed
+ *                adviser.
  */
-export type DisclaimerVariant = 'ai' | 'fitness' | 'recipe' | 'ownership' | 'medical';
+export type DisclaimerVariant =
+  | 'ai' | 'fitness' | 'recipe' | 'ownership' | 'medical' | 'health' | 'finance';
 
 const VARIANTS: Record<DisclaimerVariant, { icon: string; color: string; text: string }> = themed(() => ({
   ai: {
@@ -41,6 +49,16 @@ const VARIANTS: Record<DisclaimerVariant, { icon: string; color: string; text: s
     icon: 'shield',
     color: colors.danger,
     text: 'This content appears to contain medical or other sensitive advice. SaveHere keeps it for your reference only and is not responsible for how it\'s used — always consult a qualified professional before acting on it. Action plans are disabled for this save.',
+  },
+  health: {
+    icon: 'shield',
+    color: colors.warning,
+    text: 'Health content — general information only, not medical advice, and not tailored to you. SaveHere isn\'t responsible for how it\'s used; talk to a doctor or qualified professional before acting on it.',
+  },
+  finance: {
+    icon: 'shield',
+    color: colors.warning,
+    text: 'Finance content — general information only, not financial, investment, tax or legal advice. SaveHere is not a licensed adviser and isn\'t responsible for how this is used; markets carry risk and you can lose money. Speak to a qualified adviser before acting on it.',
   },
 }));
 

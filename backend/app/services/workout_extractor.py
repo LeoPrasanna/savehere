@@ -131,6 +131,38 @@ RULES:
 - Respond ONLY with the JSON object"""
 
 
+ITINERARY_PROMPT = """You are a travel-planning AI. Turn this travel content into a practical trip itinerary the user can actually follow.
+
+Platform: {platform}
+Title: {title}
+Text: {text}
+User's note: {notes}
+
+Return this EXACT JSON structure:
+{{
+  "trip_name": "Short name (max 6 words)",
+  "destination": "Place name if stated, else null",
+  "duration_days": 3,
+  "structure_estimated": false,
+  "days": [
+    {{ "label": "Day 1", "items": [ {{ "text": "One concrete thing to do/see, verb-first", "emoji": "📍" }} ] }}
+  ],
+  "tips": ["Short practical tip stated in the content"]
+}}
+
+EMOJI GUIDE: 📍 place/visit  🏔️ nature/trek  🏖️ beach  🍜 food/eat  🛕 culture/temple  🚗 transport  🏨 stay  📸 viewpoint  🎟️ ticket/booking  🛍️ market/shop
+
+RULES:
+- Be FAITHFUL to the content: only places, activities, prices, timings, and names STATED in the text or the user's note. NEVER invent specifics — a made-up price or place name sends someone to the wrong spot. If a detail isn't mentioned, leave it out.
+- ANTI-PADDING (critical): if the content only NAMES places with no activities or details, output one honest stop per place ("Explore Kyoto") and stop there. NEVER pad the plan with famous attractions, restaurants, neighborhoods, or timings the content didn't mention — a plausible-sounding invented stop is worse than a short plan.
+- Structure MAY be organized: if the content lists places without a day plan, group them into sensible days labeled "Day N — Place" (e.g. "Day 1 — Tokyo") — but then set "structure_estimated": true and "duration_days" to your grouping's length. If the content states its own day plan, follow it exactly and set "structure_estimated": false.
+- "duration_days": the number stated in the content, or your grouping's length when estimating; null only if there are no day-like groupings at all (then put everything in one "Places" day).
+- Each item = ONE concrete action or stop, one concise sentence, verb-first (Visit, Trek, Eat at, Catch, Book...). Use the standard spelling of a well-known real place if the content clearly misspells it ("Hiroahima" → "Hiroshima"); otherwise keep names exactly as the content gives them.
+- 1 to 14 days; 1 to 10 items per day; 0 to 6 tips. Tips only from the content (best season, what to carry, booking advice) — never generic filler.
+- If the content has ZERO usable trip information (no places, no activities), return {{"days": []}}.
+- Respond ONLY with the JSON object"""
+
+
 def _parse_model_json(raw_text: str, fallback: dict) -> dict:
     """Strip optional code fences and parse JSON; return fallback on failure."""
     raw = (raw_text or "").strip()
@@ -209,6 +241,66 @@ def extract_tasks(platform: str, title: str, text: str, category: str, notes: st
     result["source"] = "content"
     result["needs_input"] = False
     return result
+
+
+def extract_itinerary(platform: str, title: str, text: str, notes: str = "") -> dict:
+    """Extract a trip itinerary from travel content. Returns
+    {trip_name, destination, duration_days, structure_estimated, days[], tips[]}
+    with days=[] when the content holds no usable trip information.
+    Facts (places/prices/timings) are grounded-only; day GROUPING may be inferred
+    and is flagged via structure_estimated (the itinerary analog of the workout
+    extractor's is_estimated)."""
+    msg = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=1400,
+        messages=[{
+            "role": "user",
+            "content": ITINERARY_PROMPT.format(
+                platform=platform,
+                title=title,
+                text=(text or "")[:3000],
+                notes=(notes or "").strip()[:500] or "(none)",
+            ),
+        }],
+    )
+    result = _parse_model_json(msg.content[0].text, {"days": []})
+
+    # Normalize defensively — this JSON is stored and rendered as-is, so a
+    # malformed model reply must degrade to "nothing extracted", never a crash.
+    days = result.get("days")
+    if not isinstance(days, list):
+        days = []
+    clean_days = []
+    for i, day in enumerate(days[:14]):
+        if not isinstance(day, dict):
+            continue
+        items = day.get("items")
+        if not isinstance(items, list):
+            continue
+        clean_items = [
+            {"text": it["text"].strip(), "emoji": it.get("emoji") or "📍"}
+            for it in items[:10]
+            if isinstance(it, dict) and isinstance(it.get("text"), str) and it["text"].strip()
+        ]
+        if clean_items:
+            label = day.get("label")
+            clean_days.append({
+                "label": label.strip() if isinstance(label, str) and label.strip() else f"Day {i + 1}",
+                "items": clean_items,
+            })
+
+    tips = result.get("tips")
+    clean_tips = [t.strip() for t in tips[:6] if isinstance(t, str) and t.strip()] if isinstance(tips, list) else []
+
+    duration = result.get("duration_days")
+    return {
+        "trip_name": result.get("trip_name") if isinstance(result.get("trip_name"), str) else "Trip Plan",
+        "destination": result.get("destination") if isinstance(result.get("destination"), str) else None,
+        "duration_days": duration if isinstance(duration, int) and 0 < duration <= 14 else None,
+        "structure_estimated": bool(result.get("structure_estimated", False)),
+        "days": clean_days,
+        "tips": clean_tips,
+    }
 
 
 def _infer_recipe(title: str, notes: str) -> dict:

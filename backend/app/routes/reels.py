@@ -91,7 +91,7 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
                 status_code=403,
                 detail=(
                     f"Your free library is full ({ent.save_limit} saves). "
-                    "Delete a save to make room — or Pro removes the cap."
+                    "Delete a save to make room — or a Pro subscription unlocks more."
                 ),
             )
 
@@ -112,7 +112,7 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
         reel = _reel_from_info(user.id, canonical_url, info)
         _apply_duration_guard(reel)
         should_summarize = reel.summary_status == "pending"
-        if should_summarize and not _try_charge(db, user):
+        if should_summarize and not _try_charge(db, user, reel.title or canonical_url):
             reel.summary_status = "failed"   # over budget — retryable after reset
             should_summarize = False
         db.add(reel)
@@ -185,10 +185,10 @@ def _apply_duration_guard(reel: ReelDB) -> None:
         reel.raw_text = None
 
 
-def _try_charge(db: Session, user: AuthUser) -> bool:
+def _try_charge(db: Session, user: AuthUser, label: str | None = None) -> bool:
     """Charge one AI action; False when today's budget is spent (never raises)."""
     try:
-        charge_ai_action(db, user)
+        charge_ai_action(db, user, action="summary", label=label)
         return True
     except HTTPException as e:
         if e.status_code != status.HTTP_429_TOO_MANY_REQUESTS:
@@ -238,7 +238,7 @@ def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
             logger.info(f"[EXTRACT-BG] {reel_id} filled — no summary needed")
             return
 
-        if user is not None and not _try_charge(db, user):
+        if user is not None and not _try_charge(db, user, reel.title or reel.url):
             reel.summary_status = "failed"
             db.commit()
             return
@@ -334,7 +334,7 @@ def resummarize_reel(reel_id: str, user: AuthUser = Depends(get_current_user), d
         )
 
     # Per-user daily AI budget (shared across all AI actions). Charged before the call.
-    charge_ai_action(db, user)
+    charge_ai_action(db, user, action="resummarize", label=reel.title or reel.url)
 
     ai = summarizer.summarize(
         platform=reel.platform,
@@ -343,15 +343,29 @@ def resummarize_reel(reel_id: str, user: AuthUser = Depends(get_current_user), d
     )
 
     if not ai["summary"]:
-        raise HTTPException(
-            status_code=422,
-            detail="Re-summarize found no meaningful content. The reel likely has no caption or transcript. Try adding your own notes instead."
+        # Message depends on WHY it's empty: if the user already added notes and
+        # it still came back empty, "add notes" is contradictory — the content is
+        # just thin (often pure entertainment with no takeaways). Only point them
+        # at notes when there genuinely are none.
+        had_notes = bool((reel.notes or "").strip())
+        detail = (
+            "Couldn't pull clear takeaways from this — it may just be "
+            "entertainment with no key insights to capture. Your note is still "
+            "saved on the card."
+            if had_notes else
+            "Re-summarize found no readable content — this reel has no caption or "
+            "transcript we can read. Add a note describing it, then re-summarize."
         )
+        raise HTTPException(status_code=422, detail=detail)
 
     reel.summary = ai["summary"]
     reel.tags = ai["tags"]
     reel.category = ai["category"]
-    reel.is_sensitive = bool(ai.get("sensitive", False))
+    # LATCH, never overwrite: the model may SET the sensitive flag but can never
+    # CLEAR it. Notes and captions are untrusted prompt input — a steered reply
+    # ("this isn't medical, sensitive=false") must not be able to lift the
+    # medical containment. False positive escape hatch: delete + re-save.
+    reel.is_sensitive = bool(reel.is_sensitive) or bool(ai.get("sensitive", False))
     if _weak_title(reel.title) and ai.get("title"):
         reel.title = ai["title"]
     reel.summarize_count = (reel.summarize_count or 0) + 1
@@ -380,7 +394,7 @@ def summarize_now(reel_id: str, user: AuthUser = Depends(get_current_user), db: 
 
     # Per-user daily AI budget — only charged when we actually run the summary (a
     # reel already 'ready' returned above without spending a unit).
-    charge_ai_action(db, user)
+    charge_ai_action(db, user, action="summary", label=reel.title or reel.url)
 
     _summarize_reel(reel.id)        # own session; commits the result
     db.refresh(reel)                # pull the freshly-committed row into this session
@@ -569,7 +583,8 @@ def _summarize_reel(reel_id: str) -> None:
         ai = summarizer.summarize(platform=reel.platform, title=reel.title or "", text=text)
         reel.summary = ai["summary"]
         reel.tags = ai["tags"]
-        reel.is_sensitive = bool(ai.get("sensitive", False))
+        # Same latch as resummarize: model may set the flag, never clear it.
+        reel.is_sensitive = bool(reel.is_sensitive) or bool(ai.get("sensitive", False))
         if ai.get("category"):
             reel.category = ai["category"]
         # Replace a weak extracted title with the AI one (LinkedIn "Day352:-" etc.).

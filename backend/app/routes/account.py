@@ -6,9 +6,9 @@ import logging
 from datetime import datetime, timedelta
 
 from app.config import settings
-from app.database import get_db, ReelDB, TaskDB, WorkoutExerciseDB, ProfileDB
+from app.database import get_db, ReelDB, TaskDB, WorkoutExerciseDB, ProfileDB, AiActionLogDB
 from app.auth import get_current_user, AuthUser
-from app.quota import usage_today
+from app.quota import usage_today, _utc_today
 from app.entitlements import entitlements_for
 
 logger = logging.getLogger(__name__)
@@ -61,11 +61,65 @@ def get_usage(user: AuthUser = Depends(get_current_user), db: Session = Depends(
         "tier": ent.tier,
         "trial_ends_at": ent.trial_ends_at.isoformat() + "Z" if ent.trial_ends_at else None,
         "saves": {"used": saves_used, "limit": ent.save_limit},   # limit null = unlimited
+        # Feature flags for the app's locked-button UI (server enforces with 403s
+        # regardless — these only decide what to RENDER). tasks refers to
+        # non-cooking "Turn into Action"; recipes and workouts are never gated.
+        "features": {
+            "ask": ent.can_ask,
+            "tasks": ent.can_tasks,
+            "itinerary": ent.can_itinerary,
+        },
         # Legacy top-level AI fields (older clients read these directly).
         "used": used,
         "limit": ent.ai_daily_limit,
         "remaining": max(0, ent.ai_daily_limit - used),
         "resets_at": f"{tomorrow.isoformat()}T00:00:00Z",  # quota days are UTC
+    }
+
+
+# Human-readable labels for the action codes written by charge_ai_action.
+_ACTION_LABELS = {
+    "summary": "Summarised",
+    "resummarize": "Re-summarised",
+    "tasks": "Action steps",
+    "recipe": "Recipe",
+    "workout": "Workout",
+    "itinerary": "Trip itinerary",
+    "ask": "Asked your library",
+    "ai": "AI action",
+}
+
+
+@router.get("/usage/log")
+def get_usage_log(user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    """What today's AI actions were actually spent on — the drill-down behind
+    the "N of M left" meter. Read-only; never charges.
+
+    Short-lived by design (see AI_LOG_RETENTION_DAYS): this is a UI convenience,
+    not an audit trail. Actions charged before the log existed simply won't
+    appear, so `logged` can be < the meter's `used` — the client should say
+    "recent" rather than claim completeness."""
+    day = _utc_today()
+    rows = (
+        db.query(AiActionLogDB)
+        .filter(AiActionLogDB.user_id == user.id, AiActionLogDB.day == day)
+        .order_by(AiActionLogDB.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    return {
+        "day": day.isoformat(),
+        "used": usage_today(db, user.id),          # the meter's number
+        "logged": len(rows),                        # how many we can describe
+        "items": [
+            {
+                "action": r.action,
+                "action_label": _ACTION_LABELS.get(r.action, "AI action"),
+                "label": r.label,
+                "at": (r.created_at.isoformat() + "Z") if r.created_at else None,
+            }
+            for r in rows
+        ],
     }
 
 
@@ -99,6 +153,9 @@ def delete_account(user: AuthUser = Depends(get_current_user), db: Session = Dep
         .filter(ReelDB.user_id == user_id)
         .delete(synchronize_session=False)
     )
+    # The AI action log is per-user descriptive data — goes with the account.
+    # (ai_usage counters stay: deleting them would reset the daily quota.)
+    db.query(AiActionLogDB).filter(AiActionLogDB.user_id == user_id).delete(synchronize_session=False)
     # Profile (trial clock) goes with the account. trial_grants stays: it holds
     # only a hash of the normalized email and exists precisely so that deleting
     # the account can't mint a fresh trial (fraud-prevention, no readable PII).

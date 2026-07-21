@@ -7,7 +7,7 @@ import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from '../../components/Icon';
-import { api, Reel, Task, TaskListResponse, thumbUrl } from '../../services/api';
+import { api, Reel, Task, TaskListResponse, ItineraryResponse, Usage, thumbUrl } from '../../services/api';
 import { openSourceLink } from '../../services/openLink';
 import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
@@ -32,6 +32,13 @@ export default function ReelDetailScreen() {
   const [taskError, setTaskError] = useState('');
   const [hasWorkout, setHasWorkout] = useState(false);
   const [generatingWorkout, setGeneratingWorkout] = useState(false);
+  const [itin, setItin] = useState<ItineraryResponse | null>(null);
+  const [generatingItin, setGeneratingItin] = useState(false);
+  const [itinError, setItinError] = useState('');
+  // Drives the locked-Pro button states. The server enforces the gates with
+  // 403s regardless — this only decides what the button LOOKS like, so a failed
+  // fetch just falls back to the normal (unlocked) rendering.
+  const [usage, setUsage] = useState<Usage | null>(null);
   const [categoryModal, setCategoryModal] = useState(false);
   // Shown before the FIRST workout generation: sets expectations that the plan
   // is a generic template, not personalized coaching.
@@ -68,6 +75,8 @@ export default function ReelDetailScreen() {
     navigation.setOptions({ title: '' });
     api.getTasks(id).then(setTaskList).catch(() => {});
     api.getWorkout(id).then((plan) => setHasWorkout(plan.exercises.length > 0)).catch(() => {});
+    api.getItinerary(id).then(setItin).catch(() => {});
+    api.getUsage().then(setUsage).catch(() => {});
   }, [id]);
 
   // The summary is generated in the background after save, so poll until it lands.
@@ -116,7 +125,7 @@ export default function ReelDetailScreen() {
     } catch (e: any) {
       haptics.error();
       let msg = 'Re-summarize failed.';
-      try { msg = JSON.parse(e.message)?.detail ?? e.message; } catch {}
+      if (e?.message) msg = e.message;   // api.ts already extracted the server detail
       notify(msg);
     } finally {
       setResummarizing(false);
@@ -132,7 +141,7 @@ export default function ReelDetailScreen() {
       setReel(updated);
     } catch (e: any) {
       let msg = 'Summarize failed.';
-      try { msg = JSON.parse(e.message)?.detail ?? e.message; } catch {}
+      if (e?.message) msg = e.message;   // api.ts already extracted the server detail
       notify(msg);
     } finally {
       setSummarizing(false);
@@ -164,10 +173,29 @@ export default function ReelDetailScreen() {
       let msg = isCooking
         ? "Couldn't read a recipe from this content. Try adding the dish name in Notes and tapping again."
         : "Couldn't extract steps from this content.";
-      try { const detail = JSON.parse(e.message)?.detail; if (detail) msg = detail; } catch {}
+      if (e?.message) msg = e.message;   // api.ts already extracted the server detail
       setTaskError(msg);
     } finally {
       setGeneratingTasks(false);
+    }
+  };
+
+  const handleGenerateItinerary = async () => {
+    setGeneratingItin(true);
+    setItinError('');
+    try {
+      // Flush any just-typed note first (same reason as re-summarize): the note
+      // can steer the itinerary (e.g. "we only have 3 days").
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      if (notes.trim()) { try { await api.updateNotes(id, notes); } catch {} }
+      const res = await api.generateItinerary(id);
+      setItin(res);
+      haptics.success();
+    } catch (e: any) {
+      haptics.error();
+      setItinError(e?.message || 'Could not build an itinerary from this reel.');
+    } finally {
+      setGeneratingItin(false);
     }
   };
 
@@ -180,7 +208,7 @@ export default function ReelDetailScreen() {
       router.push(`/workout/${id}`);
     } catch (e: any) {
       let msg = 'Could not extract workout plan.';
-      try { msg = JSON.parse(e.message)?.detail ?? e.message; } catch {}
+      if (e?.message) msg = e.message;   // api.ts already extracted the server detail
       notify(msg);
     } finally {
       setGeneratingWorkout(false);
@@ -195,7 +223,7 @@ export default function ReelDetailScreen() {
       setReel(updated);
     } catch (e: any) {
       let msg = 'Could not update category.';
-      try { msg = JSON.parse(e.message)?.detail ?? e.message; } catch {}
+      if (e?.message) msg = e.message;   // api.ts already extracted the server detail
       notify(msg);
     } finally {
       setSavingCategory(false);
@@ -242,19 +270,49 @@ export default function ReelDetailScreen() {
   // disclaimer instead. The backend refuses generation for these too; hiding the
   // buttons here just keeps the UI honest.
   const isSensitive = !!reel.is_sensitive;
+  // Category-level statutory notices. `medical` (the AI-flagged, action-blocking
+  // case) always wins — never stack two safety notices on one summary.
+  const category = (reel.category || '').toLowerCase();
+  const summaryDisclaimer: 'medical' | 'health' | 'finance' | 'ai' =
+    isSensitive ? 'medical'
+    : category === 'health' ? 'health'
+    : category === 'finance' ? 'finance'
+    : 'ai';
   const TASKS_LIMIT = 1;   // tasks/steps are AI-generated once; then edited by hand
   const WORKOUT_LIMIT = 3;
   const workoutLimitReached = (reel.workout_count ?? 0) >= WORKOUT_LIMIT;
   const aiTasksUsed = (reel.tasks_count ?? 0) >= TASKS_LIMIT;
   const hasTasksContent = !!(taskList && taskList.tasks.length > 0);
   const showTasksCard = !!taskList && (hasTasksContent || aiTasksUsed) && !isSensitive;
-  // No "Turn into Action" for content with nothing actionable: entertainment,
-  // and anything outside a known category (other/unset). Recategorizing the
-  // reel (e.g. a DIY save stuck in "other" → tech/education) re-enables it.
-  const NO_ACTION_CATEGORIES = new Set(['entertainment', 'other', 'general', '']);
+  // No "Turn into Action" for content with nothing genuinely actionable:
+  // entertainment, motivation, news, and anything outside a known category
+  // (other/unset). Motivation yields generic filler ("Believe in yourself")
+  // rather than steps specific to the reel; news is reporting — there is
+  // nothing for the reader to *do*, and inventing steps from a headline is
+  // exactly the kind of ungrounded output we don't want. Both are an AI action
+  // spent for no value. Recategorizing the reel (e.g. a DIY save stuck in
+  // "other" → tech/education) re-enables it.
+  const NO_ACTION_CATEGORIES = new Set(['entertainment', 'motivation', 'news', 'other', 'general', '']);
   const actionableCategory = !NO_ACTION_CATEGORIES.has((reel.category || '').toLowerCase());
-  const showTasksAction = actionableCategory && reel.category !== 'fitness' && !aiTasksUsed;
+  // Trip Itinerary — travel reels only (server enforces the category with a 422
+  // and Pro-only with a 403; this just decides what to render).
+  const isTravel = (reel.category || '').toLowerCase() === 'travel';
+  // A category with its own specialised generator does NOT also get the generic
+  // "Get Action Steps": fitness → workout, travel → itinerary. Two AI buttons on
+  // one card means two charges for overlapping output, and generic steps on a
+  // trip reel ("Research flights") are strictly worse than the day plan.
+  const showTasksAction = actionableCategory && reel.category !== 'fitness' && !isTravel && !aiTasksUsed;
   const showActionsSection = (reel.category === 'fitness' || showTasksAction) && !isSensitive;
+  const itinerary = itin?.itinerary ?? null;
+  // Pro locks. Absent `features` (older server / failed fetch) = treat as
+  // unlocked; the server's 403 remains the real gate either way. Cooking tasks
+  // are the Recipe feature and are never gated.
+  const feat = usage?.features;
+  const itineraryLocked = feat ? !feat.itinerary : false;
+  const tasksLocked = feat && !isCooking ? !feat.tasks : false;
+  const PRO_HINT = 'Available on Pro. Your free plan keeps saves, summaries, recipes and workouts.';
+  const itinRegensLeft = itin?.regenerations_left ?? 3;
+  const showItinerarySection = isTravel && !isSensitive;
 
   return (
     <View style={styles.screen}>
@@ -343,9 +401,9 @@ export default function ReelDetailScreen() {
                 <Text style={styles.bulletText}>{point}</Text>
               </View>
             ))}
-            {/* Sensitive saves get the stronger medical disclaimer instead of
-                stacking it on top of the generic AI one. */}
-            <Disclaimer variant={isSensitive ? 'medical' : 'ai'} style={{ marginTop: spacing.sm }} />
+            {/* One notice only, strongest first: flagged-medical > health >
+                finance > the generic AI caveat. Stacking two would dilute both. */}
+            <Disclaimer variant={summaryDisclaimer} style={{ marginTop: spacing.sm }} />
           </>
         ) : (reel.summary_status === 'failed' || pendingStalled) ? (
           <View style={styles.emptySummary}>
@@ -420,6 +478,104 @@ export default function ReelDetailScreen() {
         />
       </View>
 
+      {/* ── Trip Itinerary (travel reels) ─────────────── */}
+      {showItinerarySection && (
+        <View style={styles.actionsSection}>
+          <View style={styles.cardTitleRow}>
+            <Icon name="travel" size={15} color={colors.warning} />
+            <Text style={styles.cardTitle}>Trip Itinerary</Text>
+          </View>
+
+          {!itinerary && itineraryLocked && (
+            <>
+              <View style={styles.lockedBtn}>
+                <Icon name="lock-closed" size={18} color={colors.textTertiary} />
+                <Text style={styles.lockedBtnText}>Create Itinerary</Text>
+                <View style={styles.proTag}><Text style={styles.proTagText}>PRO</Text></View>
+              </View>
+              <Text style={styles.actionHint}>{PRO_HINT}</Text>
+            </>
+          )}
+
+          {!itinerary && !itineraryLocked && (
+            <>
+              <Pressable
+                style={styles.actionBtnWrap}
+                onPress={handleGenerateItinerary}
+                disabled={generatingItin || itinRegensLeft <= 0}
+              >
+                <LinearGradient colors={gradients.sunset} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
+                  {generatingItin
+                    ? <ActivityIndicator size="small" color="#FFF" />
+                    : <Icon name="travel" size={20} color="#FFF" />}
+                  <Text style={styles.actionBtnText}>
+                    {generatingItin ? 'Planning…' : itinRegensLeft <= 0 ? 'Limit reached' : 'Create Itinerary'}
+                  </Text>
+                </LinearGradient>
+              </Pressable>
+              <Text style={styles.actionHint}>Built only from what the reel mentions — nothing is invented. Uses 1 AI action.</Text>
+            </>
+          )}
+
+          {itinerary && (
+            <View style={styles.card}>
+              <Text style={styles.itinTripName}>
+                {itinerary.trip_name}
+                {itinerary.destination ? ` · ${itinerary.destination}` : ''}
+                {itinerary.duration_days ? ` · ${itinerary.duration_days} day${itinerary.duration_days > 1 ? 's' : ''}` : ''}
+              </Text>
+              {itinerary.structure_estimated && (
+                <View style={styles.disclaimer}>
+                  <Icon name="information-circle" size={14} color={colors.warning} />
+                  <Text style={styles.disclaimerText}>
+                    The reel didn't state a day-by-day plan, so the days were organized by AI. The places themselves come only from the reel.
+                  </Text>
+                </View>
+              )}
+              {itinerary.days.map((day, di) => (
+                <View key={di} style={styles.itinDay}>
+                  <Text style={styles.itinDayLabel}>{day.label}</Text>
+                  {day.items.map((it, ii) => (
+                    <View key={ii} style={styles.itinItemRow}>
+                      <Text style={styles.itinEmoji}>{it.emoji}</Text>
+                      <Text style={styles.itinItemText}>{it.text}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))}
+              {itinerary.tips.length > 0 && (
+                <View style={styles.itinDay}>
+                  <Text style={styles.itinDayLabel}>Tips from the reel</Text>
+                  {itinerary.tips.map((t, i) => (
+                    <View key={i} style={styles.itinItemRow}>
+                      <Text style={styles.itinEmoji}>💡</Text>
+                      <Text style={styles.itinItemText}>{t}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {itinRegensLeft > 0 && (
+                <Pressable onPress={handleGenerateItinerary} disabled={generatingItin} style={styles.itinRebuildRow}>
+                  {generatingItin
+                    ? <ActivityIndicator size="small" color={colors.accent} />
+                    : <Icon name="refresh" size={13} color={colors.accent} />}
+                  <Text style={styles.itinRebuildText}>
+                    {generatingItin ? 'Rebuilding…' : `Rebuild itinerary (${itinRegensLeft} left)`}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+
+          {itinError ? (
+            <View style={styles.inlineError}>
+              <Icon name="alert-circle" size={14} color={colors.danger} />
+              <Text style={styles.inlineErrorText}>{itinError}</Text>
+            </View>
+          ) : null}
+        </View>
+      )}
+
       {/* ── Actions ──────────────────────────────────── */}
       {showActionsSection && (
         <View style={styles.actionsSection}>
@@ -445,7 +601,15 @@ export default function ReelDetailScreen() {
               </Pressable>
             )}
 
-            {showTasksAction && (
+            {showTasksAction && tasksLocked && (
+              <View style={styles.lockedBtn}>
+                <Icon name="lock-closed" size={18} color={colors.textTertiary} />
+                <Text style={styles.lockedBtnText}>Get Action Steps</Text>
+                <View style={styles.proTag}><Text style={styles.proTagText}>PRO</Text></View>
+              </View>
+            )}
+
+            {showTasksAction && !tasksLocked && (
               <Pressable style={styles.actionBtnWrap} onPress={handleGenerateTasks} disabled={generatingTasks}>
                 <LinearGradient colors={gradients.cool} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
                   {generatingTasks
@@ -459,7 +623,9 @@ export default function ReelDetailScreen() {
             )}
           </View>
           {showTasksAction && (
-            <Text style={styles.actionHint}>Generated once with AI — after that you can add, edit, or delete by hand.</Text>
+            <Text style={styles.actionHint}>
+              {tasksLocked ? PRO_HINT : 'Generated once with AI — after that you can add, edit, or delete by hand.'}
+            </Text>
           )}
           {taskError ? (
             <View style={styles.inlineError}>
@@ -483,6 +649,10 @@ export default function ReelDetailScreen() {
               <Text style={styles.disclaimerText}>{taskList.note}</Text>
             </View>
           ) : null}
+          {/* Steps are the riskiest surface for these categories — this is where
+              content becomes a checklist someone might actually follow. */}
+          {category === 'health' && <Disclaimer variant="health" style={{ marginTop: spacing.sm }} />}
+          {category === 'finance' && <Disclaimer variant="finance" style={{ marginTop: spacing.sm }} />}
           {isCooking && <Disclaimer variant="recipe" style={{ marginTop: spacing.sm }} />}
           <View style={{ marginTop: spacing.sm }}>
             <TaskList
@@ -719,6 +889,43 @@ const styles = themed(() => StyleSheet.create({
     padding: spacing.sm, marginTop: spacing.xs,
   },
   inlineErrorText: { color: colors.danger, fontSize: font.xs, lineHeight: 16, flex: 1 },
+
+  // Locked (Pro) variant of an action button: unmistakably inert — no gradient,
+  // dashed border, muted text — so it reads as "not yet yours", not "broken".
+  lockedBtn: {
+    flex: 1, minWidth: 140,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    borderRadius: radius.md, paddingVertical: spacing.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border, borderStyle: 'dashed',
+  },
+  lockedBtnText: { color: colors.textSecondary, fontSize: font.sm, fontWeight: '800' },
+  proTag: {
+    backgroundColor: colors.accent + '22', borderRadius: radius.sm,
+    paddingHorizontal: 6, paddingVertical: 2,
+  },
+  proTagText: { color: colors.accent, fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+
+  itinTripName: {
+    color: colors.textPrimary, fontSize: font.md, fontWeight: '800',
+    marginBottom: spacing.xs,
+  },
+  itinDay: { marginTop: spacing.sm },
+  itinDayLabel: {
+    color: colors.accent, fontSize: font.sm, fontWeight: '800',
+    marginBottom: spacing.xs, letterSpacing: 0.3,
+  },
+  itinItemRow: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
+    paddingVertical: 3,
+  },
+  itinEmoji: { fontSize: font.sm, lineHeight: 20 },
+  itinItemText: { flex: 1, color: colors.textPrimary, fontSize: font.sm, lineHeight: 20 },
+  itinRebuildRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    marginTop: spacing.md, alignSelf: 'flex-start',
+  },
+  itinRebuildText: { color: colors.accent, fontSize: font.xs, fontWeight: '700' },
 
   urlRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,

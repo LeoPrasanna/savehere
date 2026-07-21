@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, event, Column, String, DateTime, Date, JSON, Text, Integer, Boolean, ForeignKey, text
+from sqlalchemy import create_engine, event, Column, String, DateTime, Date, JSON, Text, Integer, Boolean, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
 import uuid
@@ -9,7 +9,11 @@ from app.config import settings
 # DATABASE_URL swap (with auth) needs no code change.
 _is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 _connect_args = {"check_same_thread": False} if _is_sqlite else {}
-engine = create_engine(settings.DATABASE_URL, connect_args=_connect_args)
+# pool_pre_ping: the Supabase pooler recycles idle connections, so a pooled
+# connection can be dead by the time we reuse it. Pre-ping validates it first,
+# turning "server closed the connection unexpectedly" 500s into a transparent
+# reconnect. Harmless on SQLite.
+engine = create_engine(settings.DATABASE_URL, connect_args=_connect_args, pool_pre_ping=True)
 
 if _is_sqlite:
     # SQLite ignores ON DELETE CASCADE unless foreign_keys is switched on per
@@ -49,6 +53,11 @@ class ReelDB(Base):
     summarize_count = Column(Integer, nullable=False, default=0)
     tasks_count = Column(Integer, nullable=False, default=0)        # AI task/recipe generations
     workout_count = Column(Integer, nullable=False, default=0)      # AI workout generations
+    itinerary_count = Column(Integer, nullable=False, default=0)    # AI itinerary generations (travel)
+    # Stored trip itinerary (travel reels, Pro feature). JSON blob rather than a
+    # child table: items aren't individually editable like tasks/exercises, so a
+    # single document is simpler and regenerates atomically.
+    itinerary = Column(JSON, nullable=True)
     # Flagged by the summarizer when the content is medical/high-stakes health or
     # safety advice. Sensitive reels keep thumbnail+summary+notes but are never
     # turned into tasks/workouts (enforced server-side in routes/workout.py) and
@@ -152,6 +161,25 @@ class AiUsageDB(Base):
     count = Column(Integer, nullable=False, default=0)
 
 
+class AiActionLogDB(Base):
+    """One row per successfully charged AI action — the human-readable companion
+    to `ai_usage`'s bare counter, so "95 of 100 left" can be expanded into WHAT
+    those actions were.
+
+    Deliberately short-lived: rows are pruned past `AI_LOG_RETENTION_DAYS` (see
+    app/quota.py). This is a UI convenience, not an audit trail — never make
+    anything depend on old rows being here. Written best-effort AFTER the charge
+    succeeds, so a logging failure can never block or refund an AI action."""
+    __tablename__ = "ai_action_log"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String, nullable=False, index=True)
+    day = Column(Date, nullable=False, index=True)      # UTC day, matches ai_usage
+    action = Column(String, nullable=False)             # summary | tasks | workout | itinerary | ask …
+    label = Column(String, nullable=True)               # reel title / question snippet (truncated)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 def get_db():
     db = SessionLocal()
     try:
@@ -161,23 +189,26 @@ def get_db():
 
 
 def create_tables():
-    Base.metadata.create_all(bind=engine)
-    # migrate existing tables — safe to run repeatedly
-    with engine.connect() as conn:
-        for stmt in [
-            "ALTER TABLE reels ADD COLUMN notes TEXT",
-            "ALTER TABLE reels ADD COLUMN summarize_count INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE reels ADD COLUMN tasks_count INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE reels ADD COLUMN workout_count INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE reels ADD COLUMN summary_status TEXT NOT NULL DEFAULT 'ready'",
-            "ALTER TABLE reels ADD COLUMN user_id TEXT",
-            "CREATE INDEX IF NOT EXISTS ix_reels_user_id ON reels (user_id)",
-            "ALTER TABLE reels ADD COLUMN is_sensitive BOOLEAN NOT NULL DEFAULT 0",
-            "ALTER TABLE tasks ADD COLUMN kind TEXT DEFAULT 'task'",
-            "ALTER TABLE tasks ADD COLUMN source TEXT DEFAULT 'content'",
-        ]:
-            try:
-                conn.execute(text(stmt))
-                conn.commit()
-            except Exception:
-                pass  # column already exists
+    """Bring the schema up to date. Alembic is now the single schema authority:
+    `alembic upgrade head` creates everything on a fresh DB and applies any new
+    migrations on an existing one — idempotent, so a no-op once at head.
+
+    This replaces the old `create_all()` + `ALTER TABLE … except: pass` loop,
+    which silently swallowed failures and is unsafe on Postgres (a failed
+    statement aborts the whole transaction, so the first duplicate-column error
+    would kill every later ALTER — meaning new columns would silently never
+    apply to the live DB). See TODO → "Alembic migrations".
+
+    Runs on startup; fine for a single instance. If the app is ever scaled
+    horizontally, move this to a one-shot deploy step (Render preDeployCommand)
+    so instances don't race to migrate."""
+    from pathlib import Path
+    from alembic import command
+    from alembic.config import Config
+
+    backend_dir = Path(__file__).resolve().parent.parent   # …/backend
+    cfg = Config(str(backend_dir / "alembic.ini"))
+    # Absolute script location so it works regardless of the process cwd
+    # (env.py supplies the DB URL from settings, so no url is set here).
+    cfg.set_main_option("script_location", str(backend_dir / "alembic"))
+    command.upgrade(cfg, "head")

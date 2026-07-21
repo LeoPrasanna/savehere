@@ -13,7 +13,10 @@ charges one action. The charge is a single atomic conditional UPDATE
 race-safe on SQLite (db-level write lock) and Postgres (row lock), single- or
 multi-instance. Charged BEFORE the AI call: a failed generation still cost tokens.
 """
-from datetime import datetime, date
+import logging
+import time
+import uuid
+from datetime import datetime, date, timedelta
 
 from fastapi import HTTPException, status
 from sqlalchemy import text, update, select
@@ -21,8 +24,23 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.auth import AuthUser
-from app.database import AiUsageDB
+from app.database import AiUsageDB, AiActionLogDB
 from app.entitlements import entitlements_for, tier_for  # noqa: F401  (tier_for re-exported for compat)
+
+logger = logging.getLogger(__name__)
+
+# How long the human-readable action log is kept. It exists so today's usage
+# meter can be expanded into "what did I spend it on" — not as an audit trail.
+# 2 days (not 1) so a user near the UTC boundary still sees a full day.
+AI_LOG_RETENTION_DAYS = 2
+_LABEL_MAX = 80
+_PRUNE_EVERY_SECONDS = 3600
+# -inf, NOT 0.0: time.monotonic()'s zero point is arbitrary (near process/boot
+# start), so `monotonic() - 0.0` is small on a freshly-started host and the
+# throttle would wrongly skip the FIRST prune for up to an hour after a restart.
+# -inf guarantees the first log action always triggers a prune, then it throttles
+# to hourly. (This also removes an order-dependent CI flake.)
+_last_prune_at = float("-inf")
 
 # Idempotent "make sure today's row exists" — DO NOTHING on a concurrent insert.
 # The ON CONFLICT (column-list) syntax is identical on SQLite and Postgres.
@@ -51,14 +69,71 @@ def usage_today(db: Session, user_id: str, *, today: date | None = None) -> int:
     return count or 0
 
 
-def charge_ai_action(db: Session, user: AuthUser, *, today: date | None = None) -> int:
+def _prune_action_log_if_due(db: Session) -> None:
+    """Drop log rows past the retention window. Throttled per process and
+    fail-open — pruning must never break the request that triggered it."""
+    global _last_prune_at
+    now = time.monotonic()
+    if now - _last_prune_at < _PRUNE_EVERY_SECONDS:
+        return
+    _last_prune_at = now
+    try:
+        cutoff = _utc_today() - timedelta(days=AI_LOG_RETENTION_DAYS)
+        db.query(AiActionLogDB).filter(AiActionLogDB.day < cutoff).delete(synchronize_session=False)
+        db.commit()
+    except Exception as e:                                    # pragma: no cover - defensive
+        logger.warning(f"[QUOTA] action-log prune skipped: {type(e).__name__}: {e}")
+        db.rollback()
+
+
+def log_ai_action(db: Session, user_id: str, action: str, label: str | None = None,
+                  *, today: date | None = None) -> None:
+    """Record WHAT an AI action was, for the usage-meter drill-down.
+
+    Best-effort by contract: the charge has already succeeded and the Claude call
+    is about to happen, so a logging failure must be swallowed — never turn a
+    working feature into a 500 over a UI nicety."""
+    try:
+        text_label = (label or "").strip().replace("\n", " ")
+        if len(text_label) > _LABEL_MAX:
+            text_label = text_label[:_LABEL_MAX - 1].rstrip() + "…"
+        db.add(AiActionLogDB(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            day=today or _utc_today(),
+            action=action,
+            label=text_label or None,
+        ))
+        db.commit()
+        _prune_action_log_if_due(db)
+    except Exception as e:                                    # pragma: no cover - defensive
+        logger.warning(f"[QUOTA] action-log write skipped: {type(e).__name__}: {e}")
+        db.rollback()
+
+
+def charge_ai_action(db: Session, user: AuthUser, *, action: str = "ai",
+                     label: str | None = None, today: date | None = None) -> int:
     """Charge one AI action against the user's daily budget for their EFFECTIVE
     tier (pro / in-trial / post-trial trickle — see app/entitlements.py).
 
     Raises HTTP 429 when the day's allowance is exhausted. Call it AFTER any free
-    validation/cap checks and BEFORE the Claude call."""
+    validation/cap checks and BEFORE the Claude call.
+
+    `action`/`label` feed the usage-meter drill-down (ai_action_log). They're
+    optional so an endpoint that forgets them still charges correctly — it just
+    shows up generically in the list."""
     ent = entitlements_for(user, db)
-    return enforce_daily_ai_quota(db, user.id, ent.ai_daily_limit, today=today)
+    count = enforce_daily_ai_quota(db, user.id, ent.ai_daily_limit, today=today)
+    # Only reached when the charge succeeded — refused actions are never logged.
+    # Guarded HERE as well as inside log_ai_action: past this line the user has
+    # already been charged and the Claude call is imminent, so ANY exception
+    # would mean they paid and got a 500. The guarantee must not depend on one
+    # function's internals staying correct.
+    try:
+        log_ai_action(db, user.id, action, label, today=today)
+    except Exception as e:                                    # pragma: no cover - defensive
+        logger.warning(f"[QUOTA] action-log skipped for {user.id}: {type(e).__name__}: {e}")
+    return count
 
 
 def enforce_daily_ai_quota(

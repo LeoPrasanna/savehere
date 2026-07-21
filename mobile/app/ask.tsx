@@ -35,8 +35,9 @@ export default function AskScreen() {
       const res = await api.askStream(text, { onToken: setStreamingText });
       setResult(res);
     } catch (e: any) {
-      let msg = e?.message || 'Something went wrong. Try again.';
-      try { const d = JSON.parse(e.message)?.detail; if (d) msg = d; } catch {}
+      // api.ts already extracted the server's `detail`, so e.message is the
+      // human-readable text (e.g. the Pro-upsell for a gated Ask).
+      const msg = e?.message || 'Something went wrong. Try again.';
       setError(msg);
     } finally {
       setLoading(false);

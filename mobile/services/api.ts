@@ -87,6 +87,48 @@ export interface Usage {
   limit: number;       // AI actions allowed today (tier-dependent)
   remaining: number;
   resets_at: string;
+  // Feature flags for locked-button UI (server enforces with 403s regardless):
+  // post-trial free loses ask / non-cooking tasks / itinerary; trial+pro keep all.
+  features?: { ask: boolean; tasks: boolean; itinerary: boolean };
+}
+
+// The drill-down behind the meter: what today's AI actions were spent on.
+export interface UsageLogItem {
+  action: string;         // summary | resummarize | tasks | recipe | workout | itinerary | ask
+  action_label: string;   // human label, e.g. "Trip itinerary"
+  label: string | null;   // the reel title or question snippet
+  at: string | null;      // ISO timestamp
+}
+
+export interface UsageLog {
+  day: string;
+  used: number;           // the meter's number
+  logged: number;         // how many we can actually describe (may be < used)
+  items: UsageLogItem[];
+}
+
+// ── Trip Itinerary (travel reels, Pro feature) ─────────────────────────────
+export interface ItineraryDay {
+  label: string;                                  // "Day 1 — Tokyo"
+  items: { text: string; emoji: string }[];
+}
+
+export interface Itinerary {
+  trip_name: string;
+  destination: string | null;
+  duration_days: number | null;
+  // True when the reel didn't state a day plan and the AI organized the places
+  // into days itself — the UI shows an honesty note. Places are always
+  // extracted-only, never invented.
+  structure_estimated: boolean;
+  days: ItineraryDay[];
+  tips: string[];
+}
+
+export interface ItineraryResponse {
+  reel_id: string;
+  itinerary: Itinerary | null;                    // null = never generated
+  regenerations_left: number;
 }
 
 export interface AskResponse {
@@ -260,6 +302,13 @@ export const api = {
   getWorkout: (reelId: string) =>
     request<WorkoutPlan>(`/api/reels/${reelId}/workout`),
 
+  // ── Trip Itinerary (travel reels) ────────────────────────
+  generateItinerary: (reelId: string) =>
+    request<ItineraryResponse>(`/api/reels/${reelId}/itinerary`, { method: 'POST' }),
+
+  getItinerary: (reelId: string) =>
+    request<ItineraryResponse>(`/api/reels/${reelId}/itinerary`),
+
   updateExercise: (exerciseId: string, patch: { sets?: number; reps?: number; duration_seconds?: number; rest_seconds?: number }) =>
     request<WorkoutExercise>(`/api/exercises/${exerciseId}`, {
       method: 'PATCH',
@@ -297,6 +346,8 @@ export const api = {
 
   // ── Account ───────────────────────────────────────────────
   getUsage: () => request<Usage>('/api/account/usage'),
+
+  getUsageLog: () => request<UsageLog>('/api/account/usage/log'),
 
   deleteAccount: () =>
     request<{ deleted: boolean; reels_removed: number; message: string }>(`/api/account`, { method: 'DELETE' }),
