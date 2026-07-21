@@ -1,16 +1,68 @@
-# Render Blueprint — deploys the SaveHere FastAPI backend.
-# Render → New → Blueprint → connect this repo; Render reads this file.
-# Set ANTHROPIC_API_KEY (and any optional keys) in the dashboard — they are NOT
-# stored here. See docs/DEPLOY.md for the full walkthrough and caveats.
+# Render Blueprint — deploys the SaveHere FastAPI backend to TWO environments:
+#   • savehere-api-staging  ← auto-deploys from `develop`, uses the savehere-dev Supabase project
+#   • savehere-api-prod     ← auto-deploys from `main`,    uses the SaveHere (prod) Supabase project
+#
+# Render → New → Blueprint → connect this repo; Render reads this file and proposes
+# both services. Each service's SECRETS are set in ITS OWN dashboard Environment tab
+# (sync:false = not stored in git). Point each at the matching Supabase project +
+# Postgres pooler — see docs/ENVIRONMENTS.md for the full per-env matrix, and
+# docs/DEPLOY.md for the walkthrough and caveats.
+#
+# ⚠️ DATABASE_URL is sync:false and MUST be set in EACH service. Unset → the app
+# falls back to SQLite on Render's EPHEMERAL disk, wiped on every redeploy (total
+# data loss). Use the Supabase SESSION POOLER string (port 5432, IPv4) — the direct
+# string is IPv6-only and the transaction pooler (6543) breaks prepared statements.
+
 services:
+  # ── STAGING ────────────────────────────────────────────────────────────────
   - type: web
-    name: savehere-api
+    name: savehere-api-staging
     runtime: python
     rootDir: backend
-    plan: free                      # free = stable URL but cold-starts after ~15m idle
+    branch: develop
+    plan: free                      # free = cold-starts after ~15m idle; fine for staging
     # Force-upgrade yt-dlp on every build — YouTube changes regularly break older
-    # versions, and this is the single biggest factor in save success rate. The
-    # pinned floor in requirements.txt gets bumped to latest here, ignoring cache.
+    # versions, and this is the single biggest factor in save success rate.
+    buildCommand: pip install -r requirements.txt && pip install -U --no-cache-dir yt-dlp
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.4"
+      - key: ENV
+        value: staging
+      # The deployed web app's origin(s), comma-separated. "*" works for a first
+      # deploy; tighten to the real staging domain once the web app is hosted.
+      - key: ALLOWED_ORIGINS
+        value: "*"
+      # ── Secrets — set in THIS service's dashboard (savehere-dev project) ──────
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # ⚠️ REQUIRED — savehere-dev SESSION POOLER (:5432). Unset = ephemeral SQLite.
+      - key: DATABASE_URL
+        sync: false
+      # Backend needs these for auth: JWKS token verification (app/auth.py), admin
+      # account-deletion + tier writes (routes/account.py), the billing webhook
+      # (routes/billing.py). SUPABASE_JWKS_URL is auto-derived from SUPABASE_URL.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: OPENAI_API_KEY        # optional (Whisper transcription)
+        sync: false
+      - key: APIFY_API_KEY         # optional (LinkedIn scraper)
+        sync: false
+      - key: SENTRY_DSN            # optional (error monitoring; empty = disabled)
+        sync: false
+
+  # ── PRODUCTION ─────────────────────────────────────────────────────────────
+  - type: web
+    name: savehere-api-prod
+    runtime: python
+    rootDir: backend
+    branch: main
+    plan: starter                   # always-on (~$7/mo) — no cold starts; owner approves at apply
     buildCommand: pip install -r requirements.txt && pip install -U --no-cache-dir yt-dlp
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
@@ -20,18 +72,18 @@ services:
         value: "3.12.4"
       - key: ENV
         value: production
-      # The deployed web app's origin(s), comma-separated. "*" works for a first
-      # deploy; tighten to the real domain once the web app is hosted.
+      # Tighten to the real prod domain once the web app is hosted.
       - key: ALLOWED_ORIGINS
         value: "*"
-      # Secrets — set these in the Render dashboard (sync:false = not in git).
+      # ── Secrets — set in THIS service's dashboard (SaveHere prod project) ─────
       - key: ANTHROPIC_API_KEY
         sync: false
-      # ⚠️ REQUIRED in prod. Unset = the app falls back to SQLite on Render's
-      # EPHEMERAL disk, which is wiped on every redeploy (total data loss). Use
-      # the Supabase SESSION POOLER string (port 5432, IPv4) — the direct string
-      # is IPv6-only and the transaction pooler (6543) breaks prepared statements.
+      # ⚠️ REQUIRED — SaveHere (prod) SESSION POOLER (:5432). Unset = ephemeral SQLite.
       - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: OPENAI_API_KEY        # optional (Whisper transcription)
         sync: false

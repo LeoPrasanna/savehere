@@ -19,9 +19,11 @@ Pre-seeds the local profile row, so the account works at the right tier even if
 it has never hit this backend yet. Also clears each account's AI counter so a
 freshly-flipped tier isn't instantly over its (smaller) daily cap.
 
-Guarded: refuses to run unless DATABASE_URL is SQLite. Needs SUPABASE_URL +
-SUPABASE_SERVICE_ROLE_KEY in backend/.env (to resolve emails -> user ids and to
-write the pro claim).
+Guarded: only targets the savehere-dev project — DATABASE_URL must be local
+SQLite or savehere-dev, AND SUPABASE_URL must be savehere-dev (the pro claim is
+written to whatever Supabase project SUPABASE_URL names, so a prod URL here would
+stamp a real user). Needs SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in .env (to
+resolve emails -> user ids and to write the pro claim).
 
 Usage:
     python scripts/dev_seed_tiers.py                 # apply the DEFAULT_MAP below
@@ -45,12 +47,20 @@ DEFAULT_MAP = {
 VALID = ("trial", "free", "pro")
 
 
+# Fail-closed dev guard. ponytail: dev ref hardcoded — add refs if a second
+# dev/staging project appears.
+_DEV_REF = "ymclmbmmwtczspnmccsy"  # savehere-dev
+
+
 def _guard() -> None:
-    if not settings.DATABASE_URL.startswith("sqlite"):
-        sys.exit(f"Refusing to run: DATABASE_URL is not SQLite "
-                 f"({settings.DATABASE_URL.split('://')[0]}://…). Local dev tool only.")
+    db_ok = settings.DATABASE_URL.startswith("sqlite") or _DEV_REF in settings.DATABASE_URL
+    supa_ok = _DEV_REF in settings.SUPABASE_URL
+    if not (db_ok and supa_ok):
+        sys.exit("Refusing to run: this dev tool only targets the savehere-dev project "
+                 "(SUPABASE_URL must be savehere-dev; DATABASE_URL must be local SQLite or "
+                 "savehere-dev). Never point it at production.")
     if not (settings.SUPABASE_URL and settings.SUPABASE_SERVICE_ROLE_KEY):
-        sys.exit("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing from backend/.env")
+        sys.exit("SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY missing from .env")
 
 
 def _admin_headers() -> dict:

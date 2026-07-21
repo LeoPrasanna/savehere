@@ -51,6 +51,11 @@ ALTER TABLE workout_exercises    FORCE  ROW LEVEL SECURITY;
 ALTER TABLE extraction_cache     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE extraction_cache     FORCE  ROW LEVEL SECURITY;
 
+-- ai_action_log holds the descriptive AI-usage log (reel titles + question text).
+-- Added after the tables above — must be locked down the same way.
+ALTER TABLE ai_action_log         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_action_log         FORCE  ROW LEVEL SECURITY;
+
 
 -- ── Verify ───────────────────────────────────────────────────────────────────
 -- Every row must show rowsecurity = true AND relforcerowsecurity = true.

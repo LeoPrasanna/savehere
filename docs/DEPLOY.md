@@ -1,5 +1,11 @@
 # Deploying SaveHere
 
+> **Environments:** `render.yaml` now defines **two** services —
+> `savehere-api-staging` (auto-deploys from `develop`, `savehere-dev` Supabase) and
+> `savehere-api-prod` (from `main`, `SaveHere` Supabase). For the full dev/staging/prod
+> matrix and which env-var value each environment uses, see
+> [`ENVIRONMENTS.md`](ENVIRONMENTS.md).
+
 This deploys the **backend** to a stable URL so it survives Codespace/session
 teardown (the recurring "Can't reach the server" pain). The **web frontend** is a
 separate, smaller step — see the last section.
@@ -16,10 +22,18 @@ Free tier = a stable public URL at $0 (with cold starts). Steps:
 
 1. **Push this branch / merge to `develop`** so `render.yaml` is on the branch you'll deploy.
 2. Go to **render.com → New → Blueprint** and connect the `LeoPrasanna/savehere` repo.
-   Render reads [`render.yaml`](../render.yaml) and proposes the `savehere-api` web service.
-3. **Set the secret:** in the service's **Environment**, add `ANTHROPIC_API_KEY`
-   (and optionally `OPENAI_API_KEY`, `APIFY_API_KEY`). These are `sync:false` in
-   the blueprint, so they MUST be entered here.
+   Render reads [`render.yaml`](../render.yaml) and proposes **two** web services:
+   `savehere-api-staging` (deploys from `develop`) and `savehere-api-prod` (from `main`).
+3. **Set the secrets per service** (in each service's **Environment** tab — they're
+   `sync:false`, so NOT in git and MUST be entered here). Point each at the matching
+   Supabase project — staging → `savehere-dev`, prod → `SaveHere`:
+   - `DATABASE_URL` ⚠️ **required** — the Supabase **session pooler** URL (`:5432`).
+     Unset = ephemeral SQLite → data loss on every redeploy.
+   - `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` — the backend needs these for auth
+     (token verify, admin account-deletion, billing webhook).
+   - `ANTHROPIC_API_KEY` (+ optional `OPENAI_API_KEY`, `APIFY_API_KEY`, `SENTRY_DSN`).
+
+   See [`ENVIRONMENTS.md`](ENVIRONMENTS.md) for the full per-env value matrix.
 4. **Apply / Deploy.** First build installs `backend/requirements.txt` and starts
    `uvicorn app.main:app --host 0.0.0.0 --port $PORT`.
 5. **Verify:** open `https://<your-service>.onrender.com/health` → `{"status":"ok"}`.
