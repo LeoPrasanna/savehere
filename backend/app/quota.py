@@ -35,7 +35,12 @@ logger = logging.getLogger(__name__)
 AI_LOG_RETENTION_DAYS = 2
 _LABEL_MAX = 80
 _PRUNE_EVERY_SECONDS = 3600
-_last_prune_at = 0.0
+# -inf, NOT 0.0: time.monotonic()'s zero point is arbitrary (near process/boot
+# start), so `monotonic() - 0.0` is small on a freshly-started host and the
+# throttle would wrongly skip the FIRST prune for up to an hour after a restart.
+# -inf guarantees the first log action always triggers a prune, then it throttles
+# to hourly. (This also removes an order-dependent CI flake.)
+_last_prune_at = float("-inf")
 
 # Idempotent "make sure today's row exists" — DO NOTHING on a concurrent insert.
 # The ON CONFLICT (column-list) syntax is identical on SQLite and Postgres.

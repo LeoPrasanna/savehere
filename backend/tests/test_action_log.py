@@ -154,7 +154,10 @@ class TestRetention:
         finally:
             db.close()
 
-        monkeypatch.setattr(quota, "_last_prune_at", 0.0)   # force the throttle open
+        # -inf reliably opens the throttle regardless of time.monotonic()'s
+        # arbitrary epoch (0.0 was the CI flake — on a fresh host monotonic()
+        # can be < the 1h window, leaving the throttle closed).
+        monkeypatch.setattr(quota, "_last_prune_at", float("-inf"))
         db = Session()
         try:
             log_ai_action(db, USER, "ask", "fresh")
