@@ -92,6 +92,21 @@ export interface Usage {
   features?: { ask: boolean; tasks: boolean; itinerary: boolean };
 }
 
+// The drill-down behind the meter: what today's AI actions were spent on.
+export interface UsageLogItem {
+  action: string;         // summary | resummarize | tasks | recipe | workout | itinerary | ask
+  action_label: string;   // human label, e.g. "Trip itinerary"
+  label: string | null;   // the reel title or question snippet
+  at: string | null;      // ISO timestamp
+}
+
+export interface UsageLog {
+  day: string;
+  used: number;           // the meter's number
+  logged: number;         // how many we can actually describe (may be < used)
+  items: UsageLogItem[];
+}
+
 // ── Trip Itinerary (travel reels, Pro feature) ─────────────────────────────
 export interface ItineraryDay {
   label: string;                                  // "Day 1 — Tokyo"
@@ -331,6 +346,8 @@ export const api = {
 
   // ── Account ───────────────────────────────────────────────
   getUsage: () => request<Usage>('/api/account/usage'),
+
+  getUsageLog: () => request<UsageLog>('/api/account/usage/log'),
 
   deleteAccount: () =>
     request<{ deleted: boolean; reels_removed: number; message: string }>(`/api/account`, { method: 'DELETE' }),

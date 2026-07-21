@@ -4,7 +4,7 @@ import { MotiView } from 'moti';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { api, Reel, Usage } from '../services/api';
+import { api, Reel, Usage, UsageLog } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { GlassCard } from './GlassCard';
@@ -40,12 +40,27 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [usage, setUsage] = useState<Usage | null>(null);
+  // Tap-to-expand drill-down: what today's AI actions were spent on. Lazy —
+  // only fetched the first time the user opens it, kept until the panel closes.
+  const [logOpen, setLogOpen] = useState(false);
+  const [log, setLog] = useState<UsageLog | null>(null);
+  const [logLoading, setLogLoading] = useState(false);
 
   // Refresh the AI budget each time the panel opens; quietly keep the last known
   // value if the request fails (the meter is informative, never blocking).
   useEffect(() => {
     if (visible) api.getUsage().then(setUsage).catch(() => {});
+    else { setLogOpen(false); setLog(null); }   // reset the drill-down on close
   }, [visible]);
+
+  const toggleLog = () => {
+    const next = !logOpen;
+    setLogOpen(next);
+    if (next && !log && !logLoading) {
+      setLogLoading(true);
+      api.getUsageLog().then(setLog).catch(() => {}).finally(() => setLogLoading(false));
+    }
+  };
 
   const go = (path: string) => { onClose(); router.push(path as any); };
 
@@ -231,12 +246,24 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
               transition={{ type: 'timing', duration: 300, delay: 450 }}
             >
               <GlassCard tint="violet" intensity="low" style={styles.usageCard}>
-                <View style={styles.usageHeader}>
+                {/* The whole header toggles the "what did I spend it on" list.
+                    Only offer it when there's something to show. */}
+                <Pressable
+                  onPress={usage.used > 0 ? toggleLog : undefined}
+                  disabled={usage.used === 0}
+                  style={styles.usageHeader}
+                  scaleTo={usage.used > 0 ? 0.99 : 1}
+                >
                   <Icon name="sparkles" size={14} color={colors.accentLight} />
                   <Text style={styles.usageTitle}>
                     {usage.remaining} of {usage.limit} AI actions left
                   </Text>
-                </View>
+                  {usage.used > 0 && (
+                    <Icon name={logOpen ? 'chevron-right' : 'chevron-right'} size={14}
+                          color={colors.textTertiary}
+                          style={{ transform: [{ rotate: logOpen ? '90deg' : '0deg' }] }} />
+                  )}
+                </Pressable>
                 <View style={styles.usageTrack}>
                   <LinearGradient
                     colors={gradients.hologram}
@@ -244,9 +271,36 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                     style={[styles.usageFill, { width: `${Math.min(100, (usage.used / Math.max(1, usage.limit)) * 100)}%` }]}
                   />
                 </View>
-                <Text style={styles.usageHint}>
-                  Summaries, recipes, workouts & questions all count. Resets daily.
-                </Text>
+
+                {logOpen ? (
+                  <View style={styles.logBox}>
+                    {logLoading && !log ? (
+                      <Text style={styles.usageHint}>Loading…</Text>
+                    ) : log && log.items.length > 0 ? (
+                      <>
+                        {log.items.map((it, i) => (
+                          <View key={i} style={styles.logRow}>
+                            <Text style={styles.logAction}>{it.action_label}</Text>
+                            {it.label ? <Text style={styles.logLabel} numberOfLines={1}>{it.label}</Text> : null}
+                          </View>
+                        ))}
+                        {log.used > log.logged && (
+                          <Text style={styles.logMore}>
+                            + {log.used - log.logged} earlier action{log.used - log.logged > 1 ? 's' : ''} today
+                          </Text>
+                        )}
+                      </>
+                    ) : (
+                      <Text style={styles.usageHint}>No recorded actions yet today.</Text>
+                    )}
+                  </View>
+                ) : (
+                  <Text style={styles.usageHint}>
+                    {usage.used > 0
+                      ? 'Summaries, recipes, workouts & questions all count. Tap to see today\'s.'
+                      : 'Summaries, recipes, workouts & questions all count. Resets daily.'}
+                  </Text>
+                )}
                 {usage.tier === 'trial' && usage.trial_ends_at && (
                   <View style={styles.planRow}>
                     <Icon name="time" size={13} color={colors.warning} />
@@ -397,13 +451,21 @@ const styles = themed(() => StyleSheet.create({
 
   usageCard: { padding: spacing.md, gap: spacing.xs },
   usageHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  usageTitle: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' },
+  usageTitle: { flex: 1, color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' },
   usageTrack: {
     height: 6, borderRadius: radius.full, overflow: 'hidden',
     backgroundColor: colors.border, marginTop: 2,
   },
   usageFill: { height: '100%', borderRadius: radius.full },
   usageHint: { color: colors.textTertiary, fontSize: 10, marginTop: 2 },
+  logBox: {
+    marginTop: spacing.xs, paddingTop: spacing.xs,
+    borderTopWidth: 1, borderTopColor: colors.border, gap: 5,
+  },
+  logRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
+  logAction: { color: colors.accentLight, fontSize: font.xs, fontWeight: '700', minWidth: 92 },
+  logLabel: { flex: 1, color: colors.textSecondary, fontSize: font.xs },
+  logMore: { color: colors.textTertiary, fontSize: 10, marginTop: 2, fontStyle: 'italic' },
   planRow: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     marginTop: spacing.xs, paddingTop: spacing.xs,
