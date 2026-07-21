@@ -18,12 +18,31 @@ import { colors, spacing, font, radius, gradients, shadow, typeface, themed } fr
 type Mode = 'signin' | 'signup';
 type FieldName = 'first' | 'last' | 'nick' | 'email' | 'password';
 
+// Client-side password gate for signup. This is UX only — it can't be trusted
+// (anyone can call the Supabase API directly), so the REAL floor is the
+// Supabase dashboard password policy + leaked-password protection (owner
+// action, see TODO). Length-first per NIST 800-63B: we require length and
+// merely ENCOURAGE variety rather than forcing composition rules.
+const MIN_PASSWORD = 8;
+
+function passwordStrength(pw: string): { level: 0 | 1 | 2 | 3; label: string; ok: boolean } {
+  if (pw.length < MIN_PASSWORD) {
+    return { level: 0, label: `Use at least ${MIN_PASSWORD} characters`, ok: false };
+  }
+  const variety =
+    (/[a-z]/.test(pw) ? 1 : 0) + (/[A-Z]/.test(pw) ? 1 : 0) +
+    (/[0-9]/.test(pw) ? 1 : 0) + (/[^A-Za-z0-9]/.test(pw) ? 1 : 0);
+  if (pw.length >= 12 && variety >= 3) return { level: 3, label: 'Strong password', ok: true };
+  if (pw.length >= 10 || variety >= 3) return { level: 2, label: 'Good — longer is stronger', ok: true };
+  return { level: 1, label: 'OK — add length or a number/symbol to strengthen', ok: true };
+}
+
 // Surface Supabase's auth errors as short, human messages.
 function friendly(message: string): string {
   const m = message.toLowerCase();
   if (m.includes('invalid login')) return 'Wrong email or password.';
   if (m.includes('already registered')) return 'That email already has an account — sign in instead.';
-  if (m.includes('password should be')) return 'Password must be at least 6 characters.';
+  if (m.includes('password should be') || m.includes('password is too weak')) return `Password must be at least ${MIN_PASSWORD} characters.`;
   if (m.includes('unable to validate email') || m.includes('invalid email')) return 'Enter a valid email address.';
   if (m.includes('network')) return "Couldn't reach the server. Check your connection.";
   return message || 'Something went wrong. Try again.';
@@ -100,10 +119,13 @@ export function LoginScreen() {
     shake();
   };
 
+  const pwStrength = passwordStrength(password);
+
   const submit = async () => {
     const e = email.trim();
     if (!e || !password) { fail('Enter your email and password.'); return; }
     if (mode === 'signup' && !firstName.trim()) { fail('Enter your first name.'); return; }
+    if (mode === 'signup' && !pwStrength.ok) { fail(`Use at least ${MIN_PASSWORD} characters for your password.`); return; }
     setBusy(true); setError(''); setNotice('');
     try {
       if (mode === 'signin') {
@@ -260,7 +282,7 @@ export function LoginScreen() {
               <Field
                 icon="lock" name="password" focused={focused} setFocused={setFocused}
                 value={password} onChangeText={setPassword}
-                placeholder={isSignup ? 'Create a password (6+ characters)' : 'Your password'}
+                placeholder={isSignup ? `Create a password (${MIN_PASSWORD}+ characters)` : 'Your password'}
                 secureTextEntry={!showPw} autoCapitalize="none" editable={!busy}
                 onSubmitEditing={submit} returnKeyType="go"
                 accessibilityLabel="Password"
@@ -270,6 +292,29 @@ export function LoginScreen() {
                   </Pressable>
                 }
               />
+              {isSignup && password.length > 0 && (
+                <View style={styles.strengthWrap} accessibilityLabel={`Password strength: ${pwStrength.label}`}>
+                  <View style={styles.strengthTrack}>
+                    {[0, 1, 2].map((i) => (
+                      <View
+                        key={i}
+                        style={[
+                          styles.strengthSeg,
+                          i < pwStrength.level && {
+                            backgroundColor:
+                              pwStrength.level >= 3 ? colors.success
+                              : pwStrength.level === 2 ? colors.warning
+                              : colors.danger,
+                          },
+                        ]}
+                      />
+                    ))}
+                  </View>
+                  <Text style={[styles.strengthText, { color: pwStrength.ok ? colors.textSecondary : colors.danger }]}>
+                    {pwStrength.label}
+                  </Text>
+                </View>
+              )}
             </View>
 
             {error ? (
@@ -381,6 +426,14 @@ const styles = themed(() => StyleSheet.create({
   },
   inputRowFocus: { borderColor: colors.accent, ...shadow.glow },
   input: { flex: 1, color: colors.textPrimary, fontSize: font.md, paddingVertical: spacing.md },
+
+  // Password strength meter (signup only)
+  strengthWrap: { gap: 5, paddingHorizontal: spacing.xs, marginTop: 2 },
+  strengthTrack: { flexDirection: 'row', gap: 4 },
+  strengthSeg: {
+    flex: 1, height: 3, borderRadius: radius.full, backgroundColor: colors.border,
+  },
+  strengthText: { fontSize: font.xs, fontWeight: '600' },
 
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   errorText: { color: colors.danger, fontSize: font.sm, flex: 1, fontWeight: '600' },

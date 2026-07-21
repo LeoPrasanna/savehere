@@ -270,6 +270,14 @@ export default function ReelDetailScreen() {
   // disclaimer instead. The backend refuses generation for these too; hiding the
   // buttons here just keeps the UI honest.
   const isSensitive = !!reel.is_sensitive;
+  // Category-level statutory notices. `medical` (the AI-flagged, action-blocking
+  // case) always wins — never stack two safety notices on one summary.
+  const category = (reel.category || '').toLowerCase();
+  const summaryDisclaimer: 'medical' | 'health' | 'finance' | 'ai' =
+    isSensitive ? 'medical'
+    : category === 'health' ? 'health'
+    : category === 'finance' ? 'finance'
+    : 'ai';
   const TASKS_LIMIT = 1;   // tasks/steps are AI-generated once; then edited by hand
   const WORKOUT_LIMIT = 3;
   const workoutLimitReached = (reel.workout_count ?? 0) >= WORKOUT_LIMIT;
@@ -277,12 +285,14 @@ export default function ReelDetailScreen() {
   const hasTasksContent = !!(taskList && taskList.tasks.length > 0);
   const showTasksCard = !!taskList && (hasTasksContent || aiTasksUsed) && !isSensitive;
   // No "Turn into Action" for content with nothing genuinely actionable:
-  // entertainment, motivation, and anything outside a known category
-  // (other/unset). Motivation is here because it reliably yields generic filler
-  // ("Believe in yourself", "Wake up early") rather than steps specific to the
-  // reel — an AI action spent for no value. Recategorizing the reel (e.g. a DIY
-  // save stuck in "other" → tech/education) re-enables it.
-  const NO_ACTION_CATEGORIES = new Set(['entertainment', 'motivation', 'other', 'general', '']);
+  // entertainment, motivation, news, and anything outside a known category
+  // (other/unset). Motivation yields generic filler ("Believe in yourself")
+  // rather than steps specific to the reel; news is reporting — there is
+  // nothing for the reader to *do*, and inventing steps from a headline is
+  // exactly the kind of ungrounded output we don't want. Both are an AI action
+  // spent for no value. Recategorizing the reel (e.g. a DIY save stuck in
+  // "other" → tech/education) re-enables it.
+  const NO_ACTION_CATEGORIES = new Set(['entertainment', 'motivation', 'news', 'other', 'general', '']);
   const actionableCategory = !NO_ACTION_CATEGORIES.has((reel.category || '').toLowerCase());
   // Trip Itinerary — travel reels only (server enforces the category with a 422
   // and Pro-only with a 403; this just decides what to render).
@@ -391,9 +401,9 @@ export default function ReelDetailScreen() {
                 <Text style={styles.bulletText}>{point}</Text>
               </View>
             ))}
-            {/* Sensitive saves get the stronger medical disclaimer instead of
-                stacking it on top of the generic AI one. */}
-            <Disclaimer variant={isSensitive ? 'medical' : 'ai'} style={{ marginTop: spacing.sm }} />
+            {/* One notice only, strongest first: flagged-medical > health >
+                finance > the generic AI caveat. Stacking two would dilute both. */}
+            <Disclaimer variant={summaryDisclaimer} style={{ marginTop: spacing.sm }} />
           </>
         ) : (reel.summary_status === 'failed' || pendingStalled) ? (
           <View style={styles.emptySummary}>
@@ -639,6 +649,10 @@ export default function ReelDetailScreen() {
               <Text style={styles.disclaimerText}>{taskList.note}</Text>
             </View>
           ) : null}
+          {/* Steps are the riskiest surface for these categories — this is where
+              content becomes a checklist someone might actually follow. */}
+          {category === 'health' && <Disclaimer variant="health" style={{ marginTop: spacing.sm }} />}
+          {category === 'finance' && <Disclaimer variant="finance" style={{ marginTop: spacing.sm }} />}
           {isCooking && <Disclaimer variant="recipe" style={{ marginTop: spacing.sm }} />}
           <View style={{ marginTop: spacing.sm }}>
             <TaskList
