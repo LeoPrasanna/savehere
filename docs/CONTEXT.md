@@ -7,6 +7,11 @@
 
 _Last meaningful update: see git log on `develop`._
 
+> **Dev/staging/prod split:** local dev + staging share the `savehere-dev` Postgres +
+> Supabase (SQLite retired for local dev 2026-07-21, for Codespaces data persistence);
+> staging deploys from `develop`, prod = `SaveHere` Postgres from `main`. Config is
+> 12-factor (no code branching) — full env-var matrix in [`ENVIRONMENTS.md`](ENVIRONMENTS.md).
+
 ---
 
 ## 1. What SaveHere is

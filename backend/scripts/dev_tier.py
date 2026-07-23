@@ -21,8 +21,8 @@ for that, then sign out and back in (the JWT caches the tier for up to 1h).
 By contrast trial/free is recomputed from the DB on every request, so changes
 made here take effect on the very next API call — just refresh the app.
 
-Guard: refuses to run unless DATABASE_URL is SQLite, so this can never be
-pointed at a production Postgres.
+Guard: runs only against a DEV database (local SQLite or the savehere-dev
+project), never production — so this can't corrupt real users' trial clocks.
 """
 import sys
 from datetime import datetime, timedelta
@@ -31,9 +31,13 @@ sys.path.insert(0, ".")
 
 from app.config import settings  # noqa: E402
 
-if not settings.DATABASE_URL.startswith("sqlite"):
-    sys.exit(f"Refusing to run: DATABASE_URL is not SQLite ({settings.DATABASE_URL.split('://')[0]}://…). "
-             "This is a local dev tool only.")
+# Fail-closed: allow local SQLite or the savehere-dev project only; anything else
+# (esp. the prod project) is refused. ponytail: dev ref hardcoded — add more refs
+# here if a second dev/staging project appears.
+_DEV_DB_REF = "ymclmbmmwtczspnmccsy"  # savehere-dev
+if not (settings.DATABASE_URL.startswith("sqlite") or _DEV_DB_REF in settings.DATABASE_URL):
+    sys.exit("Refusing to run: DATABASE_URL is neither local SQLite nor the savehere-dev "
+             "project. This is a dev-only tool — it must never touch production.")
 
 from app.database import SessionLocal, ProfileDB, ReelDB, AiUsageDB  # noqa: E402
 from app.auth import AuthUser  # noqa: E402
