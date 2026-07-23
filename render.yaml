@@ -1,9 +1,12 @@
-# Render Blueprint — deploys the SaveHere FastAPI backend to TWO environments:
-#   • savehere-api-staging  ← auto-deploys from `develop`, uses the savehere-dev Supabase project
-#   • savehere-api-prod     ← auto-deploys from `main`,    uses the SaveHere (prod) Supabase project
+# Render Blueprint — deploys the SaveHere FastAPI backend.
+#   • savehere-api-staging  ← from `develop`, uses the savehere-dev Supabase project. ACTIVE (free tier).
+#   • savehere-api-prod     ← from `main`,    uses the SaveHere (prod) project. DEFERRED — commented out
+#     below so the blueprint stays free-tier (a paid plan forces a card at apply). Re-enable at launch.
+# Deploys are CI-gated: Render autoDeploy is OFF, and .github/workflows/ci.yml fires the deploy hook
+# only after backend tests pass (see that file). The first deploy still runs on blueprint apply.
 #
 # Render → New → Blueprint → connect this repo; Render reads this file and proposes
-# both services. Each service's SECRETS are set in ITS OWN dashboard Environment tab
+# the staging service. Its SECRETS are set in the dashboard Environment tab
 # (sync:false = not stored in git). Point each at the matching Supabase project +
 # Postgres pooler — see docs/ENVIRONMENTS.md for the full per-env matrix, and
 # docs/DEPLOY.md for the walkthrough and caveats.
@@ -56,38 +59,40 @@ services:
       - key: SENTRY_DSN            # optional (error monitoring; empty = disabled)
         sync: false
 
-  # ── PRODUCTION ─────────────────────────────────────────────────────────────
-  - type: web
-    name: savehere-api-prod
-    runtime: python
-    rootDir: backend
-    branch: main
-    plan: starter                   # always-on (~$7/mo) — no cold starts; owner approves at apply
-    buildCommand: pip install -r requirements.txt && pip install -U --no-cache-dir yt-dlp
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health
-    autoDeploy: false               # CI-gated: deploys fire from .github/workflows/ci.yml's hook AFTER tests pass, not on raw push
-    envVars:
-      - key: PYTHON_VERSION
-        value: "3.12.4"
-      - key: ENV
-        value: production
-      # Tighten to the real prod domain once the web app is hosted.
-      - key: ALLOWED_ORIGINS
-        value: "*"
-      # ── Secrets — set in THIS service's dashboard (SaveHere prod project) ─────
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      # ⚠️ REQUIRED — SaveHere (prod) SESSION POOLER (:5432). Unset = ephemeral SQLite.
-      - key: DATABASE_URL
-        sync: false
-      - key: SUPABASE_URL
-        sync: false
-      - key: SUPABASE_SERVICE_ROLE_KEY
-        sync: false
-      - key: OPENAI_API_KEY        # optional (Whisper transcription)
-        sync: false
-      - key: APIFY_API_KEY         # optional (LinkedIn scraper)
-        sync: false
-      - key: SENTRY_DSN            # optional (error monitoring; empty = disabled)
-        sync: false
+  # ── PRODUCTION (deferred until launch — commented out on purpose) ───────────
+  # Kept out of the active blueprint so it stays 100% free-tier for now: a paid
+  # `plan: starter` service forces a credit card at blueprint apply. Re-enable at
+  # launch (with a card + Supabase Pro) by uncommenting this block. It's identical
+  # to savehere-api-staging above except: name, branch: main, plan: starter,
+  # ENV=production. Point its secrets at the SaveHere (prod) project, not dev.
+  # - type: web
+  #   name: savehere-api-prod
+  #   runtime: python
+  #   rootDir: backend
+  #   branch: main
+  #   plan: starter                 # always-on (~$7/mo)
+  #   buildCommand: pip install -r requirements.txt && pip install -U --no-cache-dir yt-dlp
+  #   startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+  #   healthCheckPath: /health
+  #   autoDeploy: false             # CI-gated via .github/workflows/ci.yml
+  #   envVars:
+  #     - key: PYTHON_VERSION
+  #       value: "3.12.4"
+  #     - key: ENV
+  #       value: production
+  #     - key: ALLOWED_ORIGINS
+  #       value: "*"
+  #     - key: ANTHROPIC_API_KEY
+  #       sync: false
+  #     - key: DATABASE_URL          # SaveHere prod SESSION POOLER (:5432)
+  #       sync: false
+  #     - key: SUPABASE_URL
+  #       sync: false
+  #     - key: SUPABASE_SERVICE_ROLE_KEY
+  #       sync: false
+  #     - key: OPENAI_API_KEY
+  #       sync: false
+  #     - key: APIFY_API_KEY
+  #       sync: false
+  #     - key: SENTRY_DSN
+  #       sync: false
