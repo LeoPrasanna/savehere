@@ -1,13 +1,15 @@
-# Monthly redeploy to pull the latest yt-dlp (the build command force-upgrades it).
-# YouTube regularly breaks older yt-dlp; this keeps the deployed backend current
-# without a code change. Triggers a Render deploy via a deploy hook.
+# Monthly redeploy of PRODUCTION to pull the latest yt-dlp (the build command
+# force-upgrades it). YouTube regularly breaks older yt-dlp; this keeps the live
+# prod backend current without a code change. Staging redeploys often enough on
+# its own (every green push to develop), so this targets prod only.
 #
+# Reuses the same deploy hook the CI gate uses for prod (ci.yml).
 # SETUP (one-time, owner action):
-#   1. Render dashboard → savehere-api → Settings → Deploy Hook → copy the URL.
+#   1. Render dashboard → savehere-api-prod → Settings → Deploy Hook → copy the URL.
 #   2. GitHub repo → Settings → Secrets and variables → Actions → New repository
-#      secret named RENDER_DEPLOY_HOOK_URL, paste the URL.
+#      secret named RENDER_DEPLOY_HOOK_PROD, paste the URL.
 # Until that secret exists the job no-ops (it won't fail the Actions tab).
-name: Refresh yt-dlp (monthly redeploy)
+name: Refresh yt-dlp (monthly prod redeploy)
 
 on:
   schedule:
@@ -18,14 +20,14 @@ jobs:
   redeploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Trigger Render deploy
+      - name: Trigger Render deploy (prod)
         env:
-          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_PROD }}
         run: |
           if [ -z "$HOOK" ]; then
-            echo "RENDER_DEPLOY_HOOK_URL not set — skipping. See this file's header for setup."
+            echo "RENDER_DEPLOY_HOOK_PROD not set — skipping. See this file's header for setup."
             exit 0
           fi
-          echo "Triggering Render redeploy to refresh yt-dlp…"
+          echo "Triggering Render prod redeploy to refresh yt-dlp…"
           curl -fsS -X POST "$HOOK"
           echo "Done."

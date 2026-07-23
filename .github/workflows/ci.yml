@@ -1,16 +1,21 @@
-# Runs the backend test suite on every push/PR touching backend code.
+# Runs the backend test suite on every push/PR touching backend code, and — ONLY
+# after tests pass on develop/main — triggers the matching Render deploy (staging
+# from develop, prod from main) via a Render deploy hook. This IS the CI gate:
+# Render's own autoDeploy is OFF (render.yaml), so a red build never ships.
 # Keeps `develop` green — the shipping gate (CLAUDE.md) depends on tests passing.
 name: CI
 
 on:
   push:
-    branches: [develop]
+    branches: [develop, main]
     paths:
       - "backend/**"
+      - "render.yaml"
       - ".github/workflows/ci.yml"
   pull_request:
     paths:
       - "backend/**"
+      - "render.yaml"
       - ".github/workflows/ci.yml"
 
 jobs:
@@ -36,3 +41,32 @@ jobs:
         # No ANTHROPIC_API_KEY in CI — tests must not make live AI calls. The suite
         # covers pure logic (url/platform/vtt parsing, rate limiter, response coercion).
         run: python -m pytest tests/ -q
+
+  deploy:
+    name: Deploy to Render (only if tests pass)
+    needs: backend-tests
+    # `needs` makes this a HARD gate: if backend-tests fails, this job is skipped
+    # and nothing deploys. Push to develop/main only — never on PRs.
+    # Note: this gates on BACKEND tests only. Mobile CI (mobile-ci.yml) is not a
+    # gate here — Render deploys the backend, so a mobile type error must not block
+    # a backend deploy.
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || github.ref == 'refs/heads/main')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Render deploy via hook
+        env:
+          STAGING_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_STAGING }}
+          PROD_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK_PROD }}
+        run: |
+          if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            HOOK="$PROD_HOOK"; TARGET="prod (savehere-api-prod)"
+          else
+            HOOK="$STAGING_HOOK"; TARGET="staging (savehere-api-staging)"
+          fi
+          if [ -z "$HOOK" ]; then
+            echo "::notice::Deploy hook for $TARGET not set — tests passed, skipping deploy. Add the RENDER_DEPLOY_HOOK_STAGING / RENDER_DEPLOY_HOOK_PROD secret to enable auto-deploy."
+            exit 0
+          fi
+          echo "Tests passed — triggering Render deploy for $TARGET…"
+          curl -fsS -X POST "$HOOK"
+          echo "Deploy triggered."
