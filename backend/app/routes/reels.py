@@ -480,9 +480,19 @@ def client_metadata(reel_id: str, body: ClientMetadataRequest,
         reel.uploader = body.uploader.strip()
 
     if len(text) < _MIN_SUMMARIZABLE:
-        # Client couldn't read it either (CORS on web, private post, or genuinely
-        # textless). Persist whatever title/thumbnail we gained; stay honest.
-        reel.summary_status = "skipped"
+        # The client couldn't read it either (CORS on web, a private post, or —
+        # most commonly — YouTube, where the client only has oEmbed and oEmbed
+        # carries no description).
+        #
+        # Do NOT downgrade a reel whose server-side extraction is still running.
+        # This payload usually arrives within a second of /save, long before the
+        # background chain finishes, and marking it 'skipped' here made the app
+        # stop polling (the detail screen only polls while status is 'pending').
+        # The summary then landed seconds later and stayed invisible until a
+        # manual page reload. Keep the title/thumbnail we gained and let the
+        # server finish; it sets the honest final status either way.
+        if reel.summary_status != "pending":
+            reel.summary_status = "skipped"
         db.commit()
         db.refresh(reel)
         return _to_response(reel)
