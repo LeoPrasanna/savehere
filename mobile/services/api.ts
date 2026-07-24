@@ -1,5 +1,6 @@
 import { Platform } from 'react-native';
 import { getAccessToken } from './supabase';
+import type { ClientMetadata } from './clientExtract';
 
 // Local dev defaults to localhost; override for cloud dev (e.g. a Codespace's
 // forwarded backend URL) by setting EXPO_PUBLIC_API_URL before `expo start`.
@@ -250,6 +251,15 @@ export const api = {
     request<Reel>('/api/reels/save', {
       method: 'POST',
       body: JSON.stringify({ url }),
+    }),
+
+  /** Hand the backend metadata this device fetched from the user's own IP, for
+   *  links our datacenter IP can't read (Instagram/Facebook). The server ignores
+   *  it whenever its own extraction succeeded. See services/clientExtract.ts. */
+  sendClientMetadata: (reelId: string, meta: ClientMetadata) =>
+    request<Reel>(`/api/reels/${reelId}/client-metadata`, {
+      method: 'POST',
+      body: JSON.stringify(meta),
     }),
 
   listReels: (filters?: { tag?: string; category?: string; platform?: string; limit?: number; offset?: number }) => {

@@ -8,7 +8,10 @@ from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
 from app.database import get_db, SessionLocal, ReelDB, ExtractionCacheDB, TaskDB, WorkoutExerciseDB
-from app.routes.models.reel import ReelSaveRequest, ReelNotesRequest, ReelCategoryRequest, ReelResponse, ReelListResponse
+from app.routes.models.reel import (
+    ReelSaveRequest, ReelNotesRequest, ReelCategoryRequest, ReelResponse, ReelListResponse,
+    ClientMetadataRequest,
+)
 from app.services import extractor, transcriber, summarizer
 from app.services import search as smart_search
 from app.ratelimit import rate_limit
@@ -224,13 +227,27 @@ def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
             _store_extraction(db, reel.url, info)
 
         filled = _reel_from_info(reel.user_id, reel.url, info)
+        # Non-destructive fill. The client-metadata endpoint may have already
+        # populated this row from the user's own IP (see client_metadata) while
+        # this background extraction was still running — a blocked server extract
+        # returns empty fields, and blindly assigning them would wipe good data.
+        # Rule: only ever replace a field with something better, never with less.
         reel.platform = filled.platform if filled.platform != "unknown" else reel.platform
-        reel.title = filled.title
-        reel.thumbnail_url = filled.thumbnail_url
-        reel.uploader = filled.uploader
-        reel.duration = filled.duration
-        reel.raw_text = filled.raw_text
-        reel.summary_status = filled.summary_status
+        if filled.title and _weak_title(reel.title):
+            reel.title = filled.title
+        if filled.thumbnail_url:
+            reel.thumbnail_url = filled.thumbnail_url
+        if filled.uploader:
+            reel.uploader = filled.uploader
+        if filled.duration:
+            reel.duration = filled.duration
+        server_text = (filled.raw_text or "").strip()
+        if len(server_text) >= len((reel.raw_text or "").strip()):
+            reel.raw_text = filled.raw_text
+            reel.summary_status = filled.summary_status
+        elif reel.summary_status == "skipped":
+            # Client text is the better source and nothing has summarized it yet.
+            reel.summary_status = "pending"
         _apply_duration_guard(reel)
         db.commit()
 
@@ -398,6 +415,75 @@ def summarize_now(reel_id: str, user: AuthUser = Depends(get_current_user), db: 
 
     _summarize_reel(reel.id)        # own session; commits the result
     db.refresh(reel)                # pull the freshly-committed row into this session
+    return _to_response(reel)
+
+
+# Minimum characters that make text worth sending to Claude — same bar the
+# extractor uses for should_summarize, kept in sync deliberately.
+_MIN_SUMMARIZABLE = 50
+
+
+@router.post("/{reel_id}/client-metadata", response_model=ReelResponse,
+             dependencies=[Depends(rate_limit(20, 60, "client_metadata"))])
+def client_metadata(reel_id: str, body: ClientMetadataRequest,
+                    user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Accept metadata the CLIENT fetched from the user's own IP, for links our
+    server can't read (Instagram/Facebook block datacenter IPs — see docs/CONTEXT.md
+    §4). The app posts this right after /save; the card is already on screen, so
+    this never delays the save.
+
+    Trust model — this is untrusted client input:
+      * sizes are capped by the pydantic model (oversize -> 422),
+      * the reel must belong to the caller (`_get_owned_reel_or_404` -> 404),
+      * the posted URL must match the reel's URL after normalization, so a client
+        can't attach text harvested from one link onto a different reel,
+      * SERVER DATA ALWAYS WINS: if our own extraction already produced usable
+        text, the payload is ignored. A lying client can therefore only influence
+        saves the server could not read at all — and that text is already fenced
+        as untrusted by the summarizer prompt + the one-way is_sensitive latch.
+    """
+    reel = _get_owned_reel_or_404(reel_id, user, db)
+
+    if extractor.normalize_url(body.url) != reel.url:
+        raise HTTPException(status_code=422, detail="This metadata doesn't belong to that saved link.")
+
+    # Server extraction already produced something usable → keep it, spend nothing.
+    if len((reel.raw_text or "").strip()) >= _MIN_SUMMARIZABLE:
+        return _to_response(reel)
+    if reel.summary_status == "ready" and reel.summary:
+        return _to_response(reel)
+
+    text = (body.text or "").strip()
+    # Fill the gaps the server couldn't. Never downgrade a field we already have.
+    if body.title and _weak_title(reel.title):
+        reel.title = body.title.strip()[:300]
+    if body.thumbnail_url and not reel.thumbnail_url:
+        reel.thumbnail_url = body.thumbnail_url.strip()
+    if body.uploader and not reel.uploader:
+        reel.uploader = body.uploader.strip()
+
+    if len(text) < _MIN_SUMMARIZABLE:
+        # Client couldn't read it either (CORS on web, private post, or genuinely
+        # textless). Persist whatever title/thumbnail we gained; stay honest.
+        reel.summary_status = "skipped"
+        db.commit()
+        db.refresh(reel)
+        return _to_response(reel)
+
+    reel.raw_text = text
+    reel.summary_status = "pending"
+    db.commit()
+
+    # Charged only now that we actually have something to summarize. Over budget →
+    # keep the text (retryable via /summarize after the daily reset), don't 500.
+    if not _try_charge(db, user, reel.title or reel.url):
+        reel.summary_status = "failed"
+        db.commit()
+        db.refresh(reel)
+        return _to_response(reel)
+
+    _summarize_reel(reel.id)        # own session; commits the result
+    db.refresh(reel)
     return _to_response(reel)
 
 
