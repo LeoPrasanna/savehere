@@ -554,16 +554,10 @@ export default function ReelDetailScreen() {
                   ))}
                 </View>
               )}
-              {itinRegensLeft > 0 && (
-                <Pressable onPress={handleGenerateItinerary} disabled={generatingItin} style={styles.itinRebuildRow}>
-                  {generatingItin
-                    ? <ActivityIndicator size="small" color={colors.accent} />
-                    : <Icon name="refresh" size={13} color={colors.accent} />}
-                  <Text style={styles.itinRebuildText}>
-                    {generatingItin ? 'Rebuilding…' : `Rebuild itinerary (${itinRegensLeft} left)`}
-                  </Text>
-                </Pressable>
-              )}
+              {/* Rebuild removed (2026-07-24): regenerating spent an AI action to
+                  produce a near-identical plan from the same source text, and the
+                  "(N left)" counter made the cost the user's problem. First
+                  generation still works; the server-side cap stays as the guard. */}
             </View>
           )}
 
@@ -921,11 +915,6 @@ const styles = themed(() => StyleSheet.create({
   },
   itinEmoji: { fontSize: font.sm, lineHeight: 20 },
   itinItemText: { flex: 1, color: colors.textPrimary, fontSize: font.sm, lineHeight: 20 },
-  itinRebuildRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
-    marginTop: spacing.md, alignSelf: 'flex-start',
-  },
-  itinRebuildText: { color: colors.accent, fontSize: font.xs, fontWeight: '700' },
 
   urlRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
