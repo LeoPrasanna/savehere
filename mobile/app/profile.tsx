@@ -7,9 +7,9 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '../components/Icon';
 import { Pressable } from '../components/Pressable';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, GENDER_OPTIONS, type Gender } from '../contexts/AuthContext';
 import * as haptics from '../services/haptics';
-import { colors, spacing, font, radius, gradients, shadow } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -17,6 +17,7 @@ export default function ProfileScreen() {
   const [firstName, setFirstName] = useState(profile.first_name ?? '');
   const [lastName, setLastName] = useState(profile.last_name ?? '');
   const [nickname, setNickname] = useState(profile.nickname ?? '');
+  const [gender, setGender] = useState<Gender | undefined>(profile.gender);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -27,6 +28,7 @@ export default function ProfileScreen() {
       first_name: firstName.trim(),
       last_name: lastName.trim() || undefined,
       nickname: nickname.trim() || undefined,
+      gender,
     });
     setBusy(false);
     if (error) { haptics.error(); setError(error); return; }
@@ -61,6 +63,26 @@ export default function ProfileScreen() {
           autoCapitalize="words" editable={!busy} onSubmitEditing={save} returnKeyType="done"
         />
 
+        {/* Optional — only picks which avatar icon you get. Tapping the selected
+            option again clears it, so choosing is never a one-way door. */}
+        <Text style={styles.label}>Avatar <Text style={styles.optional}>(optional)</Text></Text>
+        <View style={styles.genderRow}>
+          {GENDER_OPTIONS.map((opt) => {
+            const selected = gender === opt.value;
+            return (
+              <Pressable
+                key={opt.value}
+                onPress={() => !busy && setGender(selected ? undefined : opt.value)}
+                style={[styles.genderChip, selected && styles.genderChipOn]}
+                scaleTo={0.97}
+              >
+                <Icon name={opt.icon} size={16} color={selected ? colors.accent : colors.textTertiary} />
+                <Text style={[styles.genderText, selected && styles.genderTextOn]}>{opt.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
         {error ? (
           <View style={styles.errorRow}>
             <Icon name="alert-circle" size={14} color={colors.danger} />
@@ -78,13 +100,25 @@ export default function ProfileScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// themed(): this sheet bakes in accent tokens (the selected gender chip), and a
+// plain StyleSheet.create freezes them at module load — the live accent switch
+// would leave these stale. See constants/theme.ts.
+const styles = themed(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   inner: { padding: spacing.xl, gap: spacing.xs },
   caption: { color: colors.textTertiary, fontSize: font.xs, fontWeight: '700' },
   email: { color: colors.textPrimary, fontSize: font.md, fontWeight: '700', marginBottom: spacing.md },
   label: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '700', marginTop: spacing.sm },
   optional: { color: colors.textTertiary, fontWeight: '500' },
+  genderRow: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.xs },
+  genderChip: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 6, paddingVertical: 10, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
+  },
+  genderChipOn: { borderColor: colors.accent, backgroundColor: colors.cardElevated },
+  genderText: { color: colors.textTertiary, fontSize: font.xs, fontWeight: '700' },
+  genderTextOn: { color: colors.accent },
   input: {
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
     borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md,
@@ -95,4 +129,4 @@ const styles = StyleSheet.create({
   saveWrap: { marginTop: spacing.lg, borderRadius: radius.md, overflow: 'hidden', ...shadow.md },
   save: { paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center', minHeight: 52 },
   saveText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
-});
+}));

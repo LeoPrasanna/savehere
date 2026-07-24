@@ -28,7 +28,9 @@ const VARIANTS: Record<DisclaimerVariant, { icon: string; color: string; text: s
   ai: {
     icon: 'sparkles',
     color: colors.accentLight,
-    text: 'AI-generated — it can be incomplete or wrong. Double-check anything important; you can edit it anytime.',
+    // Don't promise direct editing — summaries aren't editable. The real
+    // correction path is Notes + re-summarize, so point at that instead.
+    text: 'AI-generated — it can be incomplete or wrong. Double-check anything important. To correct it, add details in Notes and re-summarize.',
   },
   fitness: {
     icon: 'shield',

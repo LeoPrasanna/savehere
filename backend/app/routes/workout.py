@@ -14,6 +14,9 @@ from app.ratelimit import rate_limit
 from app.quota import charge_ai_action
 from app.auth import get_current_user, AuthUser
 from app.entitlements import entitlements_for, PRO_FEATURE_DETAIL
+# Shared with the save path: detects generic placeholder titles ("Instagram Reel")
+# that look like content but can't seed any AI extraction.
+from app.routes.reels import _weak_title
 
 router = APIRouter(prefix="/api", tags=["workout"])
 
@@ -132,9 +135,13 @@ def generate_workout(reel_id: str, user: AuthUser = Depends(get_current_user), d
             detail=f"You've built a workout for this reel {WORKOUT_LIMIT} times — that's the limit for now (each one uses AI).",
         )
 
-    source = reel.raw_text or reel.notes or reel.title or ""
-    if not source:
-        raise HTTPException(status_code=422, detail="No content to extract a workout from.")
+    # Preflight before the charge: a generic placeholder title ("Instagram Reel")
+    # is not content — it can only produce a guaranteed 422, so don't spend an AI
+    # action on it.
+    source = (reel.raw_text or "").strip() or (reel.notes or "").strip()
+    if not source and _weak_title(reel.title):
+        raise HTTPException(status_code=422, detail="No readable content to extract a workout from. Paste the post text into Notes, then try again.")
+    source = source or (reel.title or "")
 
     # Per-user daily AI budget (shared across all AI actions). Charged after the
     # free checks, before the Claude call.
@@ -264,9 +271,12 @@ def generate_itinerary(reel_id: str, user: AuthUser = Depends(get_current_user),
             detail=f"You've built an itinerary for this reel {ITINERARY_LIMIT} times — that's the limit for now (each one uses AI).",
         )
 
-    source = reel.raw_text or reel.notes or reel.title or ""
-    if not source.strip():
-        raise HTTPException(status_code=422, detail="No content to extract an itinerary from.")
+    # Preflight before the charge: a generic placeholder title is not content and
+    # can only produce a guaranteed 422 — don't spend an AI action on it.
+    source = (reel.raw_text or "").strip() or (reel.notes or "").strip()
+    if not source and _weak_title(reel.title):
+        raise HTTPException(status_code=422, detail="No readable content to extract an itinerary from. Paste the post text into Notes, then try again.")
+    source = source or (reel.title or "")
 
     # Per-user daily AI budget (shared across all AI actions). Charged after the
     # free checks, before the Claude call.
@@ -323,6 +333,28 @@ def generate_tasks(reel_id: str, user: AuthUser = Depends(get_current_user), db:
         raise HTTPException(
             status_code=429,
             detail="These were already generated with AI. You can add, edit, or delete them by hand — regenerating isn't available (it would use AI again).",
+        )
+
+    # Preflight: refuse input that CANNOT produce output, before charging. Once
+    # Claude runs the tokens are really spent, so charging first is correct — the
+    # fix is to not run it at all for hopeless input. Without this, an unreadable
+    # save cost the user an AI action to receive a guaranteed 422.
+    body_text = (reel.raw_text or "").strip() or (reel.notes or "").strip()
+    if is_cooking:
+        # Cooking is the looser case on purpose: extract_tasks can infer a recipe
+        # from the title alone (_infer_recipe). But a generic placeholder title
+        # ("Instagram Reel") infers nothing and comes back needs_input.
+        if not body_text and _weak_title(reel.title):
+            raise HTTPException(
+                status_code=422,
+                detail="I couldn't tell what dish this is from the title. Add a note in Notes describing what you'd like (e.g. \"homemade pasta, desi style\"), then tap Get Recipe again.",
+            )
+    elif not body_text:
+        # Every other category needs real content — inventing steps from a bare
+        # headline is exactly the ungrounded output the quality bar forbids.
+        raise HTTPException(
+            status_code=422,
+            detail="There's no readable content in this save to turn into tasks. Paste the post text into Notes, then try again.",
         )
 
     # Per-user daily AI budget (shared across all AI actions). Charged before the call.

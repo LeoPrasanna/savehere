@@ -105,6 +105,17 @@ class TestUsageLogEndpoint:
         try:
             log_ai_action(db, USER, "ask", "what did I save about Japan?")
             log_ai_action(db, USER, "recipe", "Carbonara")
+            # Both inserts can land in the SAME clock tick, and `ORDER BY
+            # created_at DESC` has no tie-break — so without this the assertion
+            # below tests the resolution of utcnow() rather than the endpoint's
+            # ordering, and flips order depending on suite timing. Stamp distinct
+            # times so we're asserting the query, which is the actual contract.
+            now = datetime.utcnow()
+            db.query(AiActionLogDB).filter(AiActionLogDB.action == "ask").update(
+                {"created_at": now - timedelta(seconds=2)}, synchronize_session=False)
+            db.query(AiActionLogDB).filter(AiActionLogDB.action == "recipe").update(
+                {"created_at": now}, synchronize_session=False)
+            db.commit()
         finally:
             db.close()
 
