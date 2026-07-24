@@ -17,13 +17,20 @@ from sqlalchemy.pool import StaticPool
 from app.main import app
 from app.database import Base, ReelDB, AiUsageDB, get_db
 from app.auth import get_current_user, AuthUser
+from app.routes import workout as workout_route
 from app import ratelimit
 
 USER = "user-preflight"
 
 
 @pytest.fixture
-def env():
+def env(monkeypatch):
+    # CI has no ANTHROPIC_API_KEY and tests must never make a live AI call, so
+    # stub the extractor. The refusal cases below never reach it — but the
+    # "still passes preflight" case does, by design.
+    monkeypatch.setattr(workout_route.workout_extractor, "extract_tasks",
+                        lambda **kw: {"kind": "steps", "source": "content",
+                                      "tasks": [{"text": "Knead the dough", "emoji": "🥟"}]})
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     TestingSession = sessionmaker(bind=engine, autocommit=False, autoflush=False)
     Base.metadata.create_all(bind=engine)
