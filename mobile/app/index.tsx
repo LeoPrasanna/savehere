@@ -17,7 +17,7 @@ import { Icon } from '../components/Icon';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { Landing } from '../components/Landing';
 import { LibraryBackdrop } from '../components/LibraryBackdrop';
-import { hasEnteredLibrary, markEnteredLibrary, consumeReopenPanel } from '../services/sessionFlags';
+import { hasEnteredLibrary, markEnteredLibrary, clearEnteredLibrary, consumeReopenPanel } from '../services/sessionFlags';
 import { colors, spacing, font, radius, gradients, shadow, typeface, categoryMeta, CATEGORY_OPTIONS, themed } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
@@ -101,19 +101,40 @@ export default function HomeScreen() {
   useEffect(() => {
     const q = search.trim();
     if (!q) { setSearchResults(null); setSearching(false); return; }
+
+    // Instant feedback: filter what's already loaded so results appear on the
+    // keystroke instead of after debounce + round-trip. The server answer
+    // replaces this a moment later — it searches the WHOLE library (and tolerates
+    // typos), where this only sees the loaded page.
+    const local = q.toLowerCase();
+    setSearchResults(
+      reels.filter(r =>
+        (r.title || '').toLowerCase().includes(local) ||
+        (r.category || '').toLowerCase().includes(local) ||
+        (r.tags || []).some(t => t.toLowerCase().includes(local))
+      )
+    );
     setSearching(true);
+
+    // 250 ms rather than 400: with local results already on screen the debounce
+    // only governs the network call, so it can be tighter without spamming.
     const timer = setTimeout(async () => {
       try {
         const data = await api.searchReels(q);
-        setSearchResults(data.items);
+        // Ignore a stale response that lost the race to a newer query.
+        setSearch(cur => {
+          if (cur.trim() === q) setSearchResults(data.items);
+          return cur;
+        });
       } catch {
-        setSearchResults([]);
+        // Keep the local matches rather than blanking the screen on a failed
+        // request — some results beat "no results" when the query did match.
       } finally {
         setSearching(false);
       }
-    }, 400);
+    }, 250);
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, reels]);
 
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
 
@@ -125,9 +146,28 @@ export default function HomeScreen() {
   }, [entered, hasPending, load]);
 
   const onCategoryChange = (cat: string) => {
+    // Clear the query first. Search is global while a category is a filter, so
+    // leaving a query active meant `displayList` kept returning search results
+    // and the freshly-loaded category was fetched and then ignored — picking a
+    // category simply appeared to do nothing.
+    setSearch('');
+    setSearchResults(null);
+    setSearching(false);
     setActiveCategory(cat);
     setLoading(true);
     load(cat);
+  };
+
+  /** Back to the landing view. Must clear the session flag as well as local
+   *  state: `entered` is seeded from that flag on every mount, so without this
+   *  the next remount (opening a reel and coming back, returning from /save)
+   *  silently dropped the user back into the library and Home looked broken. */
+  const goHome = () => {
+    clearEnteredLibrary();
+    setSearch('');
+    setSearchResults(null);
+    setActiveCategory('all');
+    setEntered(false);
   };
 
   const inSearchMode = search.trim().length > 0;
@@ -156,7 +196,7 @@ export default function HomeScreen() {
           transition={{ type: 'timing', duration: 350 }}
           style={styles.headerTop}
         >
-          <Pressable style={styles.brandRow} onPress={() => setEntered(false)} scaleTo={0.97}>
+          <Pressable style={styles.brandRow} onPress={goHome} scaleTo={0.97}>
             <LinearGradient
               colors={gradients.primary}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
@@ -176,7 +216,7 @@ export default function HomeScreen() {
           <View style={styles.headerActions}>
             {/* Explicit way back to the landing/home view. Tapping the brand row
                 also works, but nothing signalled that it was tappable. */}
-            <Pressable style={styles.menuBtn} onPress={() => setEntered(false)} scaleTo={0.9}>
+            <Pressable style={styles.menuBtn} onPress={goHome} scaleTo={0.9}>
               <Icon name="home" size={20} color={colors.textPrimary} />
             </Pressable>
             <Pressable style={styles.saveBtnWrap} onPress={() => router.push('/save')} scaleTo={0.9}>

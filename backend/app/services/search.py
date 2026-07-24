@@ -13,6 +13,7 @@ the cheap way:
 True semantic matching is the embeddings step tracked in TODO.md.
 """
 import re
+from difflib import get_close_matches
 
 # Query words that carry no meaning for retrieval. Includes the "show me any
 # videos on…" framing words so natural-phrase queries reduce to their topic.
@@ -83,13 +84,36 @@ def _expand(terms: set[str]) -> set[str]:
     return {_singular(t) for t in expanded} | expanded
 
 
+# Minimum length before a term is worth fuzzy-matching, and how close the match
+# must be. 0.8 on difflib's ratio is roughly "one typo in a medium word" — tight
+# enough that "recipe" doesn't match "receipt" as a near-miss on short words,
+# loose enough to catch the real cases ("wrokout" → "workout").
+_FUZZY_MIN_LEN = 5
+_FUZZY_CUTOFF = 0.8
+
+
+def _fuzzy_hit(term: str, toks: set[str]) -> bool:
+    """Does `term` match a token apart from a typo? Uses difflib (stdlib) rather
+    than adding a fuzzy-search dependency — the candidate set here is one reel's
+    tokens, so this is cheap.
+
+    Deliberately restricted to longer terms: on short words a single edit changes
+    the meaning ("cat"/"car"), which would produce confidently wrong results.
+    """
+    if len(term) < _FUZZY_MIN_LEN:
+        return False
+    return bool(get_close_matches(term, [t for t in toks if len(t) >= _FUZZY_MIN_LEN],
+                                  n=1, cutoff=_FUZZY_CUTOFF))
+
+
 def _match_count(terms: set[str], toks: set[str]) -> int:
-    """Terms that hit a token exactly, or as a prefix (>=3 chars) so results
-    appear while the user is still typing ("fitn" → "fitness"), matching the
-    type-ahead feel of the old LIKE search."""
+    """Terms that hit a token exactly, as a prefix (>=3 chars) so results appear
+    while the user is still typing ("fitn" → "fitness"), or — for longer words —
+    despite a typo ("wrokout" → "workout"). Without the last one a single slip
+    returned nothing at all, which reads as "search is broken"."""
     n = 0
     for t in terms:
-        if t in toks or (len(t) >= 3 and any(tok.startswith(t) for tok in toks)):
+        if t in toks or (len(t) >= 3 and any(tok.startswith(t) for tok in toks)) or _fuzzy_hit(t, toks):
             n += 1
     return n
 

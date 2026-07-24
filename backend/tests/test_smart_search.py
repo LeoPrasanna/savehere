@@ -19,6 +19,34 @@ FINANCE = reel(title="Budgeting tips", tags=["finance", "money"], category="fina
                summary=["track spending"])
 
 
+class TestTypoTolerance:
+    """A single mistyped character used to return NOTHING, which reads as
+    "search is broken" rather than "no matches". Fuzzy matching is deliberately
+    limited to longer words — on short ones an edit changes the meaning."""
+
+    def test_transposed_letters_still_find_the_reel(self):
+        workout = reel(title="Chest workout at home", tags=["chest"], category="fitness")
+        assert search.rank("wrokout", [workout, PASTA, FINANCE]) == [workout]
+
+    def test_misspelled_recipe_finds_the_cooking_reel(self):
+        assert search.rank("recipie", [FITNESS, PASTA, FINANCE]) == [PASTA]
+
+    def test_misspelled_category_still_matches(self):
+        assert search.rank("finence", [FITNESS, PASTA, FINANCE]) == [FINANCE]
+
+    def test_short_words_stay_strict(self):
+        """On a 3-letter word a single edit is a DIFFERENT word, so fuzzy matching
+        is off below 5 chars — a confidently wrong result is worse than none.
+        ('car' would legitimately match via the separate >=3-char prefix rule
+        against 'care', so this uses a typo that is not also a prefix.)"""
+        cat = reel(title="Cat basics", tags=["cat"], category="other")
+        assert search.rank("cst", [cat]) == []
+
+    def test_an_unrelated_query_still_returns_nothing(self):
+        """Guard against fuzziness turning search into a match-everything."""
+        assert search.rank("quantum astrophysics", [FITNESS, PASTA, FINANCE]) == []
+
+
 class TestQueryTerms:
     def test_strips_filler_words(self):
         assert search.query_terms("any videos on Fitness") == {"fitness"}

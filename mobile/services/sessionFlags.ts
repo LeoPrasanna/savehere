@@ -19,6 +19,14 @@ export function markEnteredLibrary(): void {
   enteredLibrary = true;
 }
 
+/** Going Home must clear this, not just flip local state. The library screen
+ *  seeds `entered` from this flag on every mount, so leaving it set meant the
+ *  next remount (opening a reel and coming back, returning from /save) silently
+ *  bounced the user back into the library — Home looked like it did nothing. */
+export function clearEnteredLibrary(): void {
+  enteredLibrary = false;
+}
+
 export function markReopenPanel(): void {
   reopenPanel = true;
 }
