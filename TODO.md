@@ -5,34 +5,106 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
-## ▶ CURRENT FOCUS (2026-07-21) — dev/prod environment separation
+## ▶ CURRENT FOCUS (2026-07-25) — staging is live; open decisions below need the owner
 
-The Postgres/Alembic migration is merged (PR #10). **Next task: split dev/staging/prod
-so local dev never touches the production database.** Two Supabase projects now exist
-(both AWS ap-south-1, NANO/free): **`SaveHere`** = PRODUCTION (ref `lukmwwcilrjqqtgqbynq`,
-~27 real auth users incl. seeded test accounts, keep clean) and **`savehere-dev`** =
-DEV/STAGING (new, empty). Full plan + gotchas in the **"Environments"** item under
-Infrastructure below. **Most of this is now DONE (branch `chore/env-separation`, 2026-07-21):**
-env matrix in [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md); `render.yaml` split into
-staging/prod services; `savehere-dev` Postgres stood up (`alembic upgrade head` + deny-all RLS,
-all 8 app tables enabled+forced — fixed a script gap: `ai_action_log` was missing from
-`enable_rls.sql`); local `.env` + `mobile/.env` + `eas.json` pointed at `savehere-dev`.
-**Decision 2026-07-21: SQLite RETIRED for local dev** — local now runs on the `savehere-dev`
-Postgres pooler so data persists across the laptop AND GitHub Codespaces (one shared dev/staging
-DB). The 49 local SQLite reels were migrated + re-owned to a dev account (43 after collapsing
-dup URLs). Dev-tier scripts (`dev_tier.py`, `dev_seed_tiers.py`) re-guarded from "SQLite-only"
-to "savehere-dev-only" (still fail-closed against prod). **Remaining:** owner creates the 3
-standing test accounts in `savehere-dev` → run `dev_seed_tiers.py`; stand up the Render
-staging+prod services (owner sets each service's `sync:false` vars); apply the same RLS +
-`ai_action_log` fix to the PROD project before first prod deploy.
+**Backend is deployed and healthy: https://savehere-api-staging.onrender.com**
+(Render free tier, auto-deploys from `develop`, `savehere-dev` Supabase + Postgres.)
+225 backend tests pass. Env separation, the Render blueprint, and the extraction
+work are all DONE — see the shipped list below.
+
+**Deploys are CI-gated.** Render `autoDeploy` is OFF; `.github/workflows/ci.yml`
+fires the Render deploy hook only after backend tests pass. `RENDER_DEPLOY_HOOK_STAGING`
+is set, so merging to `develop` auto-deploys. Prod is deliberately NOT deployed —
+its service is commented out in `render.yaml` (a paid plan forces a credit card at
+Blueprint apply). See [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) and
+[`docs/DEPLOY.md`](docs/DEPLOY.md).
+
+### ⚠️ Open decisions — need the owner, don't guess
+
+1. **Tier caps were discussed but NEVER applied.** Owner proposed Pro **25**/day,
+   Trial **10**/day, Free **3**/day. `config.py` still ships `AI_DAILY_LIMIT=30`
+   (trial), `AI_PRO_DAILY_LIMIT=100`, `AI_FREE_DAILY_LIMIT=3`. Decide, then change.
+2. **Ask-unlock threshold mismatch.** Code uses `ASK_MIN_REELS = 3`
+   (`mobile/components/Landing.tsx`); the 2026-07-20 decision said **5**. It now
+   ALSO drives the home screen's state ladder, so the two must be one number.
+3. **Free auto-summary gating — the biggest lever on unit economics.** A cost
+   study (2026-07-24) put break-even at **~4.2% conversion with free auto-summary
+   gated vs ~7.8% without**; typical freemium conversion is 2–5%, so ungated is
+   likely never profitable. Not implemented. Plumbing exists (`failed` → retry is
+   already click-to-generate).
+4. **Pricing not set.** Study recommended **₹149/mo · $5.99/mo · €6.99/mo**. ₹99 is
+   underwater — it barely covers a pro user's own AI cost, leaving nothing for the
+   free-tier drag. Pro's 100/day cap is too generous at these price points (~15–25/day
+   suggested). Details in "Pricing & Monetization" below.
+
+### Recommended next steps, in order
+
+1. **Confirm the YouTube fix in the real app** — save a Short and check the summary
+   appears WITHOUT a reload. If it still needs one, next suspect is the 60s polling
+   cap in `mobile/app/reel/[id].tsx` (24 tries x 2.5 s), which a cold free-tier
+   instance can exceed.
+2. Apply the tier-cap decision (#1 above).
+3. Implement free auto-summary gating (#3) — the economics lever.
+4. **Native/EAS dev build.** Instagram/Facebook summaries rely on the client-side
+   metadata fetch, which only works on native (browser CORS blocks it on web), so
+   IG/FB still degrade on the deployed backend until a native build exists.
+5. Owner creates the 3 standing test accounts in `savehere-dev`, then run
+   `python scripts/dev_seed_tiers.py`.
+6. **Before any prod deploy:** uncomment the prod service in `render.yaml`, set its
+   `sync:false` env vars (incl. `YOUTUBE_API_KEY`), apply
+   `backend/scripts/enable_rls.sql` to the PROD Supabase project (it now includes
+   `ai_action_log`), and enable Supabase Pro.
+
+### Shipped 2026-07-21 → 07-25 (PRs #11–#20, all merged)
+
+env separation + prod service deferred (#11/#12) · deploy docs (#13) · client-side
+metadata fetch for IG/FB (#14) · AI usage drill-down, honest AI disclaimer, no charge
+for impossible AI actions (#15) · **extraction cache poisoning fix + summaries hidden
+behind `skipped`** (#16) · search typo tolerance, category/search conflict, Home nav,
+removed itinerary rebuild (#17) · library-first home + recent carousel + emoji profile
+pictures, gender feature removed (#18) · **YouTube Data API v3 fallback** (#19) ·
+summary no longer needs a page reload (#20).
+
+### Gotchas that already cost real time — do not relearn these
+
+- **Testing locally does NOT prove it works on Render.** YouTube/Instagram bot-block
+  datacenter IPs; extraction that works from a residential IP returns title+thumbnail
+  only from Render. To validate an extraction fix, SIMULATE the block (monkeypatch
+  `yt_dlp.YoutubeDL` to raise, stub `_extract_from_page` to `{}`) or read the real row
+  from the shared dev DB.
+- **`/health/extract?live=1`'s `probe_ok` passes on a thumbnail alone** — it is NOT
+  evidence that text extraction works.
+- **Render's free tier kills in-flight background tasks** on spin-down, so
+  `recover_pending_summaries` re-runs the whole chain on startup.
+- **A status field lying about content caused TWO separate bugs.** Any path writing
+  `summary_status` must consider that another path may be mid-flight. Reels holding a
+  summary but a non-`ready` status now self-heal on startup.
+- **Local dev, Codespaces and staging share ONE `savehere-dev` Postgres** — running
+  things locally writes to the same database staging serves.
+- **CI has no `ANTHROPIC_API_KEY` on purpose.** Tests must never make live AI calls;
+  mock `summarizer` / `workout_extractor`. A test reaching the real client passes
+  locally (your `.env` has a key = a real billed call) and fails CI.
+- Bash: backticks inside `git commit -m "..."` get shell-evaluated and silently eat
+  text — use `git commit -F <file>`. Git Bash also mangles `git show <ref>:<path>`;
+  prefix `MSYS_NO_PATHCONV=1`.
+
+### Known limitations (working as intended, not bugs)
+
+- **Audio-only YouTube Shorts** (no description, content only in speech) can't be
+  summarized server-side — caption download needs OAuth. The honest "couldn't read
+  this" is correct behaviour.
+- **Instagram/Facebook on web** can't use the client-side fetch (browser CORS). Native only.
+- **YouTube Data API** recovers descriptions, not transcripts. 10,000 free units/day;
+  `videos.list` costs 1 unit; the extraction cache is keyed by URL globally, so a
+  popular link costs one call no matter how many users save it.
 
 ---
 
 ## Blockers (app does not work on a real phone without these)
 
 - [ ] **iOS Share Extension** — allows sharing URLs directly from Instagram/YouTube/TikTok into SaveHere. Requires Mac + Xcode + `expo-share-extension`. This is the core feature.
-- [~] **Deploy backend** — move off `localhost:8000` to Railway, Render, or Fly.io so real devices can reach the API. **Repo is deploy-ready** (`render.yaml`, env-driven CORS/DATABASE_URL, `$PORT` start, `/health` check) — see [`docs/DEPLOY.md`](docs/DEPLOY.md). Remaining = owner action: connect repo on Render, set `ANTHROPIC_API_KEY`, deploy. Caveats in DEPLOY.md (free-tier cold starts; ephemeral SQLite → Postgres w/ auth; datacenter-IP extraction still needs a proxy).
-- [ ] **Switch API URL in mobile** — `mobile/services/api.ts` `BASE_URL` must point to the deployed backend, not localhost.
+- [x] **Deploy backend — DONE (2026-07-24).** Live at **https://savehere-api-staging.onrender.com** (Render free tier, CI-gated auto-deploy from `develop`, `savehere-dev` Postgres + auth). Prod service is deliberately commented out in `render.yaml` until launch. Walkthrough in [`docs/DEPLOY.md`](docs/DEPLOY.md). Live caveats: free-tier cold starts (~50 s to wake after 15 min idle); `DATABASE_URL` is load-bearing — unset on a Render service means ephemeral SQLite and silent data loss; and YouTube/Instagram bot-block the datacenter IP, which is why extraction leans on the YouTube Data API and the client-side fetch rather than a proxy.
+- [x] **Switch API URL in mobile — DONE.** `EXPO_PUBLIC_API_URL` drives it (`mobile/services/api.ts`); `mobile/.env` and the `eas.json` build profiles point at the staging URL. ⚠️ `EXPO_PUBLIC_*` is inlined at bundle time — restart `expo start` after changing it, a browser refresh keeps the old value.
 - [~] **User authentication** — Supabase Auth (email now; Google/Apple later). **Phases 1–4 done:** (1) `@supabase/supabase-js` client; (2) `get_current_user()` verifies ECC/ES256 tokens vs JWKS, no shared secret (`app/auth.py`); (3) `user_id` on `ReelDB` + **every** reels/workout/ask route scoped to the caller with ownership 404s (tasks/exercises owned via parent reel join) — `url` no longer globally unique (per-user dedup), isolation proven by tests; (4) mobile login/signup screen + auth gate in `_layout.tsx` + `Bearer` token injected in `api.ts` + sign-out in ProfilePanel. **Phase 5 done:** per-user, DB-backed daily AI quota (`ai_usage` table + `app/quota.py` `enforce_daily_ai_quota`) shared across all AI actions (ask/tasks/workout/(re)summarize), env-tunable `AI_DAILY_LIMIT` (default 30/day), replacing the interim per-IP ask cap. **Remaining:** Phase 6 Postgres in prod (`DATABASE_URL`). Email confirmation is OFF for dev — turn ON before launch. Apple Sign-In required for App Store once social login is added.
 - [ ] **Apple + Google sign-in (staging/prod; replaces email there — decided 2026-07-20)** — Supabase social providers; email auth stays enabled in **dev only**. ⚠️ Apple guideline 4.8: offering Google **requires** Sign in with Apple, and Apple sign-in needs the Apple Developer account below — hard dependency. Win: dropping email auth removes the SMTP/sending-domain blocker for signups (see "Production email SMTP" — auth no longer needs it). Caveat: trial-continuity hashes the email; Apple "Hide My Email" relays are stable per app, but revoke+re-auth mints a new relay → fresh trial (accepted residue — IAP raises the cycling cost). Owner setup: Google Cloud OAuth client + consent screen; Apple Services ID + signing key.
 - [ ] **Apple Developer account** — $99/year, required to test on real iPhone and submit to App Store.
@@ -51,7 +123,7 @@ staging+prod services (owner sets each service's `sync:false` vars); apply the s
   3. **`create_tables()`'s `ALTER TABLE … except: pass` loop breaks on Postgres** — see the Alembic item below.
   4. **Use the Supabase POOLER connection string, not the direct one** — direct connections are IPv6-only and Render's outbound generally isn't, which surfaces as confusing connection errors. Supavisor pooler = IPv4. Also add `pool_pre_ping=True` to the engine so stale pooled connections don't appear as random 500s.
   **No data migration needed:** leave `DATABASE_URL` unset locally → SQLite for dev; set it in staging/prod → Postgres, starting clean (local rows are test data). Decision 2026-07-20: **staying on Supabase Postgres for prod** — auth is already there, `enable_rls.sql` is Supabase-shaped, one vendor/one bill. Cost: free tier is fine for dev/staging but **pauses after 7 days idle and has no backups**, so production needs Pro ($25/mo). ⚠️ Owner action: put the pooler URL in the **repo-root `.env`** (NOT `backend/.env` — the app loads the root `.env` by walking up from `backend/`) yourself — never paste it into chat, it contains the DB password.
-- [ ] **Environments: Dev / Staging / Prod (◀ ACTIVE — the CURRENT FOCUS above; decided 2026-07-20, no PreProd)** — **Both Supabase projects now exist (2026-07-21):** `SaveHere` = PROD (ref `lukmwwcilrjqqtgqbynq`, ~27 real auth users incl. the seeded test accounts — keep clean), `savehere-dev` = DEV/STAGING (new, empty). Target shape: **dev** = `savehere-dev` Postgres (session pooler :5432) + `savehere-dev` auth (SQLite retired 2026-07-21 for Codespaces persistence — local shares the staging DB); **staging** = same `savehere-dev` Postgres + auth, 2nd Render service auto-deploying from `develop`; **prod** = `SaveHere` Postgres + `SaveHere` auth, Render (Starter+) from `main` + Supabase Pro. Each deployment gets its OWN env-var values (12-factor — no code branching). Mobile: EAS build profiles carry `EXPO_PUBLIC_API_URL` + `EXPO_PUBLIC_SUPABASE_*` per env (dev build → `savehere-dev`). PreProd skipped: with one developer, staging IS preprod. **Ordered next steps** (branch `chore/env-separation`): **Phase A DONE (no secrets):**
+- [x] **Environments: Dev / Staging / Prod — DONE (2026-07-21..24; decided 2026-07-20, no PreProd)** — **Both Supabase projects now exist (2026-07-21):** `SaveHere` = PROD (ref `lukmwwcilrjqqtgqbynq`, ~27 real auth users incl. the seeded test accounts — keep clean), `savehere-dev` = DEV/STAGING (new, empty). Target shape: **dev** = `savehere-dev` Postgres (session pooler :5432) + `savehere-dev` auth (SQLite retired 2026-07-21 for Codespaces persistence — local shares the staging DB); **staging** = same `savehere-dev` Postgres + auth, 2nd Render service auto-deploying from `develop`; **prod** = `SaveHere` Postgres + `SaveHere` auth, Render (Starter+) from `main` + Supabase Pro. Each deployment gets its OWN env-var values (12-factor — no code branching). Mobile: EAS build profiles carry `EXPO_PUBLIC_API_URL` + `EXPO_PUBLIC_SUPABASE_*` per env (dev build → `savehere-dev`). PreProd skipped: with one developer, staging IS preprod. **Ordered next steps** (branch `chore/env-separation`): **Phase A DONE (no secrets):**
 (1) ✅ reverted local root `.env` `DATABASE_URL` → SQLite (data back, `/health` 200);
 (2) ✅ env matrix documented in [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) (+ cross-links
 in DEPLOY/CONTEXT); (5) ✅ mobile per-env structured in `mobile/eas.json` (prod values baked;
