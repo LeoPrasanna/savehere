@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '../components/Icon';
 import { Pressable } from '../components/Pressable';
-import { useAuth, GENDER_OPTIONS, type Gender } from '../contexts/AuthContext';
+import { useAuth, AVATAR_OPTIONS } from '../contexts/AuthContext';
 import * as haptics from '../services/haptics';
 import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
 
@@ -17,7 +17,7 @@ export default function ProfileScreen() {
   const [firstName, setFirstName] = useState(profile.first_name ?? '');
   const [lastName, setLastName] = useState(profile.last_name ?? '');
   const [nickname, setNickname] = useState(profile.nickname ?? '');
-  const [gender, setGender] = useState<Gender | undefined>(profile.gender);
+  const [avatar, setAvatar] = useState<string | undefined>(profile.avatar);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -28,7 +28,7 @@ export default function ProfileScreen() {
       first_name: firstName.trim(),
       last_name: lastName.trim() || undefined,
       nickname: nickname.trim() || undefined,
-      gender,
+      avatar,
     });
     setBusy(false);
     if (error) { haptics.error(); setError(error); return; }
@@ -63,21 +63,20 @@ export default function ProfileScreen() {
           autoCapitalize="words" editable={!busy} onSubmitEditing={save} returnKeyType="done"
         />
 
-        {/* Optional — only picks which avatar icon you get. Tapping the selected
-            option again clears it, so choosing is never a one-way door. */}
-        <Text style={styles.label}>Avatar <Text style={styles.optional}>(optional)</Text></Text>
-        <View style={styles.genderRow}>
-          {GENDER_OPTIONS.map((opt) => {
-            const selected = gender === opt.value;
+        {/* Pick a face. Tapping the selected one again clears it, so choosing is
+            never a one-way door. */}
+        <Text style={styles.label}>Profile picture <Text style={styles.optional}>(optional)</Text></Text>
+        <View style={styles.avatarGrid}>
+          {AVATAR_OPTIONS.map((emoji) => {
+            const selected = avatar === emoji;
             return (
               <Pressable
-                key={opt.value}
-                onPress={() => !busy && setGender(selected ? undefined : opt.value)}
-                style={[styles.genderChip, selected && styles.genderChipOn]}
-                scaleTo={0.97}
+                key={emoji}
+                onPress={() => !busy && setAvatar(selected ? undefined : emoji)}
+                style={[styles.avatarCell, selected && styles.avatarCellOn]}
+                scaleTo={0.9}
               >
-                <Icon name={opt.icon} size={16} color={selected ? colors.accent : colors.textTertiary} />
-                <Text style={[styles.genderText, selected && styles.genderTextOn]}>{opt.label}</Text>
+                <Text style={styles.avatarCellEmoji}>{emoji}</Text>
               </Pressable>
             );
           })}
@@ -100,7 +99,7 @@ export default function ProfileScreen() {
   );
 }
 
-// themed(): this sheet bakes in accent tokens (the selected gender chip), and a
+// themed(): this sheet bakes in accent tokens (the selected avatar cell), and a
 // plain StyleSheet.create freezes them at module load — the live accent switch
 // would leave these stale. See constants/theme.ts.
 const styles = themed(() => StyleSheet.create({
@@ -110,15 +109,16 @@ const styles = themed(() => StyleSheet.create({
   email: { color: colors.textPrimary, fontSize: font.md, fontWeight: '700', marginBottom: spacing.md },
   label: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '700', marginTop: spacing.sm },
   optional: { color: colors.textTertiary, fontWeight: '500' },
-  genderRow: { flexDirection: 'row', gap: spacing.xs, marginTop: spacing.xs },
-  genderChip: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingVertical: 10, borderRadius: radius.md,
+  avatarGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs,
+  },
+  avatarCell: {
+    width: 48, height: 48, borderRadius: radius.md,
+    alignItems: 'center', justifyContent: 'center',
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
   },
-  genderChipOn: { borderColor: colors.accent, backgroundColor: colors.cardElevated },
-  genderText: { color: colors.textTertiary, fontSize: font.xs, fontWeight: '700' },
-  genderTextOn: { color: colors.accent },
+  avatarCellOn: { borderColor: colors.accent, backgroundColor: colors.cardElevated },
+  avatarCellEmoji: { fontSize: 24, lineHeight: 30 },
   input: {
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
     borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.md,

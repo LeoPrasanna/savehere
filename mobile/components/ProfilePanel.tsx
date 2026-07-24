@@ -9,7 +9,7 @@ import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { GlassCard } from './GlassCard';
 import { BorderBeam } from './BorderBeam';
-import { useAuth, avatarIcon } from '../contexts/AuthContext';
+import { useAuth } from '../contexts/AuthContext';
 import { markReopenPanel } from '../services/sessionFlags';
 import { colors, spacing, font, radius, gradients, shadow, themed, accentThemes, getAccentKey, setAccentTheme } from '../constants/theme';
 
@@ -213,7 +213,9 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
         >
           <GlassCard tint="violet" intensity="medium" style={styles.accountCard}>
             <LinearGradient colors={gradients.hologram} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
-              <Icon name={avatarIcon(profile.gender)} size={26} color="#FFF" />
+              {profile.avatar
+                ? <Text style={styles.avatarEmoji}>{profile.avatar}</Text>
+                : <Icon name="user" size={26} color="#FFF" />}
             </LinearGradient>
             <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
             <Text style={styles.sub} numberOfLines={1}>{email ?? 'Synced to your account'}</Text>
@@ -453,6 +455,7 @@ const styles = themed(() => StyleSheet.create({
     padding: spacing.md,
     marginTop: spacing.sm,
   },
+  avatarEmoji: { fontSize: 26, lineHeight: 32 },
   avatar: {
     width: 64, height: 64, borderRadius: radius.full,
     alignItems: 'center', justifyContent: 'center', ...shadow.glow,

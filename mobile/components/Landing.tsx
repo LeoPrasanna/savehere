@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Modal } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Modal, Image } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import { ArrowRight, Plus } from 'lucide-react-native';
-import { api, Reel } from '../services/api';
+import { api, thumbUrl, Reel } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { AuroraBackground } from './AuroraBackground';
@@ -15,7 +15,43 @@ import { useAuth } from '../contexts/AuthContext';
 import { consumeReopenPanel } from '../services/sessionFlags';
 import { FEATURES, Feature } from '../constants/features';
 
+// One threshold drives BOTH the Ask unlock and the home screen's state ladder.
+// Two different "you're still getting started" numbers would read as a bug.
 const ASK_MIN_REELS = 3;
+// How many saves the home screen shows before handing off to the full library.
+const RECENT_LIMIT = 10;
+/** Carousel card width — also the snap interval, so scrolling settles on a card. */
+const RECENT_CARD_W = 150;
+/** Only fetch what this screen renders. The landing used to pull 24 reels for a
+ *  list it never showed; the carousel needs a fraction of that, and a smaller
+ *  payload is the whole reason the home screen now appears faster. */
+const LANDING_FETCH = 12;
+
+/** One card in the recent carousel. A horizontal strip beats a vertical list
+ *  here: it shows the thumbnail at a size worth looking at, and it costs a fixed
+ *  slice of screen no matter how many saves exist — a list pushed everything
+ *  below it off the page. */
+function RecentCard({ reel, onPress }: { reel: Reel; onPress: () => void }) {
+  const thumb = thumbUrl(reel.thumbnail_url);
+  const pending = reel.summary_status === 'pending';
+  return (
+    <Pressable style={styles.recentCard} onPress={onPress} scaleTo={0.97}>
+      {thumb ? (
+        <Image source={{ uri: thumb }} style={styles.recentCover} resizeMode="cover" />
+      ) : (
+        <View style={[styles.recentCover, styles.recentCoverEmpty]}>
+          <Icon name={reel.category || 'other'} size={20} color={colors.textTertiary} />
+        </View>
+      )}
+      <Text style={styles.recentTitle} numberOfLines={2}>{reel.title || 'Untitled save'}</Text>
+      {pending ? (
+        <Text style={styles.recentPending} numberOfLines={1}>Summarizing…</Text>
+      ) : reel.category ? (
+        <Text style={styles.recentCat} numberOfLines={1}>{reel.category}</Text>
+      ) : null}
+    </Pressable>
+  );
+}
 
 export function Landing({ onEnter }: { onEnter: () => void }) {
   const router = useRouter();
@@ -26,13 +62,14 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
   const [selected, setSelected] = useState<Feature | null>(null);
+  const [catFilter, setCatFilter] = useState<string | null>(null);
   // Reopens after an accent switch remounts the tree (one-shot session flag).
   const [menuOpen, setMenuOpen] = useState(consumeReopenPanel());
 
   useFocusEffect(
     useCallback(() => {
       setFetchError(false);
-      api.listReels({ limit: 24 })
+      api.listReels({ limit: LANDING_FETCH })
         .then(d => { setReels(d.items); setTotal(d.total); })
         .catch(() => setFetchError(true))
         .finally(() => setLoading(false));
@@ -42,6 +79,18 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const categories = new Set(reels.map(r => r.category).filter(Boolean)).size;
   const askVisible = !loading && total >= ASK_MIN_REELS;
   const hasSaves = !loading && !fetchError && total > 0;
+
+  // Three states, one screen. Anything that can't justify itself at 50+ saves is
+  // a first-run element and lives in `firstRun` only — that's exactly how the old
+  // "What you can do" list became permanent furniture.
+  const firstRun = !loading && !fetchError && total === 0;
+  const learning = hasSaves && total < ASK_MIN_REELS;
+
+  // Category chips filter the already-fetched page locally — no extra request,
+  // and no filter state to hand off to the library screen.
+  const catList = Array.from(new Set(reels.map(r => r.category).filter(Boolean))) as string[];
+  const visible = catFilter ? reels.filter(r => r.category === catFilter) : reels;
+  const recent = visible.slice(0, RECENT_LIMIT);
 
   return (
     <View style={styles.screen}>
@@ -85,23 +134,126 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           </Pressable>
         </MotiView>
 
-        {/* ── Library door ─────────────────────────────── */}
-        <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 180 }}>
-          <Pressable style={styles.quietRow} onPress={onEnter} scaleTo={0.98}>
-            <View style={[styles.quietIcon, { backgroundColor: colors.accent + '1A' }]}>
-              <Icon name="bookmark" size={18} color={colors.accent} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.quietTitle}>Open my library</Text>
-              <Text style={styles.quietSub}>
-                {hasSaves ? `All ${total} ${total === 1 ? 'save' : 'saves'}, searchable and organized.` : 'Everything you save lives here.'}
-              </Text>
-            </View>
-            <Icon name="chevron-right" size={16} color={colors.textTertiary} />
-          </Pressable>
-        </MotiView>
+        {/* ── FIRST RUN (0 saves) ──────────────────────────
+            "What you can do" lives HERE and only here. With nothing to show, the
+            job of the screen is to explain the payoff — which is what this copy
+            was always for. It disappears the moment there's real content. */}
+        {firstRun && (
+          <MotiView
+            from={{ opacity: 0, translateY: 10 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 300, delay: 180 }}
+            style={styles.features}
+          >
+            <Text style={styles.sectionLabel}>WHAT A SAVE BECOMES</Text>
+            {FEATURES.map(f => (
+              <Pressable key={f.title} style={styles.feature} onPress={() => setSelected(f)} scaleTo={0.98}>
+                <View style={[styles.featureIcon, { backgroundColor: f.color + '1E' }]}>
+                  <Icon name={f.icon} size={17} color={f.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.featureTitle}>{f.title}</Text>
+                  <Text style={styles.featureDesc}>{f.desc}</Text>
+                </View>
+                <Icon name="chevron-right" size={15} color={colors.textTertiary} />
+              </Pressable>
+            ))}
+          </MotiView>
+        )}
 
-        {/* ── Ask — quiet, secondary ───────────────────── */}
+        {/* ── LEARNING (1 .. ASK_MIN_REELS-1) ──────────────
+            Exactly one tip, and it's progress toward something real — not a
+            brochure. Same threshold as the Ask unlock. */}
+        {learning && (
+          <MotiView
+            from={{ opacity: 0, translateY: 10 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 300, delay: 160 }}
+            style={styles.progressCard}
+          >
+            <Text style={styles.progressTitle}>
+              Save {ASK_MIN_REELS - total} more to unlock Ask your library
+            </Text>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${(total / ASK_MIN_REELS) * 100}%` }]} />
+            </View>
+            <Text style={styles.progressSub}>
+              Ask answers from your own saves — it works best with a few to draw on.
+            </Text>
+          </MotiView>
+        )}
+
+        {/* ── YOUR SAVES — the reason this screen exists ─── */}
+        {hasSaves && (
+          <MotiView
+            from={{ opacity: 0, translateY: 10 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            transition={{ type: 'timing', duration: 300, delay: 200 }}
+            style={styles.recentBlock}
+          >
+            {/* Search vs Ask read as duplicates, so each now says what it does
+                and what it costs: search is instant and free, Ask spends an AI
+                action. They are NOT the same feature. */}
+            <Pressable style={styles.searchRow} onPress={onEnter} scaleTo={0.98}>
+              <Icon name="search" size={16} color={colors.textTertiary} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.searchText}>
+                  Search {total} {total === 1 ? 'save' : 'saves'}
+                </Text>
+                <Text style={styles.searchHint}>Find a save by title, tag or note — instant, free</Text>
+              </View>
+            </Pressable>
+
+            {catList.length > 1 && (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.chipRow}
+              >
+                <Pressable
+                  style={[styles.chip, !catFilter && styles.chipOn]}
+                  onPress={() => setCatFilter(null)}
+                  scaleTo={0.96}
+                >
+                  <Text style={[styles.chipText, !catFilter && styles.chipTextOn]}>All</Text>
+                </Pressable>
+                {catList.map(c => (
+                  <Pressable
+                    key={c}
+                    style={[styles.chip, catFilter === c && styles.chipOn]}
+                    onPress={() => setCatFilter(catFilter === c ? null : c)}
+                    scaleTo={0.96}
+                  >
+                    <Text style={[styles.chipText, catFilter === c && styles.chipTextOn]}>{c}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            )}
+
+            <Text style={styles.sectionLabel}>{catFilter ? catFilter.toUpperCase() : 'RECENT'}</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.recentStrip}
+              // Snap to card width so the carousel settles on a card, not mid-cut.
+              snapToInterval={RECENT_CARD_W + spacing.sm}
+              decelerationRate="fast"
+            >
+              {recent.map(r => (
+                <RecentCard key={r.id} reel={r} onPress={() => router.push(`/reel/${r.id}`)} />
+              ))}
+            </ScrollView>
+
+            <Pressable style={styles.seeAll} onPress={onEnter} scaleTo={0.98}>
+              <Text style={styles.seeAllText}>
+                Open my library{total > recent.length ? ` · all ${total}` : ''}
+              </Text>
+              <Icon name="chevron-right" size={15} color={colors.accent} />
+            </Pressable>
+          </MotiView>
+        )}
+
+        {/* ── Ask — one entry point, not two ──────────────── */}
         {askVisible && (
           <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 250 }}>
             <Pressable style={styles.quietRow} onPress={() => router.push('/ask')} scaleTo={0.98}>
@@ -117,27 +269,10 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           </MotiView>
         )}
 
-        {/* ── What you can do ──────────────────────────── */}
-        <View style={styles.features}>
-          <Text style={styles.sectionLabel}>WHAT YOU CAN DO</Text>
-          {FEATURES.map(f => (
-            <Pressable key={f.title} style={styles.feature} onPress={() => setSelected(f)} scaleTo={0.98}>
-              <View style={[styles.featureIcon, { backgroundColor: f.color + '1E' }]}>
-                <Icon name={f.icon} size={17} color={f.color} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.featureTitle}>{f.title}</Text>
-                <Text style={styles.featureDesc}>{f.desc}</Text>
-              </View>
-              <Icon name="chevron-right" size={15} color={colors.textTertiary} />
-            </Pressable>
-          ))}
-        </View>
-
         <View style={{ flex: 1, minHeight: spacing.lg }} />
 
         <Text style={styles.disclaimer}>
-          Summaries are generated by AI and may be wrong or have gaps — edit them and add your own notes anytime.
+          Summaries are generated by AI and may be wrong or have gaps — add details in Notes and re-summarize to correct one.
           Saved content belongs to its original creators; SaveHere keeps links and summaries for personal reference only.
         </Text>
       </ScrollView>
@@ -215,6 +350,58 @@ const styles = themed(() => StyleSheet.create({
   quietIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   quietTitle: { color: colors.textPrimary, fontSize: font.md, fontWeight: '700' },
   quietSub: { color: colors.textSecondary, fontSize: font.xs, marginTop: 1 },
+
+  // ── Library-first home ──────────────────────────────────────────────
+  recentBlock: { gap: spacing.sm },
+  searchRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.surface, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.borderLight,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 3,
+  },
+  searchText: { color: colors.textTertiary, fontSize: font.sm },
+
+  chipRow: { gap: spacing.xs, paddingVertical: 2 },
+  chip: {
+    paddingHorizontal: spacing.sm + 2, paddingVertical: 6, borderRadius: radius.full,
+    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+  },
+  chipOn: { backgroundColor: colors.accent + '24', borderColor: colors.accent },
+  chipText: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '600', textTransform: 'capitalize' },
+  chipTextOn: { color: colors.accentLight },
+
+  recentStrip: { gap: spacing.sm, paddingRight: spacing.lg },
+  recentCard: { width: RECENT_CARD_W },
+  recentCover: {
+    width: RECENT_CARD_W, height: 94, borderRadius: radius.md,
+    backgroundColor: colors.cardElevated,
+    borderWidth: 1, borderColor: colors.border,
+  },
+  recentCoverEmpty: { alignItems: 'center', justifyContent: 'center' },
+  recentTitle: {
+    color: colors.textPrimary, fontSize: font.xs, fontWeight: '700',
+    lineHeight: 16, marginTop: spacing.xs,
+  },
+  recentCat: { color: colors.textTertiary, fontSize: 10, marginTop: 2, textTransform: 'capitalize' },
+  recentPending: { color: colors.textTertiary, fontSize: 10, marginTop: 2, fontStyle: 'italic' },
+  searchHint: { color: colors.textTertiary, fontSize: 10, marginTop: 1 },
+
+  seeAll: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    paddingVertical: spacing.sm,
+  },
+  seeAllText: { color: colors.accent, fontSize: font.sm, fontWeight: '700' },
+
+  progressCard: {
+    backgroundColor: colors.card, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.xs,
+  },
+  progressTitle: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' },
+  progressTrack: {
+    height: 5, borderRadius: radius.full, backgroundColor: colors.border, overflow: 'hidden',
+  },
+  progressFill: { height: '100%', borderRadius: radius.full, backgroundColor: colors.accent },
+  progressSub: { color: colors.textSecondary, fontSize: font.xs, lineHeight: 16 },
 
   features: { gap: spacing.sm },
   feature: {
