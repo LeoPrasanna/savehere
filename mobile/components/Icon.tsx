@@ -11,7 +11,6 @@ import {
   Menu, UserRound, Settings, Bell, Download, LogIn, ChevronRight, Bookmark, Layers, Shield,
   MessageCircle, Compass, ArrowLeft, Send, Brush,
   Rocket, BicepsFlexed, PersonStanding, Trophy,
-  Mars, Venus, Transgender,
 } from 'lucide-react-native';
 
 // One icon family for the whole app (Lucide). Platform brand logos are the only
@@ -28,9 +27,6 @@ const MAP: Record<string, any> = {
   restaurant: UtensilsCrossed, lock: Lock, eye: Eye, 'eye-off': EyeOff,
   mail: Mail, key: KeyRound, celebrate: PartyPopper,
   menu: Menu, user: UserRound, settings: Settings, bell: Bell, download: Download,
-  // Avatar glyphs, chosen from the profile's optional `gender`. `user` stays the
-  // default when it's unset — nobody is forced to pick one.
-  'gender-male': Mars, 'gender-female': Venus, 'gender-other': Transgender,
   login: LogIn, 'chevron-right': ChevronRight, bookmark: Bookmark, layers: Layers, shield: Shield,
   ask: MessageCircle, rediscover: Compass, back: ArrowLeft, send: Send,
   barbell: Dumbbell, 'barbell-outline': Dumbbell, trash: Trash2,
