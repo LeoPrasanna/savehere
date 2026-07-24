@@ -10,6 +10,7 @@ import { Wand2, ClipboardPaste } from 'lucide-react-native';
 import * as Clipboard from 'expo-clipboard';
 import { Icon } from '../components/Icon';
 import { api } from '../services/api';
+import { fetchClientMetadata } from '../services/clientExtract';
 import * as haptics from '../services/haptics';
 import { Pressable } from '../components/Pressable';
 import { GlassCard } from '../components/GlassCard';
@@ -141,7 +142,20 @@ export default function SaveScreen() {
     if (!trimmed) { setError('Paste a URL first.'); return; }
     setLoading(true); setError(''); startStepTimers();
     try {
+      // Kick the device-side metadata fetch off FIRST but don't await it here —
+      // it runs alongside the save so the card still appears immediately. It only
+      // matters for links our server's datacenter IP can't read (Instagram/
+      // Facebook); the server discards it whenever its own extraction worked.
+      const metaPromise = fetchClientMetadata(trimmed);
+
       const reel = await api.saveReel(trimmed);
+
+      // Fire-and-forget: deliver the metadata once it lands. Failures are silent
+      // by design — the save already succeeded and the server has its own path.
+      metaPromise
+        .then((meta) => (meta ? api.sendClientMetadata(reel.id, meta) : null))
+        .catch(() => {});
+
       clearStepTimers();
       haptics.success();
       // A short success beat completes the robot's journey before the card
