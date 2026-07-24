@@ -1,6 +1,7 @@
 import yt_dlp
 import httpx
 import re
+from app.config import settings
 import os
 import json
 import tempfile
@@ -277,6 +278,67 @@ _BASE_YDL_OPTS = {
 }
 
 
+def _youtube_id(url: str) -> str:
+    """Video id from any YouTube URL shape we accept (shorts / watch / youtu.be)."""
+    m = re.search(r'(?:/shorts/|/live/|/embed/|youtu\.be/)([A-Za-z0-9_-]{6,})', url)
+    if m:
+        return m.group(1)
+    m = re.search(r'[?&]v=([A-Za-z0-9_-]{6,})', url)
+    return m.group(1) if m else ""
+
+
+def _youtube_data_api(url: str) -> dict:
+    """Fetch title + description via the official YouTube Data API v3.
+
+    This exists because YouTube bot-blocks our server's datacenter IP: yt-dlp
+    fails and the watch-page scrape returns nothing, so a save from the deployed
+    backend had no text to summarize no matter how many times it was retried.
+    The Data API is authenticated by key rather than judged by IP reputation, so
+    it answers normally from anywhere.
+
+    Uses `videos.list` (1 quota unit), NOT `search.list` (100 units) — we already
+    have the id from the URL. At 10,000 free units/day that is ~10k lookups, and
+    the extraction cache is keyed by URL globally, so popular links cost one call
+    no matter how many users save them.
+
+    Returns {} on any failure (no key, quota exhausted, unknown id) — the caller
+    then degrades exactly as it did before. Captions are NOT available here:
+    downloading them needs OAuth, so this recovers descriptions only.
+    """
+    if not settings.YOUTUBE_API_KEY:
+        return {}
+    vid = _youtube_id(url)
+    if not vid:
+        return {}
+    try:
+        r = httpx.get(
+            "https://www.googleapis.com/youtube/v3/videos",
+            params={"id": vid, "part": "snippet", "key": settings.YOUTUBE_API_KEY},
+            timeout=8,
+        )
+        if r.status_code == 403:
+            # Almost always quotaExceeded / key restriction. Log loudly: this is
+            # the difference between working summaries and silent link-only saves.
+            logger.warning(f"[YT-API] 403 for {vid} — quota exhausted or key restricted")
+            return {}
+        if r.status_code != 200:
+            logger.info(f"[YT-API] HTTP {r.status_code} for {vid}")
+            return {}
+        items = (r.json() or {}).get("items") or []
+        if not items:
+            return {}
+        sn = items[0].get("snippet") or {}
+        return {
+            "title": (sn.get("title") or "").strip(),
+            "description": (sn.get("description") or "").strip(),
+            "uploader": (sn.get("channelTitle") or "").strip(),
+            "thumbnail": ((sn.get("thumbnails") or {}).get("high") or {}).get("url", ""),
+        }
+    except Exception as e:
+        logger.info(f"[YT-API] {type(e).__name__}: {e}")
+        return {}
+
+
 def _youtube_attempts() -> list[dict]:
     """
     Ordered extraction strategies for YouTube. We prefer the ios/tv/android
@@ -379,15 +441,29 @@ def extract_info(url: str) -> dict:
         meta = _youtube_oembed(url)
         title = meta.get("title") or ""
         thumb = meta.get("image") or ""
+        uploader = meta.get("uploader") or ""
+
+        # Last resort before giving up on text: the official Data API. yt-dlp and
+        # the page scrape are both bot-blocked from datacenter IPs, so on the
+        # deployed backend this is the only path that returns a description —
+        # without it every YouTube save here becomes a link-only bookmark.
+        api = _youtube_data_api(url)
+        description = api.get("description") or ""
+        if description:
+            logger.info(f"[YT-API] recovered {len(description)} chars for {url}")
+        title = title or api.get("title") or ""
+        thumb = thumb or api.get("thumbnail") or ""
+        uploader = uploader or api.get("uploader") or ""
+
         return {
             "title": title or "YouTube Short",
-            "caption": "",
+            "caption": description,
             "transcript": "",
-            "best_text": "",
+            "best_text": description,
             "thumbnail_url": thumb,
             "duration": 0,
             "platform": platform,
-            "uploader": meta.get("uploader") or "",
+            "uploader": uploader,
             "needs_audio": False,
             # True when even oEmbed gave nothing — i.e. fully blocked / private.
             "blocked": not (title or thumb),

@@ -7,6 +7,12 @@ class Settings:
     ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
     APIFY_API_KEY: str = os.getenv("APIFY_API_KEY", "")
+    # YouTube Data API v3 — the ONLY reliable way to read a Short's description
+    # from a datacenter IP. yt-dlp and the watch-page scrape are bot-blocked on
+    # Render (verified: title+thumbnail come back, description and transcript do
+    # not), so without this every YouTube save degrades to a link-only bookmark.
+    # Unset = the fallback is skipped and behaviour is exactly as before.
+    YOUTUBE_API_KEY: str = os.getenv("YOUTUBE_API_KEY", "")
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     # New "Publishable" key (sb_publishable_...). Safe to share. Falls back to the
     # older SUPABASE_ANON_KEY name if that's what's set.
