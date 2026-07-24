@@ -139,6 +139,31 @@ def test_oversize_text_rejected_by_schema(env):
     assert r.status_code == 422
 
 
+def test_does_not_downgrade_while_server_extraction_is_still_running(env):
+    """Regression: this payload lands within a second of /save, long before the
+    background chain finishes. Marking a still-'pending' reel as 'skipped' made
+    the app stop polling (the detail screen only polls while pending), so the
+    summary that arrived seconds later stayed invisible until a manual reload.
+
+    The common trigger is YouTube: the client only has oEmbed, and oEmbed carries
+    no description — so the payload is always text-less there.
+    """
+    client, Session = env
+    rid = _make_reel(Session, status="pending", title=None)
+
+    r = client.post(f"/api/reels/{rid}/client-metadata",
+                    json=_payload(title="3 Bali Travel Tips", text=""))
+    assert r.status_code == 200
+    assert r.json()["summary_status"] == "pending", \
+        "downgraded a reel the server was still extracting — the app stops polling"
+
+    s = Session()
+    reel = s.query(ReelDB).filter(ReelDB.id == rid).first()
+    assert reel.summary_status == "pending"
+    assert reel.title == "3 Bali Travel Tips"      # the title we gained is kept
+    s.close()
+
+
 def test_short_client_text_stays_skipped_but_keeps_title(env):
     """Client couldn't read it either (CORS on web / private post): don't invent a
     summary, but keep the title+thumbnail we did gain."""
