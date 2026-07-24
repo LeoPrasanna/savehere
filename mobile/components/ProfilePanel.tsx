@@ -8,11 +8,17 @@ import { api, Reel, Usage, UsageLog } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { GlassCard } from './GlassCard';
-import { useAuth } from '../contexts/AuthContext';
+import { BorderBeam } from './BorderBeam';
+import { useAuth, avatarIcon } from '../contexts/AuthContext';
 import { markReopenPanel } from '../services/sessionFlags';
 import { colors, spacing, font, radius, gradients, shadow, themed, accentThemes, getAccentKey, setAccentTheme } from '../constants/theme';
 
 const APP_VERSION = '1.0.0';
+
+/** How many of today's AI actions the drill-down shows. The endpoint returns up
+ *  to 200, but a short, honest list reads better than a wall — and the footer
+ *  below says exactly how many more there are. */
+const LOG_LIMIT = 10;
 
 /** "3 days" / "1 day" / "a few hours" from an ISO end date. */
 function trialDaysLeft(endsAt: string): string {
@@ -36,7 +42,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const panelWidth = Math.min(330, width * 0.86);
-  const { email, displayName, signOut, deleteAccount } = useAuth();
+  const { email, displayName, profile, signOut, deleteAccount } = useAuth();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [usage, setUsage] = useState<Usage | null>(null);
@@ -45,6 +51,8 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const [logOpen, setLogOpen] = useState(false);
   const [log, setLog] = useState<UsageLog | null>(null);
   const [logLoading, setLogLoading] = useState(false);
+  // Measured size of the AI-budget card, so the BorderBeam can trace its outline.
+  const [usageCardSize, setUsageCardSize] = useState({ w: 0, h: 0 });
 
   // Refresh the AI budget each time the panel opens; quietly keep the last known
   // value if the request fails (the meter is informative, never blocking).
@@ -205,7 +213,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
         >
           <GlassCard tint="violet" intensity="medium" style={styles.accountCard}>
             <LinearGradient colors={gradients.hologram} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.avatar}>
-              <Icon name="user" size={26} color="#FFF" />
+              <Icon name={avatarIcon(profile.gender)} size={26} color="#FFF" />
             </LinearGradient>
             <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
             <Text style={styles.sub} numberOfLines={1}>{email ?? 'Synced to your account'}</Text>
@@ -245,6 +253,13 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
               animate={{ opacity: 1, translateY: 0 }}
               transition={{ type: 'timing', duration: 300, delay: 450 }}
             >
+              {/* Measured so the BorderBeam can trace this card's exact outline.
+                  The travelling light is the affordance that says "tappable" —
+                  same cue as the paste-URL field on the save screen. */}
+              <View onLayout={(e) => {
+                const { width, height } = e.nativeEvent.layout;
+                setUsageCardSize((s) => (s.w === width && s.h === height ? s : { w: width, h: height }));
+              }}>
               <GlassCard tint="violet" intensity="low" style={styles.usageCard}>
                 {/* The whole header toggles the "what did I spend it on" list.
                     Only offer it when there's something to show. */}
@@ -278,17 +293,29 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                       <Text style={styles.usageHint}>Loading…</Text>
                     ) : log && log.items.length > 0 ? (
                       <>
-                        {log.items.map((it, i) => (
+                        {/* Say what this list is, so a short list never reads as
+                            "that's everything" when it isn't. */}
+                        <Text style={styles.logHeader}>
+                          Last {Math.min(LOG_LIMIT, log.items.length)} AI action
+                          {Math.min(LOG_LIMIT, log.items.length) > 1 ? 's' : ''} · newest first
+                        </Text>
+                        {log.items.slice(0, LOG_LIMIT).map((it, i) => (
                           <View key={i} style={styles.logRow}>
                             <Text style={styles.logAction}>{it.action_label}</Text>
                             {it.label ? <Text style={styles.logLabel} numberOfLines={1}>{it.label}</Text> : null}
                           </View>
                         ))}
-                        {log.used > log.logged && (
-                          <Text style={styles.logMore}>
-                            + {log.used - log.logged} earlier action{log.used - log.logged > 1 ? 's' : ''} today
-                          </Text>
-                        )}
+                        {/* Covers BOTH kinds of hidden action: ones past the 10 we
+                            show, and ones charged before the log existed (used > logged). */}
+                        {(() => {
+                          const shown = Math.min(LOG_LIMIT, log.items.length);
+                          const hidden = log.used - shown;
+                          return hidden > 0 ? (
+                            <Text style={styles.logMore}>
+                              + {hidden} more action{hidden > 1 ? 's' : ''} today
+                            </Text>
+                          ) : null;
+                        })()}
                       </>
                     ) : (
                       <Text style={styles.usageHint}>No recorded actions yet today.</Text>
@@ -320,6 +347,18 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                   </View>
                 )}
               </GlassCard>
+              {/* Only while there's something to open — a beam on a dead card
+                  would advertise an interaction that isn't there. */}
+              {usage.used > 0 && usageCardSize.w > 0 && (
+                <BorderBeam
+                  width={usageCardSize.w}
+                  height={usageCardSize.h}
+                  radius={radius.lg}
+                  color={colors.accentLight}
+                  strokeWidth={1.5}
+                />
+              )}
+              </View>
             </MotiView>
           </>
         )}
@@ -461,6 +500,10 @@ const styles = themed(() => StyleSheet.create({
   logBox: {
     marginTop: spacing.xs, paddingTop: spacing.xs,
     borderTopWidth: 1, borderTopColor: colors.border, gap: 5,
+  },
+  logHeader: {
+    color: colors.textTertiary, fontSize: 10, fontWeight: '700',
+    letterSpacing: 0.4, textTransform: 'uppercase', marginBottom: 2,
   },
   logRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
   logAction: { color: colors.accentLight, fontSize: font.xs, fontWeight: '700', minWidth: 92 },

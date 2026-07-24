@@ -6,10 +6,29 @@ import { supabase } from '../services/supabase';
 import { api } from '../services/api';
 import { resetSessionFlags } from '../services/sessionFlags';
 
+/** Optional — deliberately NOT asked at sign-up (that would add friction to
+ *  onboarding); it's set later from Edit Profile. Only drives which avatar icon
+ *  is shown. */
+export type Gender = 'male' | 'female' | 'other';
+
 export interface Profile {
   first_name?: string;
   last_name?: string;
   nickname?: string;
+  gender?: Gender;
+}
+
+/** The picker's options AND the avatar's icon come from this one list, so the
+ *  two can never disagree about which glyph means what. */
+export const GENDER_OPTIONS: { value: Gender; label: string; icon: string }[] = [
+  { value: 'male', label: 'Male', icon: 'gender-male' },
+  { value: 'female', label: 'Female', icon: 'gender-female' },
+  { value: 'other', label: 'Other', icon: 'gender-other' },
+];
+
+/** Avatar glyph for a profile — falls back to the neutral person icon. */
+export function avatarIcon(gender?: Gender): string {
+  return GENDER_OPTIONS.find((o) => o.value === gender)?.icon ?? 'user';
 }
 
 interface AuthState {
