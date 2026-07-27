@@ -1,5 +1,5 @@
-import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, Modal, Image } from 'react-native';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Modal, Image, Animated } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -50,6 +50,37 @@ function RecentCard({ reel, onPress }: { reel: Reel; onPress: () => void }) {
         <Text style={styles.recentCat} numberOfLines={1}>{reel.category}</Text>
       ) : null}
     </Pressable>
+  );
+}
+
+/** Placeholder carousel shown while the first fetch is in flight, so the screen
+ *  isn't just the greeting + a "Save a reel" button over dead space. A gentle
+ *  opacity pulse; it unmounts the instant real content (or the empty state) lands. */
+function RecentSkeleton() {
+  const pulse = useRef(new Animated.Value(0.5)).current;
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 1, duration: 750, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.5, duration: 750, useNativeDriver: true }),
+      ])
+    );
+    loop.start();
+    return () => loop.stop();
+  }, []);
+  return (
+    <View style={styles.recentBlock}>
+      <Animated.View style={[styles.skelLine, { width: 84, opacity: pulse }]} />
+      <ScrollView horizontal scrollEnabled={false} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentStrip}>
+        {[0, 1, 2, 3].map(i => (
+          <Animated.View key={i} style={[styles.recentCard, { opacity: pulse }]}>
+            <View style={styles.recentCover} />
+            <View style={[styles.skelLine, { width: '85%', marginTop: spacing.xs }]} />
+            <View style={[styles.skelLine, { width: '50%', marginTop: 4 }]} />
+          </Animated.View>
+        ))}
+      </ScrollView>
+    </View>
   );
 }
 
@@ -133,6 +164,9 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
             </LinearGradient>
           </Pressable>
         </MotiView>
+
+        {/* Loading — a shaped placeholder so the fetch gap isn't dead space. */}
+        {loading && <RecentSkeleton />}
 
         {/* ── FIRST RUN (0 saves) ──────────────────────────
             "What you can do" lives HERE and only here. With nothing to show, the
@@ -370,6 +404,7 @@ const styles = themed(() => StyleSheet.create({
   chipText: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '600', textTransform: 'capitalize' },
   chipTextOn: { color: colors.accentLight },
 
+  skelLine: { height: 11, borderRadius: 5, backgroundColor: colors.cardElevated },
   recentStrip: { gap: spacing.sm, paddingRight: spacing.lg },
   recentCard: { width: RECENT_CARD_W },
   recentCover: {

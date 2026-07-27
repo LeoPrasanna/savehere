@@ -1,7 +1,7 @@
 import { StyleProp, ViewStyle } from 'react-native';
 import {
   Play, X, Sparkles, Tags, Tag, SquarePen, Zap, Dumbbell, UtensilsCrossed,
-  List, ListChecks, Footprints, Info, ExternalLink, Trash2, Check,
+  List, ListChecks, Footprints, Info, ExternalLink, Trash2, Check, Copy,
   CircleAlert, CloudDownload, Link2, FileText, Hourglass, Clock, House,
   ArrowRight, Minus, Plus, Activity, Repeat, Lock, RefreshCw, Circle,
   ChefHat, Cpu, Flame, GraduationCap, Clapperboard, Shirt, Plane, Briefcase,
@@ -20,7 +20,7 @@ const MAP: Record<string, any> = {
   play: Play, close: X, sparkles: Sparkles, pricetags: Tags, create: SquarePen,
   flash: Zap, list: List, checkbox: ListChecks, footsteps: Footprints,
   'information-circle': Info, 'open-outline': ExternalLink, 'trash-outline': Trash2,
-  checkmark: Check, 'alert-circle': CircleAlert, 'cloud-download': CloudDownload,
+  checkmark: Check, copy: Copy, 'alert-circle': CircleAlert, 'cloud-download': CloudDownload,
   link: Link2, 'document-text': FileText, hourglass: Hourglass, time: Clock,
   'time-outline': Clock, home: House, 'arrow-forward': ArrowRight, remove: Minus,
   add: Plus, repeat: Repeat, 'lock-closed': Lock, refresh: RefreshCw,

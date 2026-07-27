@@ -79,6 +79,7 @@ export const platformMeta: Record<string, { color: string; gradient: readonly [s
   tiktok: { color: '#25F4EE', gradient: ['#12333A', '#0D2228'], icon: 'logo-tiktok', label: 'TikTok' },
   linkedin: { color: '#4A9DE0', gradient: ['#132A3F', '#0D1C2A'], icon: 'logo-linkedin', label: 'LinkedIn' },
   facebook: { color: '#4A90F2', gradient: ['#14263F', '#0D1A2A'], icon: 'logo-facebook', label: 'Facebook' },
+  twitter: { color: '#8AA0B4', gradient: ['#1C242B', '#12181D'], icon: 'logo-twitter', label: 'X' },
   unknown: { color: '#FF9770', gradient: ['#33251C', '#241A14'], icon: 'globe-outline', label: 'Web' },
 };
 

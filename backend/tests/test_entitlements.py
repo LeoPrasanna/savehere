@@ -79,7 +79,7 @@ class TestEffectiveTier:
             ent = entitlements_for(AuthUser(id="u-new", email="a@b.co"), db)
             assert ent.tier == "trial"
             assert ent.save_limit is None
-            assert ent.ai_daily_limit == 30
+            assert ent.ai_daily_limit == 10
             assert ent.trial_ends_at is not None
         finally:
             db.close()
@@ -109,7 +109,7 @@ class TestEffectiveTier:
             pro = AuthUser(id="u-pro", email="p@b.co", claims={"app_metadata": {"tier": "pro"}})
             ent = entitlements_for(pro, db)
             assert ent.tier == "pro"
-            assert ent.ai_daily_limit == 100
+            assert ent.ai_daily_limit == 20
             assert ent.save_limit is None
             assert ent.trial_ends_at is None
             # pro never creates a profile row (no trial clock needed)
@@ -287,12 +287,12 @@ class TestTrickleQuota:
             db.close()
 
     def test_downgrade_mid_day_blocks_over_limit(self, env):
-        """Pro burns 50 → token flips to free (expired trial) → next charge refused."""
+        """Pro burns its full cap → token flips to free (expired trial) → next charge refused."""
         _, Session = env
         db = Session()
         try:
             pro = AuthUser(id="u-down", email="dn@b.co", claims={"app_metadata": {"tier": "pro"}})
-            for _ in range(50):
+            for _ in range(20):
                 charge_ai_action(db, pro)
             free = AuthUser(id="u-down", email="dn@b.co")
             entitlements_for(free, db)
@@ -303,7 +303,7 @@ class TestTrickleQuota:
         try:
             free = AuthUser(id="u-down", email="dn@b.co")
             with pytest.raises(HTTPException) as exc:
-                charge_ai_action(db, free)       # 50 >= 3
+                charge_ai_action(db, free)       # 20 >= 3
             assert exc.value.status_code == 429
         finally:
             db.close()
@@ -316,7 +316,7 @@ class TestUsageEndpoint:
         assert body["tier"] == "trial"
         assert body["trial_ends_at"] is not None
         assert body["saves"] == {"used": 0, "limit": None}
-        assert body["limit"] == 30 and body["remaining"] == 30
+        assert body["limit"] == 10 and body["remaining"] == 10
 
     def test_expired_shape(self, env):
         client, Session = env
