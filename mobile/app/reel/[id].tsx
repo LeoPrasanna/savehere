@@ -319,13 +319,17 @@ export default function ReelDetailScreen() {
   const showTasksAction = actionableCategory && reel.category !== 'fitness' && !isTravel && !aiTasksUsed;
   const showActionsSection = (reel.category === 'fitness' || showTasksAction) && !isSensitive;
   const itinerary = itin?.itinerary ?? null;
-  // Pro locks. Absent `features` (older server / failed fetch) = treat as
-  // unlocked; the server's 403 remains the real gate either way. Cooking tasks
-  // are the Recipe feature and are never gated.
+  // Pro locks. Lock ONLY when the server EXPLICITLY says a flag is false. A
+  // missing flag — still loading, OR a backend that predates the flag — must read
+  // as unlocked, or a paid user flashes a spurious PRO lock the moment `usage`
+  // resolves without that field. The server's 403 is the real gate either way.
   const feat = usage?.features;
-  const itineraryLocked = feat ? !feat.itinerary : false;
-  const tasksLocked = feat && !isCooking ? !feat.tasks : false;
-  const PRO_HINT = 'Available on Pro. Your free plan keeps saves, summaries, recipes and workouts.';
+  const itineraryLocked = feat?.itinerary === false;
+  const workoutLocked = feat?.workout === false;
+  // The "action" button is Recipe on cooking reels, generic tasks elsewhere —
+  // each has its own flag.
+  const actionLocked = isCooking ? feat?.recipe === false : feat?.tasks === false;
+  const PRO_HINT = 'Available on Pro. Your free plan keeps saves, summaries and search.';
   const itinRegensLeft = itin?.regenerations_left ?? 3;
   const showItinerarySection = isTravel && !isSensitive;
 
@@ -606,32 +610,41 @@ export default function ReelDetailScreen() {
             <Text style={styles.cardTitle}>Turn into Action</Text>
           </View>
           <View style={styles.actionRow}>
+            {/* Build is Pro-gated; VIEWING a plan generated during trial stays free. */}
             {reel.category === 'fitness' && (
-              <Pressable
-                style={styles.actionBtnWrap}
-                onPress={hasWorkout ? () => router.push(`/workout/${id}`) : () => openModal(setWorkoutModal)}
-                disabled={generatingWorkout || (!hasWorkout && workoutLimitReached)}
-              >
-                <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
-                  {generatingWorkout
-                    ? <ActivityIndicator size="small" color="#FFF" />
-                    : <Icon name="barbell" size={20} color="#FFF" />}
-                  <Text style={styles.actionBtnText}>
-                    {generatingWorkout ? 'Building…' : hasWorkout ? 'View Workout' : workoutLimitReached ? 'Limit reached' : 'Build Workout'}
-                  </Text>
-                </LinearGradient>
-              </Pressable>
+              workoutLocked && !hasWorkout ? (
+                <View style={styles.lockedBtn}>
+                  <Icon name="lock-closed" size={18} color={colors.textTertiary} />
+                  <Text style={styles.lockedBtnText}>Build Workout</Text>
+                  <View style={styles.proTag}><Text style={styles.proTagText}>PRO</Text></View>
+                </View>
+              ) : (
+                <Pressable
+                  style={styles.actionBtnWrap}
+                  onPress={hasWorkout ? () => router.push(`/workout/${id}`) : () => openModal(setWorkoutModal)}
+                  disabled={generatingWorkout || (!hasWorkout && workoutLimitReached)}
+                >
+                  <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
+                    {generatingWorkout
+                      ? <ActivityIndicator size="small" color="#FFF" />
+                      : <Icon name="barbell" size={20} color="#FFF" />}
+                    <Text style={styles.actionBtnText}>
+                      {generatingWorkout ? 'Building…' : hasWorkout ? 'View Workout' : workoutLimitReached ? 'Limit reached' : 'Build Workout'}
+                    </Text>
+                  </LinearGradient>
+                </Pressable>
+              )
             )}
 
-            {showTasksAction && tasksLocked && (
+            {showTasksAction && actionLocked && (
               <View style={styles.lockedBtn}>
                 <Icon name="lock-closed" size={18} color={colors.textTertiary} />
-                <Text style={styles.lockedBtnText}>Get Action Steps</Text>
+                <Text style={styles.lockedBtnText}>{isCooking ? 'Get Recipe' : 'Get Action Steps'}</Text>
                 <View style={styles.proTag}><Text style={styles.proTagText}>PRO</Text></View>
               </View>
             )}
 
-            {showTasksAction && !tasksLocked && (
+            {showTasksAction && !actionLocked && (
               <Pressable style={styles.actionBtnWrap} onPress={handleGenerateTasks} disabled={generatingTasks}>
                 <LinearGradient colors={gradients.cool} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
                   {generatingTasks
@@ -646,7 +659,7 @@ export default function ReelDetailScreen() {
           </View>
           {showTasksAction && (
             <Text style={styles.actionHint}>
-              {tasksLocked ? PRO_HINT : 'Generated once with AI — after that you can add, edit, or delete by hand.'}
+              {actionLocked ? PRO_HINT : 'Generated once with AI — after that you can add, edit, or delete by hand.'}
             </Text>
           )}
           {taskError ? (

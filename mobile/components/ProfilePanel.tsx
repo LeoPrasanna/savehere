@@ -221,11 +221,15 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
             </LinearGradient>
             <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
             <Text style={styles.sub} numberOfLines={1}>{email ?? 'Synced to your account'}</Text>
-            <View style={styles.tierBadge}>
-              <Text style={styles.tierBadgeText}>
-                {usage?.tier === 'pro' ? 'Pro' : usage?.tier === 'trial' ? 'Trial' : 'Free'}
-              </Text>
-            </View>
+            {/* Only once usage loads — otherwise it flashes "Free" then corrects,
+                which reads as a downgrade glitch to a paying user. */}
+            {usage && (
+              <View style={styles.tierBadge}>
+                <Text style={styles.tierBadgeText}>
+                  {usage.tier === 'pro' ? 'Pro' : usage.tier === 'trial' ? 'Trial' : 'Free'}
+                </Text>
+              </View>
+            )}
           </GlassCard>
         </MotiView>
 
