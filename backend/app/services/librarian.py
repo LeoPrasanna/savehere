@@ -62,6 +62,7 @@ Saved items:
 RULES:
 - Answer concisely and directly, grounded ONLY in the saved items above.
 - Reference the relevant item(s) by title in your answer when useful.
+- When SEVERAL saves relate to the question, connect them — synthesize across them and note where they agree or differ — instead of answering from just one. Drawing threads between saves is the whole point.
 - If nothing in the saved items answers the question, say you couldn't find anything saved about that. Do NOT invent or guess facts that aren't in the items.
 - Return this EXACT JSON: {{"answer": "your answer", "source_ids": ["id", ...]}}
 - source_ids: the ids of items you actually used (max 5). Use [] if none were relevant.
@@ -81,6 +82,7 @@ Saved items:
 RULES:
 - Answer concisely and directly, grounded ONLY in the saved items above.
 - Reference the relevant item(s) by title so the user knows which save it came from.
+- When SEVERAL saves relate to the question, connect them — synthesize across them and note where they agree or differ — instead of answering from just one. Drawing threads between saves is the whole point.
 - If nothing here answers the question, say you couldn't find anything saved about that. Do NOT invent facts that aren't in the items.
 - Write a plain, friendly answer — no JSON, no preamble, no markdown headers."""
 

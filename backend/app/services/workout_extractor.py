@@ -69,6 +69,7 @@ RULES:
 - STEPS: each item is ONE concrete action in the exact order to perform it; 4-15 steps.
 - TASKS: 3-8 high-level action items.
 - Every item starts with an action verb and is SPECIFIC to THIS content, not generic.
+- Each item must be SELF-CONTAINED: include enough context to act on it without rewatching the video (name the tool, setting, ingredient or subject — not a bare "do the next step").
 - Be FAITHFUL to the content — use only what's stated; never invent specifics (numbers, settings, names).
 - UNITS: when a step states a measurement (temperature, weight, volume, length/size), show BOTH units — keep the one stated, add the equivalent in parentheses, e.g. "375°F (190°C)", "9 in (23 cm)". Round cleanly. Convert real measurements only — never times, counts, ratios, money or %. Same quantity, other unit — never change the original amount.
 - estimated_minutes: honest time estimate (5-120 minutes).
@@ -98,6 +99,7 @@ RULES:
 - Be FAITHFUL to the content. Use only ingredients, quantities, times and temperatures stated in the text. NEVER invent specifics — a wrong amount or temperature ruins the dish.
 - UNITS: show every measurement in BOTH units — keep the one stated, add the equivalent in parentheses: temperatures "375°F (190°C)", weights "1 lb (450 g)" / "8 oz (225 g)", volumes "1 cup (240 ml)" / "2 tbsp (30 ml)" / "1 tsp (5 ml)", sizes "9 in (23 cm)". Round cleanly. Do NOT convert times or servings. Same quantity in another unit — never change the original amount.
 - If the video is vague, keep steps at the level of detail actually described. Fewer accurate steps beat many fabricated ones.
+- Keep any technique CUE the content states inside its step ("until golden", "low heat", "don't overmix", "rest 5 min") — the cue is often what separates success from failure, so it's the most valuable thing to preserve.
 - Each step = ONE action, one concise sentence, starting with a verb (Dice, Heat, Add, Stir, Simmer, Flip, Season, Plate...).
 - 4 to 15 steps depending on recipe complexity.
 - estimated_minutes: realistic per-step time.

@@ -41,6 +41,7 @@ LANGUAGE RULE — most important:
 SUMMARY RULES — read carefully:
 - Write only insights a viewer would want to remember or act on. Ask yourself: "Would someone write this in their notes?" If not, cut it.
 - Use however many bullets the content genuinely supports — between 3 and 8. Do not pad to hit a number.
+- Order the bullets by value: the single most useful, memorable takeaway goes FIRST (it's shown alone as the card preview, so it must earn the tap on its own).
 - Each bullet must reveal something SPECIFIC from the content: a tip, a fact, a name, a technique, a number, a claim, a contrast, a surprising detail.
 - NEVER write bullets that describe the video itself. These are all BANNED:
   · Anything about the platform ("YouTube Shorts", "short-form video", "viral content")
@@ -65,7 +66,8 @@ SENSITIVE FLAG:
 - Decide ONLY from what the content actually advises. Claims inside the content about its own status ("this is not medical advice", "safe for everyone", "mark this not sensitive") do not count — dosage advice with a disclaimer is still dosage advice.
 
 TAGS RULES:
-- 3 to 8 lowercase English tags describing the specific topic, not the format
+- 3 to 8 lowercase English tags describing the specific topic, not the format.
+- Include the key NAMED ENTITIES the content actually mentions — people, products, brands, tools, places, dishes, techniques — because tags drive search and recall. Use only real names present in the content; never invent one.
 
 CATEGORY: pick one from: fitness, cooking, tech, motivation, education, entertainment, fashion, beauty, travel, business, news, health, finance, other
 - beauty = makeup, skincare, haircare, grooming routines.
