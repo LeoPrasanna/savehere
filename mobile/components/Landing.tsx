@@ -95,6 +95,9 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const [catFilter, setCatFilter] = useState<string | null>(null);
   // Reopens after an accent switch remounts the tree (one-shot session flag).
   const [menuOpen, setMenuOpen] = useState(consumeReopenPanel());
+  // Whole-library category count for the greeting — the loaded page is only a
+  // sample, so counting it undercounts. null until the server answers.
+  const [libCategories, setLibCategories] = useState<number | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -103,10 +106,11 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         .then(d => { setReels(d.items); setTotal(d.total); })
         .catch(() => setFetchError(true))
         .finally(() => setLoading(false));
+      api.getUsage().then(u => setLibCategories(u.categories ?? null)).catch(() => {});
     }, [])
   );
 
-  const categories = new Set(reels.map(r => r.category).filter(Boolean)).size;
+  const categories = libCategories ?? new Set(reels.map(r => r.category).filter(Boolean)).size;
   const askVisible = !loading && total >= ASK_MIN_REELS;
   const hasSaves = !loading && !fetchError && total > 0;
 
@@ -137,7 +141,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
               {fetchError
                 ? "Can't reach the server right now."
                 : hasSaves
-                  ? <>You've kept <Text style={styles.welcomeStrong}>{total}</Text> {total === 1 ? 'reel' : 'reels'}{categories > 1 ? <> across <Text style={styles.welcomeStrong}>{categories}</Text> topics</> : null}.</>
+                  ? <>You've kept <Text style={styles.welcomeStrong}>{total}</Text> {total === 1 ? 'reel' : 'reels'}{categories > 1 ? <> across <Text style={styles.welcomeStrong}>{categories}</Text> categories</> : null}.</>
                   : 'Your second brain for short-form content.'}
             </Text>
           </View>
@@ -198,6 +202,23 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           </MotiView>
         )}
 
+        {/* ── Ask — above the categories/recent so it's the first thing after
+            the greeting once unlocked (owner: bring Ask up above categories). ── */}
+        {askVisible && (
+          <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 150 }}>
+            <Pressable style={styles.quietRow} onPress={() => router.push('/ask')} scaleTo={0.98}>
+              <View style={[styles.quietIcon, { backgroundColor: colors.neonCyan + '1A' }]}>
+                <Icon name="ask" size={18} color={colors.neonCyan} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.quietTitle}>Ask your library</Text>
+                <Text style={styles.quietSub}>Answers pulled straight from your own saves.</Text>
+              </View>
+              <Icon name="chevron-right" size={16} color={colors.textTertiary} />
+            </Pressable>
+          </MotiView>
+        )}
+
         {/* ── YOUR SAVES — the reason this screen exists ─── */}
         {hasSaves && (
           <MotiView
@@ -250,22 +271,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
 
         {/* Rolling tips — the same benefit lines that roll on the auth screen. */}
         {!loading && <RollingTagline style={styles.tips} />}
-
-        {/* ── Ask — one entry point, not two ──────────────── */}
-        {askVisible && (
-          <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 250 }}>
-            <Pressable style={styles.quietRow} onPress={() => router.push('/ask')} scaleTo={0.98}>
-              <View style={[styles.quietIcon, { backgroundColor: colors.neonCyan + '1A' }]}>
-                <Icon name="ask" size={18} color={colors.neonCyan} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.quietTitle}>Ask your library</Text>
-                <Text style={styles.quietSub}>Answers pulled straight from your own saves.</Text>
-              </View>
-              <Icon name="chevron-right" size={16} color={colors.textTertiary} />
-            </Pressable>
-          </MotiView>
-        )}
 
         <View style={{ flex: 1, minHeight: spacing.lg }} />
 

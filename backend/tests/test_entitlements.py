@@ -337,6 +337,26 @@ class TestUsageEndpoint:
         assert body["trial_ends_at"] is None
         assert body["saves"]["limit"] is None
 
+    def test_library_counts_are_whole_library_distinct(self, env):
+        """categories/platforms count DISTINCT values across the whole library —
+        the client used to derive these from a page sample and undercounted."""
+        client, Session = env
+        db = Session()
+        try:
+            for i, (cat, plat) in enumerate([
+                ("fitness", "youtube"), ("fitness", "instagram"),
+                ("travel", "tiktok"), (None, "youtube"),  # null category ignored
+            ]):
+                db.add(ReelDB(id=f"lc{i}", user_id="u-lc", url=f"u{i}",
+                              platform=plat, category=cat, summary_status="ready"))
+            db.commit()
+        finally:
+            db.close()
+        body = client(AuthUser(id="u-lc", email="lc@b.co")).get("/api/account/usage").json()
+        assert body["saves"]["used"] == 4
+        assert body["categories"] == 2   # fitness, travel (null not counted)
+        assert body["platforms"] == 3    # youtube, instagram, tiktok
+
 
 class TestAccountDeletionInteraction:
     def test_profile_deleted_grant_survives(self, env, monkeypatch):
