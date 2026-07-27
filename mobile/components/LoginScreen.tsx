@@ -12,6 +12,7 @@ import { AuroraBackground } from './AuroraBackground';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { FloatingParticleField } from './FloatingParticleField';
+import { RollingTagline } from './RollingTagline';
 import * as haptics from '../services/haptics';
 import { colors, spacing, font, radius, gradients, shadow, typeface, themed } from '../constants/theme';
 
@@ -209,9 +210,8 @@ export function LoginScreen() {
           transition={{ type: 'timing', duration: 500, delay: 160 }}
         >
           <Text style={styles.title}>SaveHere</Text>
-          <Text style={styles.tagline}>
-            {isSignup ? 'Your second brain for the internet ✨' : 'Welcome back — let’s pick up where you left off 👋'}
-          </Text>
+          {/* Rolls on both sign in and sign up — the benefit lines fit either. */}
+          <RollingTagline style={styles.taglineRoll} />
         </MotiView>
 
         {/* ── Glass card (shakes on a failed attempt) ── */}
@@ -392,10 +392,7 @@ const styles = themed(() => StyleSheet.create({
     color: colors.textPrimary, fontFamily: typeface.serifBlack, fontSize: font.display, fontWeight: '900',
     textAlign: 'center', letterSpacing: -0.5,
   },
-  tagline: {
-    color: colors.textSecondary, fontSize: font.md, fontWeight: '600', textAlign: 'center',
-    marginTop: spacing.xs, paddingHorizontal: spacing.md, lineHeight: 22,
-  },
+  taglineRoll: { marginTop: spacing.xs },
 
   // Card
   card: {

@@ -249,7 +249,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
         {/* Daily AI budget — honest meter so a quota 429 is never a surprise */}
         {usage && (
           <>
-            <Text style={styles.sectionLabel}>AI TODAY</Text>
+            <Text style={styles.sectionLabel}>AI USAGE FOR TODAY</Text>
             <MotiView
               from={{ opacity: 0, translateY: 8 }}
               animate={{ opacity: 1, translateY: 0 }}
@@ -273,7 +273,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                 >
                   <Icon name="sparkles" size={14} color={colors.accentLight} />
                   <Text style={styles.usageTitle}>
-                    {usage.remaining} of {usage.limit} AI actions left
+                    {usage.remaining}/{usage.limit} actions left for today
                   </Text>
                   {usage.used > 0 && (
                     <Icon name={logOpen ? 'chevron-right' : 'chevron-right'} size={14}
