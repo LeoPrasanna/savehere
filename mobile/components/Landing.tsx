@@ -4,7 +4,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
-import { ArrowRight, Plus } from 'lucide-react-native';
+import { Plus } from 'lucide-react-native';
 import { api, thumbUrl, Reel } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
@@ -14,10 +14,8 @@ import { colors, spacing, font, radius, gradients, shadow, typeface, themed } fr
 import { useAuth } from '../contexts/AuthContext';
 import { consumeReopenPanel } from '../services/sessionFlags';
 import { FEATURES, Feature } from '../constants/features';
+import { ASK_MIN_REELS } from '../constants/limits';
 
-// One threshold drives BOTH the Ask unlock and the home screen's state ladder.
-// Two different "you're still getting started" numbers would read as a bug.
-const ASK_MIN_REELS = 3;
 // How many saves the home screen shows before handing off to the full library.
 const RECENT_LIMIT = 10;
 /** Carousel card width — also the snap interval, so scrolling settles on a card. */
@@ -127,7 +125,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
     <View style={styles.screen}>
       <AuroraBackground />
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + spacing.lg }]}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + 92 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Greeting ─────────────────────────────────── */}
@@ -144,24 +142,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           </View>
           <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)} scaleTo={0.9}>
             <Icon name="menu" size={20} color={colors.textPrimary} />
-          </Pressable>
-        </MotiView>
-
-        {/* ── Primary action — the ONE loud thing on this screen ── */}
-        <MotiView
-          from={{ opacity: 0, translateY: 12 }}
-          animate={{ opacity: 1, translateY: 0 }}
-          transition={{ type: 'timing', duration: 350, delay: 100 }}
-        >
-          <Pressable style={styles.saveWrap} onPress={() => router.push('/save')} scaleTo={0.97}>
-            <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.saveBtn}>
-              <View style={styles.savePlus}><Plus size={20} color="#FFF" /></View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.saveTitle}>Save a reel</Text>
-                <Text style={styles.saveSub}>Paste a link — the AI summary writes itself.</Text>
-              </View>
-              <ArrowRight size={20} color="rgba(255,255,255,0.9)" />
-            </LinearGradient>
           </Pressable>
         </MotiView>
 
@@ -225,19 +205,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
             transition={{ type: 'timing', duration: 300, delay: 200 }}
             style={styles.recentBlock}
           >
-            {/* Search vs Ask read as duplicates, so each now says what it does
-                and what it costs: search is instant and free, Ask spends an AI
-                action. They are NOT the same feature. */}
-            <Pressable style={styles.searchRow} onPress={onEnter} scaleTo={0.98}>
-              <Icon name="search" size={16} color={colors.textTertiary} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.searchText}>
-                  Search {total} {total === 1 ? 'save' : 'saves'}
-                </Text>
-                <Text style={styles.searchHint}>Find a save by title, tag or note — instant, free</Text>
-              </View>
-            </Pressable>
-
             {catList.length > 1 && (
               <ScrollView
                 horizontal
@@ -277,13 +244,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
                 <RecentCard key={r.id} reel={r} onPress={() => router.push(`/reel/${r.id}`)} />
               ))}
             </ScrollView>
-
-            <Pressable style={styles.seeAll} onPress={onEnter} scaleTo={0.98}>
-              <Text style={styles.seeAllText}>
-                Open my library{total > recent.length ? ` · all ${total}` : ''}
-              </Text>
-              <Icon name="chevron-right" size={15} color={colors.accent} />
-            </Pressable>
           </MotiView>
         )}
 
@@ -310,6 +270,20 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           Saved content belongs to its original creators; SaveHere keeps links and summaries for personal reference only.
         </Text>
       </ScrollView>
+
+      {/* ── Fixed bottom bar: Library + Save ─────────────── */}
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.sm }]}>
+        <Pressable style={styles.bottomLibrary} onPress={onEnter} scaleTo={0.96}>
+          <Icon name="bookmark" size={18} color={colors.textPrimary} />
+          <Text style={styles.bottomLibraryText}>Library</Text>
+        </Pressable>
+        <Pressable style={styles.bottomSaveWrap} onPress={() => router.push('/save')} scaleTo={0.96}>
+          <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.bottomSave}>
+            <Plus size={18} color="#FFF" />
+            <Text style={styles.bottomSaveText}>Save</Text>
+          </LinearGradient>
+        </Pressable>
+      </View>
 
       <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => setSelected(null)} statusBarTranslucent>
         <Pressable style={styles.modalOverlay} onPress={() => setSelected(null)} scaleTo={1}>
@@ -341,7 +315,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         onClose={() => setMenuOpen(false)}
         reels={reels}
         total={total}
-        showAsk={!askVisible}
+        showAsk={askVisible}
       />
     </View>
   );
@@ -361,20 +335,28 @@ const styles = themed(() => StyleSheet.create({
   welcome: { color: colors.textSecondary, fontSize: font.lg, lineHeight: 24, marginTop: spacing.sm },
   welcomeStrong: { color: colors.accentLight, fontFamily: typeface.displaySemi, fontWeight: '700' },
 
-  saveWrap: { borderRadius: radius.lg, ...shadow.glow },
-  saveBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    borderRadius: radius.lg, padding: spacing.md, paddingVertical: spacing.md + 2,
-  },
-  savePlus: {
-    width: 40, height: 40, borderRadius: radius.full,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  saveTitle: { color: '#FFF', fontFamily: typeface.display, fontSize: font.lg, fontWeight: '800' },
-  saveSub: { color: 'rgba(255,255,255,0.85)', fontSize: font.xs, marginTop: 1 },
-
   sectionLabel: { color: colors.textTertiary, fontSize: font.xs, fontWeight: '800', letterSpacing: 1.2 },
+
+  // ── Fixed bottom bar ────────────────────────────────────────────────
+  bottomBar: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    flexDirection: 'row', gap: spacing.sm,
+    paddingHorizontal: spacing.lg, paddingTop: spacing.sm,
+    backgroundColor: colors.background,
+    borderTopWidth: 1, borderTopColor: colors.border,
+  },
+  bottomLibrary: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    backgroundColor: colors.card, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.border, height: 50,
+  },
+  bottomLibraryText: { color: colors.textPrimary, fontSize: font.md, fontWeight: '700' },
+  bottomSaveWrap: { flex: 1, borderRadius: radius.md, ...shadow.glow },
+  bottomSave: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+    borderRadius: radius.md, height: 50,
+  },
+  bottomSaveText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
 
   quietRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2,
@@ -387,13 +369,6 @@ const styles = themed(() => StyleSheet.create({
 
   // ── Library-first home ──────────────────────────────────────────────
   recentBlock: { gap: spacing.sm },
-  searchRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.borderLight,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 3,
-  },
-  searchText: { color: colors.textTertiary, fontSize: font.sm },
 
   chipRow: { gap: spacing.xs, paddingVertical: 2 },
   chip: {
@@ -419,13 +394,6 @@ const styles = themed(() => StyleSheet.create({
   },
   recentCat: { color: colors.textTertiary, fontSize: 10, marginTop: 2, textTransform: 'capitalize' },
   recentPending: { color: colors.textTertiary, fontSize: 10, marginTop: 2, fontStyle: 'italic' },
-  searchHint: { color: colors.textTertiary, fontSize: 10, marginTop: 1 },
-
-  seeAll: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
-    paddingVertical: spacing.sm,
-  },
-  seeAllText: { color: colors.accent, fontSize: font.sm, fontWeight: '700' },
 
   progressCard: {
     backgroundColor: colors.card, borderRadius: radius.lg,

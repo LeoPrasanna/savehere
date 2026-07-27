@@ -18,6 +18,7 @@ import { ProfilePanel } from '../components/ProfilePanel';
 import { Landing } from '../components/Landing';
 import { LibraryBackdrop } from '../components/LibraryBackdrop';
 import { hasEnteredLibrary, markEnteredLibrary, clearEnteredLibrary, consumeReopenPanel } from '../services/sessionFlags';
+import { ASK_MIN_REELS } from '../constants/limits';
 import { colors, spacing, font, radius, gradients, shadow, typeface, categoryMeta, CATEGORY_OPTIONS, themed } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
@@ -418,7 +419,7 @@ export default function HomeScreen() {
         </View>
       </KeyboardAvoidingView>
 
-      <ProfilePanel visible={menuOpen} onClose={() => setMenuOpen(false)} reels={reels} total={total} />
+      <ProfilePanel visible={menuOpen} onClose={() => setMenuOpen(false)} reels={reels} total={total} showAsk={total >= ASK_MIN_REELS} />
     </View>
   );
 }
