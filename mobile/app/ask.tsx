@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, ScrollView, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -9,6 +9,7 @@ import { api, AskResponse } from '../services/api';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { Disclaimer } from '../components/Disclaimer';
+import { ASK_MIN_REELS } from '../constants/limits';
 import { colors, spacing, font, radius, gradients, categoryFor, themed } from '../constants/theme';
 
 const SUGGESTIONS = [
@@ -24,6 +25,15 @@ export default function AskScreen() {
   const [result, setResult] = useState<AskResponse | null>(null);
   const [streamingText, setStreamingText] = useState('');   // grows token-by-token
   const [error, setError] = useState('');
+  // Save count gate: the entry points already hide Ask below the threshold, but a
+  // deep link / back-navigation could still land here, so guard the screen too.
+  // null = still checking (don't flash the locked state before we know).
+  const [savedCount, setSavedCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    api.getUsage().then(u => setSavedCount(u.saves.used)).catch(() => setSavedCount(null));
+  }, []);
+  const locked = savedCount !== null && savedCount < ASK_MIN_REELS;
 
   const ask = async (question: string) => {
     const text = question.trim();
@@ -44,6 +54,31 @@ export default function AskScreen() {
       setStreamingText('');
     }
   };
+
+  if (locked) {
+    const remaining = ASK_MIN_REELS - (savedCount ?? 0);
+    return (
+      <View style={styles.screen}>
+        <View style={styles.lockWrap}>
+          <View style={styles.lockIcon}><Icon name="lock" size={30} color={colors.accent} /></View>
+          <Text style={styles.lockTitle}>Ask unlocks at {ASK_MIN_REELS} saves</Text>
+          <Text style={styles.lockSub}>
+            Ask answers questions from your own library — it needs a few saves to draw on.
+            You have {savedCount}. Save {remaining} more to unlock it.
+          </Text>
+          <View style={styles.lockTrack}>
+            <View style={[styles.lockFill, { width: `${((savedCount ?? 0) / ASK_MIN_REELS) * 100}%` }]} />
+          </View>
+          <Pressable style={styles.lockBtnWrap} onPress={() => router.push('/save')} scaleTo={0.97}>
+            <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.lockBtn}>
+              <Icon name="add" size={18} color="#FFF" />
+              <Text style={styles.lockBtnText}>Save a reel</Text>
+            </LinearGradient>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.screen}>
@@ -151,6 +186,27 @@ const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
   sub: { color: colors.textSecondary, fontSize: font.sm, lineHeight: 20 },
+
+  // Locked state — shown when the library is below the Ask unlock threshold.
+  lockWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },
+  lockIcon: {
+    width: 72, height: 72, borderRadius: radius.full,
+    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs,
+  },
+  lockTitle: { color: colors.textPrimary, fontSize: font.lg, fontWeight: '800', textAlign: 'center' },
+  lockSub: { color: colors.textSecondary, fontSize: font.sm, lineHeight: 20, textAlign: 'center' },
+  lockTrack: {
+    width: '80%', height: 6, borderRadius: radius.full, overflow: 'hidden',
+    backgroundColor: colors.border, marginTop: spacing.sm,
+  },
+  lockFill: { height: '100%', borderRadius: radius.full, backgroundColor: colors.accent },
+  lockBtnWrap: { marginTop: spacing.md, borderRadius: radius.md },
+  lockBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm + 4,
+  },
+  lockBtnText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
 
   inputRow: {
     flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
