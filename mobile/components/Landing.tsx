@@ -15,6 +15,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { consumeReopenPanel } from '../services/sessionFlags';
 import { FEATURES, Feature } from '../constants/features';
 import { RollingTagline } from './RollingTagline';
+import { HolographicShimmer } from './HolographicShimmer';
 import { ASK_MIN_REELS } from '../constants/limits';
 
 // How many saves the home screen shows before handing off to the full library.
@@ -25,6 +26,22 @@ const RECENT_CARD_W = 150;
  *  list it never showed; the carousel needs a fraction of that, and a smaller
  *  payload is the whole reason the home screen now appears faster. */
 const LANDING_FETCH = 12;
+
+/** Greeting sub-line for a returning user: a best-case "here's what SaveHere can
+ *  do for you" prompt instead of a dead stat. One is picked at random each open
+ *  so it feels fresh. Keep them true for the free tier and one line long. */
+const GREETING_HELPERS = [
+  'Ask your library a question and get an answer from your own saves.',
+  'That reel you saved? Its key steps are one tap away.',
+  'Turn a saved workout into a plan you can follow along to.',
+  'Your travel saves can come together into a trip plan.',
+  'Forgot where you saved that tip? Search finds it in seconds.',
+  'Every save is summarized, so you can skim it without rewatching.',
+  'Your endless scroll, turned into a library you can actually use.',
+  'The recipe you saved is ready as step-by-step instructions.',
+  'Pick a saved idea and turn it into a checklist you can finish.',
+  "Everything you've saved — summarized and searchable in one place.",
+];
 
 /** One card in the recent carousel. A horizontal strip beats a vertical list
  *  here: it shows the thumbnail at a size worth looking at, and it costs a fixed
@@ -95,9 +112,10 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const [catFilter, setCatFilter] = useState<string | null>(null);
   // Reopens after an accent switch remounts the tree (one-shot session flag).
   const [menuOpen, setMenuOpen] = useState(consumeReopenPanel());
-  // Whole-library category count for the greeting — the loaded page is only a
-  // sample, so counting it undercounts. null until the server answers.
-  const [libCategories, setLibCategories] = useState<number | null>(null);
+  // A best-case "here's what SaveHere can do for you" line, picked once per open.
+  const [greetingTip] = useState(() => GREETING_HELPERS[Math.floor(Math.random() * GREETING_HELPERS.length)]);
+  // Measured so the holographic shimmer can sweep the greeting line's exact box.
+  const [tipSize, setTipSize] = useState({ w: 0, h: 0 });
 
   useFocusEffect(
     useCallback(() => {
@@ -106,11 +124,8 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         .then(d => { setReels(d.items); setTotal(d.total); })
         .catch(() => setFetchError(true))
         .finally(() => setLoading(false));
-      api.getUsage().then(u => setLibCategories(u.categories ?? null)).catch(() => {});
     }, [])
   );
-
-  const categories = libCategories ?? new Set(reels.map(r => r.category).filter(Boolean)).size;
   const askVisible = !loading && total >= ASK_MIN_REELS;
   const hasSaves = !loading && !fetchError && total > 0;
 
@@ -137,13 +152,34 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         <MotiView from={{ opacity: 0, translateY: -8 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 400 }} style={styles.headerRow}>
           <View style={{ flex: 1 }}>
             <Text style={styles.hi}>Hi, {userName}.</Text>
-            <Text style={styles.welcome}>
-              {fetchError
-                ? "Can't reach the server right now."
-                : hasSaves
-                  ? <>You've kept <Text style={styles.welcomeStrong}>{total}</Text> {total === 1 ? 'reel' : 'reels'}{categories > 1 ? <> across <Text style={styles.welcomeStrong}>{categories}</Text> categories</> : null}.</>
-                  : 'Your second brain for short-form content.'}
-            </Text>
+            {fetchError ? (
+              <Text style={styles.welcome}>Can't reach the server right now.</Text>
+            ) : hasSaves ? (
+              // Best-case tip with a twinkling sparkle and a holographic shine
+              // sweeping across it — makes the line feel alive, not a dead stat.
+              <View
+                style={styles.tipWrap}
+                onLayout={(e) => {
+                  const { width, height } = e.nativeEvent.layout;
+                  setTipSize((s) => (s.w === width && s.h === height ? s : { w: width, h: height }));
+                }}
+              >
+                <MotiView
+                  from={{ opacity: 0.4, scale: 0.8, rotate: '-10deg' }}
+                  animate={{ opacity: 1, scale: 1.12, rotate: '10deg' }}
+                  transition={{ type: 'timing', duration: 1300, loop: true, repeatReverse: true }}
+                  style={styles.tipSparkle}
+                >
+                  <Icon name="sparkles" size={14} color={colors.accentLight} />
+                </MotiView>
+                <Text style={[styles.welcome, styles.tipText]}>{greetingTip}</Text>
+                {tipSize.w > 0 && (
+                  <HolographicShimmer width={tipSize.w} height={tipSize.h} color="rgba(255,255,255,0.10)" duration={1800} />
+                )}
+              </View>
+            ) : (
+              <Text style={styles.welcome}>Your second brain for short-form content.</Text>
+            )}
           </View>
           <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)} scaleTo={0.9}>
             <Icon name="menu" size={20} color={colors.textPrimary} />
@@ -342,7 +378,12 @@ const styles = themed(() => StyleSheet.create({
   },
   hi: { color: colors.textPrimary, fontFamily: typeface.serifBlack, fontSize: font.display, lineHeight: 42, letterSpacing: -0.5 },
   welcome: { color: colors.textSecondary, fontSize: font.lg, lineHeight: 24, marginTop: spacing.sm },
-  welcomeStrong: { color: colors.accentLight, fontFamily: typeface.displaySemi, fontWeight: '700' },
+  tipWrap: {
+    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs,
+    marginTop: spacing.sm, overflow: 'hidden', borderRadius: radius.sm,
+  },
+  tipSparkle: { marginTop: 3 },
+  tipText: { flex: 1, marginTop: 0 },
 
   sectionLabel: { color: colors.textTertiary, fontSize: font.xs, fontWeight: '800', letterSpacing: 1.2 },
 

@@ -30,9 +30,12 @@ const NODE = 30;
 const BOT = 44;
 
 const SAVE_NOTES = [
-  'Public Reels, Shorts, TikToks & LinkedIn posts work best.',
+  'Public Reels, YouTube Shorts, TikToks & LinkedIn posts work best.',
   'Your card saves instantly — the title, thumbnail and AI summary fill in on their own right after.',
-  'Private or login-only content (and most Facebook reels) can\'t be read — you can still keep the link and add your own notes.',
+  'Private or login-only content (and most Facebook reels) can\'t be read — paste the post text into Notes and tap Re-summarize instead.',
+  'Cooking and workout saves can become step-by-step recipes and guided plans.',
+  'Everything is auto-categorized and searchable, so you can find any save in seconds.',
+  'Summaries, recipes, workouts and questions share a daily AI limit that resets each day.',
   'Summaries are AI-made, so a small detail might slip — easy to edit anytime.',
   'We save the link and an AI summary for your personal reference — the content stays its creator\'s.',
 ];

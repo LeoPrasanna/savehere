@@ -1,6 +1,6 @@
-"""Feature gating (decided 2026-07-20): post-trial free keeps saves/library/
-summaries + workout & recipe (cooking-category tasks); Ask-my-Library,
-non-cooking tasks, and Trip Itinerary are Pro-only. Trial keeps FULL access.
+"""Feature gating (revised 2026-07-28): post-trial free keeps saves/library/
+search/summaries ONLY — every derived AI action (workout, recipe, tasks,
+itinerary, ask) is Pro-only. Trial keeps FULL access.
 
 Enforced server-side with 403s — the app's locked buttons are cosmetic; these
 tests are the lock. Core property: a refused call must never charge the quota.
@@ -134,19 +134,21 @@ class TestFreeTierLocks:
         assert charges(FREE) == 0
 
 
-class TestFreeTierKeeps:
-    def test_recipe_stays_free(self, env):
-        # Cooking-category tasks ARE the recipe feature — free keeps it.
+class TestFreeTierDerivedActionsLocked:
+    # Revised 2026-07-28: ALL derived AI actions are Pro-only for the free tier
+    # (free users will earn them via rewarded ads later). Gating on tier — not the
+    # user-editable category — also closes the recategorize-to-unlock hole.
+    def test_recipe_is_pro_only_and_never_charges(self, env):
         client, charges = env
         res = client(FREE).post(f"/api/reels/{FREE}-cook/tasks")
-        assert res.status_code == 200
-        assert charges(FREE) == 1   # allowed call charges normally
+        assert res.status_code == 403
+        assert charges(FREE) == 0   # refused before the quota charge
 
-    def test_workout_stays_free(self, env):
+    def test_workout_is_pro_only_and_never_charges(self, env):
         client, charges = env
         res = client(FREE).post(f"/api/reels/{FREE}-fit/workout")
-        assert res.status_code == 200
-        assert charges(FREE) == 1
+        assert res.status_code == 403
+        assert charges(FREE) == 0
 
 
 class TestTrialAndProKeepFullAccess:
@@ -168,14 +170,17 @@ class TestUsageExposesFeatureFlags:
     def test_free_flags_all_locked(self, env):
         client, _ = env
         feats = client(FREE).get("/api/account/usage").json()["features"]
-        assert feats == {"ask": False, "tasks": False, "itinerary": False}
+        assert feats == {"ask": False, "tasks": False, "recipe": False,
+                         "workout": False, "itinerary": False}
 
     def test_trial_flags_all_open(self, env):
         client, _ = env
         feats = client(TRIAL).get("/api/account/usage").json()["features"]
-        assert feats == {"ask": True, "tasks": True, "itinerary": True}
+        assert feats == {"ask": True, "tasks": True, "recipe": True,
+                         "workout": True, "itinerary": True}
 
     def test_pro_flags_all_open(self, env):
         client, _ = env
         feats = client(PRO, tier_claim="pro").get("/api/account/usage").json()["features"]
-        assert feats == {"ask": True, "tasks": True, "itinerary": True}
+        assert feats == {"ask": True, "tasks": True, "recipe": True,
+                         "workout": True, "itinerary": True}

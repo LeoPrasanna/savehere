@@ -129,6 +129,12 @@ def generate_workout(reel_id: str, user: AuthUser = Depends(get_current_user), d
     reel = _get_reel_or_404(reel_id, user, db)
     _reject_if_sensitive(reel)
 
+    # Pro-only after trial (revised 2026-07-28): all derived AI actions are gated
+    # for the free tier. Fires before the cap/charge so a refused call shows the
+    # upsell and costs no AI action.
+    if not entitlements_for(user, db).can_workout:
+        raise HTTPException(status_code=403, detail=PRO_FEATURE_DETAIL.format(feature="Build Workout"))
+
     if (reel.workout_count or 0) >= WORKOUT_LIMIT:
         raise HTTPException(
             status_code=429,
@@ -318,12 +324,19 @@ def generate_tasks(reel_id: str, user: AuthUser = Depends(get_current_user), db:
     reel = _get_reel_or_404(reel_id, user, db)
     _reject_if_sensitive(reel)
 
-    # Feature gate (decided 2026-07-20): cooking-category tasks ARE the recipe
-    # feature and stay free; "Turn into Action" on every other category is
-    # Pro-only after the trial. Fires before the cap check and the quota charge
-    # so a refused call costs nothing and shows the upsell, not a cap message.
+    # Feature gate (revised 2026-07-28): BOTH the recipe (cooking) and the generic
+    # "Turn into Action" (other categories) are Pro-only for the free tier now —
+    # gating on tier, not the user-editable category, also closes the old
+    # recategorize-to-cooking-to-unlock hole. Fires before the cap check and the
+    # quota charge so a refused call costs nothing and shows the upsell.
     is_cooking = (reel.category or "").lower() == "cooking"
-    if not is_cooking and not entitlements_for(user, db).can_tasks:
+    ent = entitlements_for(user, db)
+    if is_cooking and not ent.can_recipe:
+        raise HTTPException(
+            status_code=403,
+            detail=PRO_FEATURE_DETAIL.format(feature="Get Recipe"),
+        )
+    if not is_cooking and not ent.can_tasks:
         raise HTTPException(
             status_code=403,
             detail=PRO_FEATURE_DETAIL.format(feature="Turn into Action"),
