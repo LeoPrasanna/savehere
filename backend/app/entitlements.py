@@ -103,8 +103,8 @@ def _get_or_create_profile(db: Session, user: AuthUser, *, now: datetime) -> Pro
 # human-readable feature name. Kept here so routes and tests share one string.
 # Locked buttons in the app are cosmetic — THIS is the enforcement.
 PRO_FEATURE_DETAIL = (
-    "{feature} is a Pro feature. Your free plan keeps saving, your library, "
-    "summaries, recipes and workouts — upgrade to Pro to unlock {feature}."
+    "{feature} is a Pro feature. Your free plan keeps saving, your library and "
+    "summaries — upgrade to Pro to unlock {feature}."
 )
 
 
@@ -114,11 +114,16 @@ class Entitlements:
     ai_daily_limit: int
     save_limit: int | None          # None = unlimited; gates NEW saves only
     trial_ends_at: datetime | None  # UTC; None for pro
-    # Feature gating (decided 2026-07-20): post-trial free keeps saves/library/
-    # search/auto-summaries + workout & recipe (cooking-category tasks); the rest
-    # is Pro-only. Trial keeps FULL access — it's the demo that converts.
+    # Feature gating (revised 2026-07-28): post-trial free keeps saves/library/
+    # search/auto-summaries only — ALL derived AI actions (workout, recipe, tasks,
+    # itinerary, ask) are Pro-only for now (free users will earn them via rewarded
+    # ads later). Trial keeps FULL access — it's the demo that converts. Gating on
+    # tier (not the user-editable category) also closes the recategorize-to-unlock
+    # hole entirely.
     can_ask: bool = True            # Ask-my-Library
-    can_tasks: bool = True          # "Turn into Action" tasks on NON-cooking reels
+    can_tasks: bool = True          # "Turn into Action" tasks (non-cooking reels)
+    can_recipe: bool = True         # "Get Recipe" (cooking-category tasks)
+    can_workout: bool = True        # "Build Workout" (fitness reels)
     can_itinerary: bool = True      # Trip Itinerary on travel reels
 
 
@@ -155,5 +160,7 @@ def entitlements_for(user: AuthUser, db: Session, *, now: datetime | None = None
         trial_ends_at=trial_ends,
         can_ask=False,
         can_tasks=False,
+        can_recipe=False,
+        can_workout=False,
         can_itinerary=False,
     )

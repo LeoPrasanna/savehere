@@ -92,7 +92,7 @@ export interface Usage {
   resets_at: string;
   // Feature flags for locked-button UI (server enforces with 403s regardless):
   // post-trial free loses ask / non-cooking tasks / itinerary; trial+pro keep all.
-  features?: { ask: boolean; tasks: boolean; itinerary: boolean };
+  features?: { ask: boolean; tasks: boolean; recipe: boolean; workout: boolean; itinerary: boolean };
 }
 
 // The drill-down behind the meter: what today's AI actions were spent on.
