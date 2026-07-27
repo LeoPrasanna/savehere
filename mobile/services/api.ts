@@ -84,6 +84,8 @@ export interface Usage {
   tier: 'trial' | 'free' | 'pro';
   trial_ends_at: string | null;                    // ISO UTC; null for pro
   saves: { used: number; limit: number | null };   // limit null = unlimited
+  categories?: number; // distinct categories across the whole library
+  platforms?: number;  // distinct platforms across the whole library
   used: number;        // AI actions spent today
   limit: number;       // AI actions allowed today (tier-dependent)
   remaining: number;

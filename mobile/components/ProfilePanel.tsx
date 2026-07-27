@@ -73,8 +73,10 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const go = (path: string) => { onClose(); router.push(path as any); };
 
   const total = totalProp ?? reels.length;
-  const categories = new Set(reels.map(r => r.category).filter(Boolean)).size;
-  const platforms = new Set(reels.map(r => r.platform).filter(Boolean)).size;
+  // Prefer the server's whole-library counts; fall back to the loaded sample only
+  // until usage loads (the sample undercounts — it's just the visible page).
+  const categories = usage?.categories ?? new Set(reels.map(r => r.category).filter(Boolean)).size;
+  const platforms = usage?.platforms ?? new Set(reels.map(r => r.platform).filter(Boolean)).size;
 
   const handleDeleteAccount = async () => {
     if (deleting) return;
