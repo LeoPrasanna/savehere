@@ -39,6 +39,15 @@ services:
       # deploy; tighten to the real staging domain once the web app is hosted.
       - key: ALLOWED_ORIGINS
         value: "*"
+      # ── AI quota knobs — per-tier daily AI actions. Editable here or in the
+      #    Render dashboard to retune the budget WITHOUT a code deploy (config.py
+      #    reads these; unset falls back to its defaults). ─────────────────────────
+      - key: AI_DAILY_LIMIT          # trial tier
+        value: "10"
+      - key: AI_FREE_DAILY_LIMIT     # post-trial free tier
+        value: "3"
+      - key: AI_PRO_DAILY_LIMIT      # pro tier
+        value: "20"
       # ── Secrets — set in THIS service's dashboard (savehere-dev project) ──────
       - key: ANTHROPIC_API_KEY
         sync: false
@@ -82,6 +91,12 @@ services:
   #       value: production
   #     - key: ALLOWED_ORIGINS
   #       value: "*"
+  #     - key: AI_DAILY_LIMIT          # trial tier
+  #       value: "10"
+  #     - key: AI_FREE_DAILY_LIMIT     # post-trial free tier
+  #       value: "3"
+  #     - key: AI_PRO_DAILY_LIMIT      # pro tier
+  #       value: "20"
   #     - key: ANTHROPIC_API_KEY
   #       sync: false
   #     - key: DATABASE_URL          # SaveHere prod SESSION POOLER (:5432)
