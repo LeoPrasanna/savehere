@@ -49,25 +49,38 @@ npm install
 sudo apt-get update && sudo apt-get install -y ffmpeg
 ```
 
-### A3. Credentials (do NOT commit `.env`)
-`backend/app/config.py` reads from a `.env` file **or** real environment variables (`os.getenv`), so either works. Prefer **Codespaces Secrets** — they're encrypted and never in git:
+### A3. Credentials (do NOT commit `.env`) — TWO files, both gitignored
 
-1. GitHub → **Settings ▸ Codespaces ▸ Secrets ▸ New secret**.
-2. Add `ANTHROPIC_API_KEY` (required). Optionally `OPENAI_API_KEY` (Whisper), `APIFY_API_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`.
-3. Scope the secret to the `savehere` repo. Rebuild/reopen the Codespace so it's injected as an env var.
+There is a **backend `.env`** (repo ROOT — `config.py` walks up from `backend/`, there is
+no `backend/.env`) and a **separate `mobile/.env`**. A fresh Codespace clone has **neither**
+— you must recreate both, every time, or auth breaks (`supabaseUrl is required` is exactly
+this: `mobile/.env` missing). See [`docs/ENVIRONMENTS.md`](ENVIRONMENTS.md) for the full
+per-variable matrix; this is the Codespace-specific quick version.
 
-Alternatively, copy the template locally inside the Codespace (it stays gitignored):
-```bash
-cd backend && cp ../.env.example .env   # then edit .env and paste your key
-```
+**Root `.env` (backend).** Easiest: copy the content of your **local machine's** root
+`.env` into a new file at the Codespace repo root — it's the same values, you already have
+them, no need to re-source secrets. Or use **Codespaces Secrets** (GitHub → Settings ▸
+Codespaces ▸ Secrets) for `ANTHROPIC_API_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`,
+etc. — rebuild/reopen the Codespace so they're injected.
 
 | Env var | Required? | Purpose |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | **Yes** | Claude Haiku — summaries, tasks, workout, ask |
-| `OPENAI_API_KEY` | No | Whisper transcription fallback (needs ffmpeg) |
-| `APIFY_API_KEY` | No | (future) LinkedIn scraping |
-| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | No (future) | auth, once built |
+| `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SERVICE_ROLE_KEY` | **Yes** | Auth (JWKS verify, admin ops) — point at `savehere-dev` |
+| `DATABASE_URL` | **Yes** | `savehere-dev` session-pooler Postgres (SQLite retired for local dev 2026-07-21 — see ENVIRONMENTS.md). Omitting it silently falls back to a Codespace-local SQLite file that won't have your data and won't survive the Codespace being deleted. |
+| `OPENAI_API_KEY` / `APIFY_API_KEY` | No | Optional integrations |
 | `ENV` | No | `development` (default) |
+
+**`mobile/.env` (frontend) — the file causing your current error.** Create it at
+`mobile/.env` with the **public** dev values (safe to paste anywhere — the publishable key
+is designed to be shipped in the client bundle; RLS is what actually protects the data):
+```
+EXPO_PUBLIC_API_URL=<the backend's forwarded Codespace URL — see A5, NOT localhost>
+EXPO_PUBLIC_SUPABASE_URL=<savehere-dev project URL, from your local mobile/.env>
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<savehere-dev publishable key, from your local mobile/.env>
+```
+⚠️ **Env vars are read once at Metro bundle time — restart `expo start`, a browser refresh
+alone won't pick up a new/changed `.env`.**
 
 ### A4. Run the app
 **Backend** (terminal 1):
@@ -85,16 +98,19 @@ npx expo start --web
 Your Expo web app runs in **your local browser**, but the backend runs in the **Codespace container**. So `http://localhost:8000` from the browser hits *your laptop*, not the Codespace — API calls will fail.
 
 Fix:
-1. In the Codespace **Ports** panel, find port **8000**, copy its forwarded URL (looks like `https://<name>-8000.app.github.dev`), and set its visibility to **Public** (or keep Private and stay signed in).
-2. Set the mobile app to use it before starting Expo:
-   ```bash
-   cd mobile
-   EXPO_PUBLIC_API_URL="https://<name>-8000.app.github.dev" npx expo start --web
-   ```
-   (`services/api.ts` reads `EXPO_PUBLIC_API_URL`, falling back to localhost.)
-3. Also forward Expo's web port (**8081**) to open the app.
+1. In the Codespace **Ports** panel, find port **8000** (start the backend first if it's not
+   listed yet), copy its forwarded URL (`https://<name>-8000.app.github.dev`), and set its
+   visibility to **Public**. Use Public, not Private — `services/api.ts` calls it with
+   `fetch`/a Bearer token, not a signed-in browser tab, and Private ports gate on a GitHub
+   session cookie that a plain `fetch` won't carry, so the request never reaches FastAPI.
+2. Put that URL in `mobile/.env` as `EXPO_PUBLIC_API_URL` (see A3) — same subdomain as the
+   frontend's forwarded URL, just the `-8000` port instead of `-8081`.
+3. Restart `expo start` (not just a browser refresh — env vars are baked in at bundle time).
 
-> ⚠️ Making port 8000 **public** exposes your (currently auth-less, AI-key-backed) backend to the internet for that session. The rate limits help, but **set it back to Private when done**, and don't leave a public Codespace running.
+> ⚠️ Making port 8000 **public** exposes your (auth-less at the network level — app-level
+> auth via Supabase JWT is required, but anyone can reach the endpoint) backend to the
+> internet for that session. **Set it back to Private when done**, and don't leave a public
+> Codespace running.
 
 ### A6. Tests
 ```bash
@@ -142,8 +158,8 @@ Your global `~/.claude/CLAUDE.md` (advisor persona) and the local memory files *
 **Avoid**
 - ❌ **Committing `.env` / keys.** Never. The `.gitignore` covers `.env`, `*.db`, `node_modules` — keep it that way.
 - ❌ **Pasting API keys into the Claude chat.** Put them in Secrets/`.env` only.
-- ❌ **Leaving backend port 8000 public.** No auth yet — set it back to Private after testing.
-- ❌ **Treating the SQLite `savehere.db` as real data.** It's local/dev and gitignored; it won't follow you between Codespaces. Don't build anything assuming it persists.
+- ❌ **Leaving backend port 8000 public.** App-level auth (Supabase JWT) is required per-route, but the network port itself has no gate — set it back to Private after testing.
+- ❌ **Assuming your data won't follow you.** Decision 2026-07-20/21: local dev, Codespaces, and staging all point at the **same** `savehere-dev` Postgres (SQLite is retired for local dev specifically so this works) — your saves DO persist and DO show up in every environment pointed at `savehere-dev`. Don't accidentally point a Codespace at `SaveHere` (prod) trying to "get your real data" — auth users are per-project, so a prod `DATABASE_URL` there would be reachable but pointless (your dev-project login can't own prod rows) and risks writing test traffic into production.
 - ❌ **Letting a fresh Claude session run blind.** Always point it at `docs/CONTEXT.md` + `TODO.md` first, or it'll re-derive (or wrongly guess) decisions already made.
 - ❌ **Editing Expo code from memory.** SDK 56 changed APIs — check `https://docs.expo.dev/versions/v56.0.0/` (see `mobile/AGENTS.md`).
 
@@ -151,11 +167,10 @@ Your global `~/.claude/CLAUDE.md` (advisor persona) and the local memory files *
 
 ## Part D — Next steps to follow
 
-The current backlog, in priority order (full detail in [`TODO.md`](../TODO.md)):
-1. **Anthropic console monthly budget cap** — owner action; the only hard cost ceiling today.
-2. **Auth + per-user data** (Supabase) — users table, `user_id` everywhere, per-user filtering + ownership checks, per-user AI quota (replaces the interim per-IP daily cap). Biggest pure-code unlock; gates tiers/referrals/quota.
-3. **Deploy backend** (Railway/Render) → set `EXPO_PUBLIC_API_URL` to it, lock CORS, migrate SQLite→Postgres.
-4. **iOS share extension** (Mac/EAS) — the core "share to SaveHere" capture flow.
-5. **Pricing/IAP** in App Store Connect — regional prices, India ₹59×3 intro offer, `SAVEHEREFIRST` code.
+Don't duplicate the backlog here — it drifts out of sync (this section used to list
+"Auth + per-user data" and "migrate SQLite→Postgres" as upcoming; both shipped long ago).
+**[`TODO.md`](../TODO.md)**'s **"▶ CURRENT FOCUS"** banner at the top is the single source
+of truth for what's active right now, and the full checklist below it is the release gate.
 
-A good first task in a new environment: tell Claude to read the context files and pick up at the highest-priority unchecked item.
+A good first task in a new environment: tell Claude to read `docs/CONTEXT.md` +
+`TODO.md`, then pick up at the CURRENT FOCUS item.
