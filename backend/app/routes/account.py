@@ -55,12 +55,28 @@ def get_usage(user: AuthUser = Depends(get_current_user), db: Session = Depends(
     ent = entitlements_for(user, db)
     used = usage_today(db, user.id)
     saves_used = db.query(ReelDB).filter(ReelDB.user_id == user.id).count()
+    # Distinct counts across the user's WHOLE library — the client's stat cards used
+    # to compute these from the loaded page (a ~12-reel sample), so they undercounted.
+    categories = (
+        db.query(ReelDB.category)
+        .filter(ReelDB.user_id == user.id, ReelDB.category.isnot(None), ReelDB.category != "")
+        .distinct().count()
+    )
+    platforms = (
+        db.query(ReelDB.platform)
+        .filter(ReelDB.user_id == user.id, ReelDB.platform.isnot(None), ReelDB.platform != "")
+        .distinct().count()
+    )
     tomorrow = datetime.utcnow().date() + timedelta(days=1)
     return {
         # Effective tier: 'pro' | 'trial' | 'free' (trial expired).
         "tier": ent.tier,
         "trial_ends_at": ent.trial_ends_at.isoformat() + "Z" if ent.trial_ends_at else None,
         "saves": {"used": saves_used, "limit": ent.save_limit},   # limit null = unlimited
+        # Whole-library distinct counts for the profile stat cards (authoritative,
+        # unfiltered — not derived from whatever page the client happens to hold).
+        "categories": categories,
+        "platforms": platforms,
         # Feature flags for the app's locked-button UI (server enforces with 403s
         # regardless — these only decide what to RENDER). tasks refers to
         # non-cooking "Turn into Action"; recipes and workouts are never gated.
