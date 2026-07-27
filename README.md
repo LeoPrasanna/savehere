@@ -132,7 +132,7 @@ Copy `.env.example` → `.env`. Only `ANTHROPIC_API_KEY` is required to run loca
 | `SENTRY_DSN` | No | Error monitoring; empty = disabled |
 | `REVENUECAT_WEBHOOK_TOKEN` | Launch | Shared secret for the billing webhook (fail-closed when unset) |
 | `TRUSTED_PROXY_HOPS` | No | Trusted reverse proxies in front (default `1`; `0` = never trust `X-Forwarded-For`) |
-| `AI_DAILY_LIMIT` / `AI_FREE_DAILY_LIMIT` / `AI_PRO_DAILY_LIMIT` | No | Daily AI actions per tier (30 / 3 / 100) |
+| `AI_DAILY_LIMIT` / `AI_FREE_DAILY_LIMIT` / `AI_PRO_DAILY_LIMIT` | No | Daily AI actions per tier (trial 10 / free 3 / pro 20) |
 | `TRIAL_DAYS` / `FREE_SAVE_LIMIT` | No | Trial length (10) and post-trial save cap (20) |
 | `ENV` | No | `development` (default) or `production` |
 

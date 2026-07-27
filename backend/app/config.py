@@ -46,14 +46,16 @@ class Settings:
     # all count). The real spend ceiling per user — env-overridable so the budget
     # can be tightened without a deploy. This is the IN-TRIAL limit (the name is
     # kept from when free==trial, so existing env files/dashboards keep working).
-    AI_DAILY_LIMIT: int = int(os.getenv("AI_DAILY_LIMIT", "30"))
+    # Owner-set 2026-07-27: trial 10 / free 3 / pro 20.
+    AI_DAILY_LIMIT: int = int(os.getenv("AI_DAILY_LIMIT", "10"))
     # Post-trial free tier: a small daily trickle keeps the product alive enough
     # to convert instead of going view-only (owner decision 2026-07-10).
     AI_FREE_DAILY_LIMIT: int = int(os.getenv("AI_FREE_DAILY_LIMIT", "3"))
     # Paid tier's daily AI-action limit. Applies to users whose JWT carries
     # app_metadata.tier == "pro" (set server-side: scripts/set_tier.py now, the
-    # RevenueCat/IAP webhook at launch). Placeholder until pricing is finalized.
-    AI_PRO_DAILY_LIMIT: int = int(os.getenv("AI_PRO_DAILY_LIMIT", "100"))
+    # RevenueCat/IAP webhook at launch). Owner-set 2026-07-27 to 20/day (was 100,
+    # too generous for the ₹149/$5.99 price point — revisit if pricing moves).
+    AI_PRO_DAILY_LIMIT: int = int(os.getenv("AI_PRO_DAILY_LIMIT", "20"))
     # Trial length in days, counted from the user's first authenticated request.
     TRIAL_DAYS: int = int(os.getenv("TRIAL_DAYS", "10"))
     # Post-trial free tier: total saves allowed (existing saves are grandfathered
