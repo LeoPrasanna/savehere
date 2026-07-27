@@ -106,9 +106,16 @@ export default function HomeScreen() {
     // keystroke instead of after debounce + round-trip. The server answer
     // replaces this a moment later — it searches the WHOLE library (and tolerates
     // typos), where this only sees the loaded page.
+    // A selected category scopes search to that category; 'all' searches the
+    // whole library. Server search is global, so we scope its result here.
+    const scope = (items: Reel[]) =>
+      activeCategory === 'all'
+        ? items
+        : items.filter(r => (r.category || '').toLowerCase() === activeCategory);
+
     const local = q.toLowerCase();
     setSearchResults(
-      reels.filter(r =>
+      scope(reels).filter(r =>
         (r.title || '').toLowerCase().includes(local) ||
         (r.category || '').toLowerCase().includes(local) ||
         (r.tags || []).some(t => t.toLowerCase().includes(local))
@@ -123,7 +130,7 @@ export default function HomeScreen() {
         const data = await api.searchReels(q);
         // Ignore a stale response that lost the race to a newer query.
         setSearch(cur => {
-          if (cur.trim() === q) setSearchResults(data.items);
+          if (cur.trim() === q) setSearchResults(scope(data.items));
           return cur;
         });
       } catch {
@@ -134,7 +141,7 @@ export default function HomeScreen() {
       }
     }, 250);
     return () => clearTimeout(timer);
-  }, [search, reels]);
+  }, [search, reels, activeCategory]);
 
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
 
@@ -156,6 +163,14 @@ export default function HomeScreen() {
     setActiveCategory(cat);
     setLoading(true);
     load(cat);
+  };
+
+  /** Widen an unproductive in-category search to the whole library WITHOUT
+   *  dropping the query (onCategoryChange clears it; this keeps it and re-scopes). */
+  const searchEverywhere = () => {
+    setActiveCategory('all');
+    setLoading(true);
+    load('all');
   };
 
   /** Back to the landing view. Must clear the session flag as well as local
@@ -299,8 +314,17 @@ export default function HomeScreen() {
             {inSearchMode ? 'No matches' : 'Nothing saved yet'}
           </Text>
           <Text style={styles.emptyText}>
-            {inSearchMode ? `No results for "${search.trim()}".` : 'Save your first reel and the AI summary appears in seconds.'}
+            {inSearchMode
+              ? (activeCategory !== 'all'
+                  ? `No matches for "${search.trim()}" in ${activeCategory}. This reel may be filed under a different category.`
+                  : `No results for "${search.trim()}".`)
+              : 'Save your first reel and the AI summary appears in seconds.'}
           </Text>
+          {inSearchMode && activeCategory !== 'all' && (
+            <Pressable style={styles.retryBtn} onPress={searchEverywhere}>
+              <Text style={styles.retryText}>Search all categories</Text>
+            </Pressable>
+          )}
           {!inSearchMode && (
             <Pressable style={styles.emptyCtaWrap} onPress={() => router.push('/save')} scaleTo={0.96}>
               <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.emptyCta}>

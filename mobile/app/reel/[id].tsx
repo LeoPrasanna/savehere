@@ -4,6 +4,7 @@ import {
   ActivityIndicator, Alert, Platform, TextInput, Modal,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from '../../components/Icon';
@@ -57,6 +58,8 @@ export default function ReelDetailScreen() {
     setter(false);
   };
   const [savingCategory, setSavingCategory] = useState(false);
+  // Transient "Copied ✓" feedback on the hero copy-link chip.
+  const [copied, setCopied] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load the reel; any failure (offline, server down) is caught and shown as a
@@ -231,6 +234,18 @@ export default function ReelDetailScreen() {
     }
   };
 
+  const handleCopyLink = async () => {
+    if (!reel?.url) return;
+    try {
+      await Clipboard.setStringAsync(reel.url);
+      haptics.success();
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      notify("Couldn't copy the link.");
+    }
+  };
+
   const handleDelete = async () => {
     const doDelete = async () => { await api.deleteReel(id); goHome(); };
     haptics.warning();
@@ -332,9 +347,23 @@ export default function ReelDetailScreen() {
           <Ionicons name={platform.icon as any} size={13} color="#FFF" />
           <Text style={styles.platformChipText}>{platform.label}</Text>
         </View>
-        <View style={styles.watchChip}>
-          <Icon name="play" size={12} color="#FFF" />
-          <Text style={styles.watchChipText}>Watch</Text>
+        <View style={styles.heroActions}>
+          <View style={styles.watchChip}>
+            <Icon name="play" size={12} color="#FFF" />
+            <Text style={styles.watchChipText}>Watch</Text>
+          </View>
+          {/* Real button (Watch is just decoration for the whole-hero tap), so it
+              must swallow the press or the hero opens the link instead of copying. */}
+          <Pressable
+            style={styles.watchChip}
+            onPress={(e) => { e?.stopPropagation?.(); handleCopyLink(); }}
+            scaleTo={0.94}
+            hitSlop={6}
+            accessibilityLabel="Copy link"
+          >
+            <Icon name={copied ? 'checkmark' : 'copy'} size={12} color="#FFF" />
+            <Text style={styles.watchChipText}>{copied ? 'Copied' : 'Copy'}</Text>
+          </Pressable>
         </View>
       </Pressable>
 
@@ -672,12 +701,7 @@ export default function ReelDetailScreen() {
         </View>
       )}
 
-      {/* ── Source + delete ──────────────────────────── */}
-      <Pressable style={styles.urlRow} onPress={() => openSourceLink(reel.url)}>
-        <Icon name="open-outline" size={15} color={colors.accent} />
-        <Text style={styles.url} numberOfLines={1}>{reel.url}</Text>
-      </Pressable>
-
+      {/* ── Delete ───────────────────────────────────── */}
       <Pressable style={styles.deleteButton} onPress={handleDelete}>
         <Icon name="trash-outline" size={16} color={colors.danger} />
         <Text style={styles.deleteText}>Delete</Text>
@@ -764,13 +788,16 @@ const styles = themed(() => StyleSheet.create({
   },
   platformChipText: { color: '#FFF', fontSize: font.xs, fontWeight: '800' },
   watchChip: {
-    position: 'absolute', right: spacing.md, bottom: spacing.md,
     flexDirection: 'row', alignItems: 'center', gap: 5,
     paddingHorizontal: spacing.sm + 2, paddingVertical: 5,
     borderRadius: radius.full, backgroundColor: 'rgba(0,0,0,0.55)',
     borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
   },
   watchChipText: { color: '#FFF', fontSize: font.xs, fontWeight: '800' },
+  heroActions: {
+    position: 'absolute', right: spacing.md, bottom: spacing.md,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+  },
 
   titleBlock: { gap: spacing.xs },
   catRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
@@ -915,13 +942,6 @@ const styles = themed(() => StyleSheet.create({
   },
   itinEmoji: { fontSize: font.sm, lineHeight: 20 },
   itinItemText: { flex: 1, color: colors.textPrimary, fontSize: font.sm, lineHeight: 20 },
-
-  urlRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.card, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.md,
-  },
-  url: { flex: 1, color: colors.textSecondary, fontSize: font.xs },
 
   deleteButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
