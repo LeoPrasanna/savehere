@@ -14,6 +14,7 @@ import { colors, spacing, font, radius, gradients, shadow, typeface, themed } fr
 import { useAuth } from '../contexts/AuthContext';
 import { consumeReopenPanel } from '../services/sessionFlags';
 import { FEATURES, Feature } from '../constants/features';
+import { RollingTagline } from './RollingTagline';
 import { ASK_MIN_REELS } from '../constants/limits';
 
 // How many saves the home screen shows before handing off to the full library.
@@ -247,6 +248,9 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           </MotiView>
         )}
 
+        {/* Rolling tips — the same benefit lines that roll on the auth screen. */}
+        {!loading && <RollingTagline style={styles.tips} />}
+
         {/* ── Ask — one entry point, not two ──────────────── */}
         {askVisible && (
           <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 250 }}>
@@ -369,6 +373,7 @@ const styles = themed(() => StyleSheet.create({
 
   // ── Library-first home ──────────────────────────────────────────────
   recentBlock: { gap: spacing.sm },
+  tips: { marginTop: spacing.xs },
 
   chipRow: { gap: spacing.xs, paddingVertical: 2 },
   chip: {
