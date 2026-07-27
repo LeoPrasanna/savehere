@@ -359,7 +359,6 @@ export default function ReelDetailScreen() {
             onPress={(e) => { e?.stopPropagation?.(); handleCopyLink(); }}
             scaleTo={0.94}
             hitSlop={6}
-            accessibilityLabel="Copy link"
           >
             <Icon name={copied ? 'checkmark' : 'copy'} size={12} color="#FFF" />
             <Text style={styles.watchChipText}>{copied ? 'Copied' : 'Copy'}</Text>
