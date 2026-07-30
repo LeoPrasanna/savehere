@@ -121,6 +121,41 @@ class TaskDB(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class TodoDB(Base):
+    """The user's cross-reel action list — "things I actually mean to do".
+
+    Deliberately NOT `TaskDB`. Those rows are recipe/how-to steps scoped to one
+    reel: they're deleted wholesale when tasks are regenerated (see
+    `routes/workout.py`), read back per-reel without filtering on `kind`, and
+    owned only via a join to the parent reel. A todo has to outlive all of that
+    — it can exist with no reel at all, and must never be collateral damage of
+    a recipe regeneration.
+
+    `title`/`description` are COPIED from the reel when added rather than
+    joined, so `ondelete="SET NULL"` leaves a still-readable todo instead of a
+    dangling row. Deleting a save should not silently delete the user's plan.
+
+    `due_date` is a plain calendar date supplied by the client in ITS OWN
+    timezone and never converted server-side. "Today" is a device-local
+    concept: storing an instant would make a 9 p.m. IST task read as tomorrow
+    to a UTC server. Bucketing (overdue / today / upcoming) is done client-side
+    against the device clock for the same reason.
+    """
+    __tablename__ = "todos"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    # Owned directly (not via a reel join) — a standalone todo has no reel.
+    user_id = Column(String, nullable=False, index=True)
+    reel_id = Column(String, ForeignKey("reels.id", ondelete="SET NULL"), nullable=True, index=True)
+    title = Column(Text, nullable=False)
+    description = Column(Text, nullable=True)
+    priority = Column(String, nullable=False, default="medium")   # high | medium | low
+    due_date = Column(Date, nullable=True)                        # null = "Someday"
+    completed = Column(Boolean, nullable=False, default=False)
+    completed_at = Column(DateTime, nullable=True)                # feeds the activity grid
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class ProfileDB(Base):
     """Server-side per-user state the JWT can't carry (and the client can't
     forge): the trial clock. Created lazily on the user's first authenticated

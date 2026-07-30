@@ -14,6 +14,7 @@ import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
 import { goHome } from '../../components/HomeButton';
 import { TaskList } from '../../components/TaskList';
+import { TodoEditor } from '../../components/TodoEditor';
 import { Disclaimer } from '../../components/Disclaimer';
 import { colors, spacing, font, radius, gradients, shadow, typeface, platformMeta, categoryFor, categoryMeta, CATEGORY_OPTIONS, themed } from '../../constants/theme';
 
@@ -30,6 +31,9 @@ export default function ReelDetailScreen() {
   const [summarizing, setSummarizing] = useState(false);
   const [taskList, setTaskList] = useState<TaskListResponse | null>(null);
   const [generatingTasks, setGeneratingTasks] = useState(false);
+  // "Add to to-do" — no AI, no quota; just copies this save onto the user's list.
+  const [todoOpen, setTodoOpen] = useState(false);
+  const [todoAdded, setTodoAdded] = useState(false);
   const [taskError, setTaskError] = useState('');
   const [hasWorkout, setHasWorkout] = useState(false);
   const [generatingWorkout, setGeneratingWorkout] = useState(false);
@@ -510,6 +514,39 @@ export default function ReelDetailScreen() {
         />
       </View>
 
+      {/* ── Add to to-do ─────────────────────────────────
+          Above the AI sections on purpose: it's free, instant, and works on
+          every save — including the ones nothing can be generated from. */}
+      <View style={styles.card}>
+        {todoAdded ? (
+          <Pressable style={styles.todoDoneRow} onPress={() => router.push('/todos')} scaleTo={0.98}>
+            <Icon name="checkmark" size={16} color={colors.success} />
+            <Text style={styles.todoDoneText}>Added to your to-do list</Text>
+            <Text style={styles.todoDoneLink}>View list</Text>
+          </Pressable>
+        ) : (
+          <Pressable style={styles.todoAddRow} onPress={() => setTodoOpen(true)} scaleTo={0.98}>
+            <View style={styles.todoAddIcon}>
+              <Icon name="add" size={16} color={colors.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>Add to to-do list</Text>
+              <Text style={styles.todoAddSub}>Give this save a day, and it'll come find you.</Text>
+            </View>
+            <Icon name="chevron-right" size={15} color={colors.textTertiary} />
+          </Pressable>
+        )}
+      </View>
+
+      <TodoEditor
+        visible={todoOpen}
+        reelId={id}
+        defaultTitle={reel.title || 'Saved reel'}
+        defaultDescription={reel.summary?.join('\n') || ''}
+        onClose={() => setTodoOpen(false)}
+        onSaved={() => setTodoAdded(true)}
+      />
+
       {/* ── Trip Itinerary (travel reels) ─────────────── */}
       {showItinerarySection && (
         <View style={styles.actionsSection}>
@@ -870,6 +907,18 @@ const styles = themed(() => StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   cardTitle: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '800', letterSpacing: 0.3, textTransform: 'uppercase' },
+
+  // ── Add to to-do ────────────────────────────────────────────────────
+  todoAddRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  todoAddIcon: {
+    width: 34, height: 34, borderRadius: radius.sm,
+    backgroundColor: colors.accent + '1A',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  todoAddSub: { color: colors.textSecondary, fontSize: font.xs, marginTop: 2 },
+  todoDoneRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  todoDoneText: { flex: 1, color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' },
+  todoDoneLink: { color: colors.accentLight, fontSize: font.sm, fontWeight: '700' },
 
   pill: {
     flexDirection: 'row', alignItems: 'center', gap: 5,

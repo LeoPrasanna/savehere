@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
-from app.database import get_db, SessionLocal, ReelDB, ExtractionCacheDB, TaskDB, WorkoutExerciseDB
+from app.database import get_db, SessionLocal, ReelDB, ExtractionCacheDB, TaskDB, WorkoutExerciseDB, TodoDB
 from app.routes.models.reel import (
     ReelSaveRequest, ReelNotesRequest, ReelCategoryRequest, ReelResponse, ReelListResponse,
     ClientMetadataRequest,
@@ -544,6 +544,13 @@ def delete_reel(reel_id: str, user: AuthUser = Depends(get_current_user), db: Se
     # PRAGMA foreign_keys on, and rows saved before that fix may be orphaned.
     db.query(TaskDB).filter(TaskDB.reel_id == reel.id).delete(synchronize_session=False)
     db.query(WorkoutExerciseDB).filter(WorkoutExerciseDB.reel_id == reel.id).delete(synchronize_session=False)
+    # Todos are NOT children — they're the user's own plan and outlive the save.
+    # Unlink instead of delete (title/description were copied at add time, so the
+    # todo still reads correctly). Explicit for the same reason as above: SQLite
+    # only applies ON DELETE SET NULL with PRAGMA foreign_keys on.
+    (db.query(TodoDB)
+       .filter(TodoDB.reel_id == reel.id)
+       .update({TodoDB.reel_id: None}, synchronize_session=False))
     db.delete(reel)
     db.commit()
     return {"message": "Deleted"}

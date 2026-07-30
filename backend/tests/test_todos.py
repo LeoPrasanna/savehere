@@ -1,0 +1,253 @@
+"""DB-backed tests for the cross-reel to-do list.
+
+Isolated in-memory SQLite (never touches the real DB) + an overridden
+get_current_user so no JWT/Supabase call happens. Two users are seeded to prove
+one can't read or mutate the other's list.
+
+The load-bearing behaviours locked here:
+  - a todo OUTLIVES its reel (unlink, not cascade) — deleting a save must never
+    silently delete the user's plan;
+  - completed_at is set/cleared with `completed` (it's what the activity grid reads);
+  - priority is validated server-side (it drives ordering);
+  - todos are swept on account deletion (they're owned by user_id, so the reel
+    sweep alone would orphan them).
+"""
+import pytest
+from datetime import datetime, timedelta
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.main import app
+from app.database import Base, ReelDB, TodoDB, get_db
+from app.auth import get_current_user, AuthUser
+from app import ratelimit
+
+USER_A = "user-aaaa"
+USER_B = "user-bbbb"
+
+
+@pytest.fixture
+def ctx():
+    """make_client(user_id) -> TestClient, plus a session factory for direct
+    DB assertions. One in-memory DB shared by both users."""
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TestingSession = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    Base.metadata.create_all(bind=engine)
+
+    db = TestingSession()
+    db.add_all([
+        ReelDB(id="a1", user_id=USER_A, url="u-a1", platform="youtube",
+               title="Perfect pasta recipe", summary=["Boil water", "Add salt"],
+               tags=["cooking"], category="food", summary_status="ready",
+               created_at=datetime.utcnow()),
+        ReelDB(id="b1", user_id=USER_B, url="u-b1", platform="youtube",
+               title="User B's reel", summary=["secret"], tags=[],
+               category="food", summary_status="ready", created_at=datetime.utcnow()),
+    ])
+    db.commit()
+    db.close()
+
+    def _override_get_db():
+        s = TestingSession()
+        try:
+            yield s
+        finally:
+            s.close()
+
+    app.dependency_overrides[get_db] = _override_get_db
+    # The per-IP limiter is a process global and TestClient always looks like one
+    # IP — clear it so unrelated suite traffic can't 429 these tests.
+    ratelimit._store.clear()
+
+    def _make_client(user_id: str) -> TestClient:
+        app.dependency_overrides[get_current_user] = lambda: AuthUser(id=user_id, email="t@e.co")
+        return TestClient(app)
+
+    yield _make_client, TestingSession
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def client(ctx):
+    make_client, _ = ctx
+    return make_client(USER_A)
+
+
+# ── Creating ────────────────────────────────────────────────────────────────
+
+def test_create_standalone_needs_only_a_title(client):
+    r = client.post("/api/todos", json={"title": "Call the plumber"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["title"] == "Call the plumber"
+    assert body["due_date"] is None          # date is optional by design
+    assert body["priority"] == "medium"      # sane default
+    assert body["completed"] is False
+    assert body["reel_id"] is None
+
+
+def test_create_accepts_optional_fields(client):
+    r = client.post("/api/todos", json={
+        "title": "Book flights",
+        "description": "Before prices climb",
+        "priority": "high",
+        "due_date": "2026-08-15",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["priority"] == "high"
+    assert body["due_date"] == "2026-08-15"
+    assert body["description"] == "Before prices climb"
+
+
+@pytest.mark.parametrize("payload", [
+    {"title": ""},                              # empty title
+    {"title": "x", "priority": "urgent"},       # not one of high|medium|low
+    {"title": "x", "due_date": "not-a-date"},
+    {"description": "no title at all"},
+])
+def test_invalid_input_is_rejected(client, payload):
+    assert client.post("/api/todos", json=payload).status_code == 422
+
+
+# ── Adding from a reel ──────────────────────────────────────────────────────
+
+def test_add_from_reel_copies_title_and_summary(client):
+    r = client.post("/api/reels/a1/todo", json={"due_date": "2026-08-01"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["reel_id"] == "a1"
+    assert body["title"] == "Perfect pasta recipe"
+    # Summary bullets are flattened into the description so the todo still reads
+    # correctly once the reel is gone.
+    assert "Boil water" in body["description"]
+    assert "Add salt" in body["description"]
+
+
+def test_add_from_reel_accepts_an_override_title(client):
+    r = client.post("/api/reels/a1/todo", json={"title": "Cook pasta on Friday"})
+    assert r.status_code == 200
+    assert r.json()["title"] == "Cook pasta on Friday"
+
+
+def test_cannot_add_from_someone_elses_reel(client):
+    assert client.post("/api/reels/b1/todo", json={}).status_code == 404
+
+
+# ── The reel/todo lifetime contract ─────────────────────────────────────────
+
+def test_todo_survives_deleting_its_reel(ctx):
+    make_client, Session = ctx
+    client = make_client(USER_A)
+    todo_id = client.post("/api/reels/a1/todo", json={}).json()["id"]
+
+    assert client.delete("/api/reels/a1").status_code == 200
+
+    items = client.get("/api/todos").json()["items"]
+    assert len(items) == 1, "deleting the save must not delete the user's plan"
+    assert items[0]["id"] == todo_id
+    assert items[0]["reel_id"] is None          # link cleared, content intact
+    assert items[0]["title"] == "Perfect pasta recipe"
+
+
+# ── Completion ──────────────────────────────────────────────────────────────
+
+def test_completing_stamps_completed_at_and_undo_clears_it(client):
+    todo_id = client.post("/api/todos", json={"title": "Ship the thing"}).json()["id"]
+
+    done = client.patch(f"/api/todos/{todo_id}", json={"completed": True}).json()
+    assert done["completed"] is True
+    assert done["completed_at"] is not None, "the activity grid reads this timestamp"
+
+    undone = client.patch(f"/api/todos/{todo_id}", json={"completed": False}).json()
+    assert undone["completed"] is False
+    assert undone["completed_at"] is None, "an undo must not leave a phantom 'done' day"
+
+
+def test_completed_items_are_hidden_unless_asked_for(client):
+    todo_id = client.post("/api/todos", json={"title": "Done thing"}).json()["id"]
+    client.patch(f"/api/todos/{todo_id}", json={"completed": True})
+
+    assert client.get("/api/todos").json()["total"] == 0
+    assert client.get("/api/todos?include_completed=true").json()["total"] == 1
+
+
+def test_clear_due_date_moves_it_back_to_someday(client):
+    todo_id = client.post(
+        "/api/todos", json={"title": "Maybe later", "due_date": "2026-09-01"}
+    ).json()["id"]
+
+    r = client.patch(f"/api/todos/{todo_id}", json={"clear_due_date": True})
+    assert r.json()["due_date"] is None
+
+
+# ── Ordering ────────────────────────────────────────────────────────────────
+
+def test_dated_items_come_first_then_priority(client):
+    client.post("/api/todos", json={"title": "someday-high", "priority": "high"})
+    client.post("/api/todos", json={"title": "later", "due_date": "2026-09-01"})
+    client.post("/api/todos", json={"title": "soon-low", "due_date": "2026-08-01",
+                                    "priority": "low"})
+    client.post("/api/todos", json={"title": "soon-high", "due_date": "2026-08-01",
+                                    "priority": "high"})
+
+    titles = [t["title"] for t in client.get("/api/todos").json()["items"]]
+    # Soonest date first; within a date, priority; undated ("Someday") last —
+    # even when it's high priority.
+    assert titles == ["soon-high", "soon-low", "later", "someday-high"]
+
+
+# ── Isolation ───────────────────────────────────────────────────────────────
+
+def test_one_user_cannot_see_or_touch_anothers_todos(ctx):
+    make_client, _ = ctx
+    a = make_client(USER_A)
+    todo_id = a.post("/api/todos", json={"title": "A's private plan"}).json()["id"]
+
+    b = make_client(USER_B)
+    assert b.get("/api/todos").json()["total"] == 0
+    # 404 (not 403) so an id probe can't distinguish "not yours" from "not there".
+    assert b.patch(f"/api/todos/{todo_id}", json={"title": "hijacked"}).status_code == 404
+    assert b.delete(f"/api/todos/{todo_id}").status_code == 404
+
+    # …and A's todo is untouched. (make_client swaps one app-wide auth override,
+    # so re-point it at A before asserting as A.)
+    a = make_client(USER_A)
+    assert a.get("/api/todos").json()["items"][0]["title"] == "A's private plan"
+
+
+def test_unauthenticated_is_rejected(ctx):
+    make_client, _ = ctx
+    make_client(USER_A)
+    app.dependency_overrides.pop(get_current_user)
+    # No `with` — the lifespan/startup hook runs migrations against the REAL DB.
+    anon = TestClient(app)
+    assert anon.get("/api/todos").status_code == 401
+
+
+# ── Account deletion ────────────────────────────────────────────────────────
+
+def test_account_deletion_removes_todos(ctx, monkeypatch):
+    from app.routes import account
+    # Don't touch the Supabase Admin API from a test.
+    monkeypatch.setattr(account, "_delete_auth_user", lambda uid: True)
+
+    make_client, Session = ctx
+    a = make_client(USER_A)
+    a.post("/api/todos", json={"title": "standalone, no reel"})
+    a.post("/api/reels/a1/todo", json={})
+
+    assert a.delete("/api/account").status_code == 200
+
+    s = Session()
+    try:
+        # Owned by user_id, so the reel sweep alone would have orphaned these.
+        assert s.query(TodoDB).filter(TodoDB.user_id == USER_A).count() == 0
+    finally:
+        s.close()

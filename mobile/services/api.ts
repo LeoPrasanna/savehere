@@ -78,6 +78,40 @@ export interface Task {
   sort_order: number;
 }
 
+export type TodoPriority = 'high' | 'medium' | 'low';
+
+export interface Todo {
+  id: string;
+  /** null once the linked reel is deleted — the todo outlives it. */
+  reel_id: string | null;
+  title: string;
+  description: string | null;
+  priority: TodoPriority;
+  /** "YYYY-MM-DD", or null for "Someday". A calendar date in the user's OWN
+   *  timezone — the server stores it verbatim and never converts, so bucketing
+   *  into overdue/today/upcoming happens here against the device clock. */
+  due_date: string | null;
+  completed: boolean;
+  completed_at: string | null;
+  created_at: string | null;
+}
+
+export interface TodoListResponse {
+  total: number;
+  items: Todo[];
+}
+
+export interface TodoInput {
+  title?: string;
+  description?: string | null;
+  priority?: TodoPriority;
+  due_date?: string | null;
+  completed?: boolean;
+  /** due_date is nullable, so omitted and null look identical in JSON — this is
+   *  the explicit "move it back to Someday". */
+  clear_due_date?: boolean;
+}
+
 export interface Usage {
   // Effective tier: 'trial' (first days, full limits), 'free' (post-trial:
   // capped saves + a small daily AI trickle), 'pro' (paid, unlimited saves).
@@ -355,6 +389,24 @@ export const api = {
 
   deleteTask: (taskId: string) =>
     request<{ message: string }>(`/api/tasks/${taskId}`, { method: 'DELETE' }),
+
+  // ── To-do list (no AI, no quota) ─────────────────────────
+  listTodos: (includeCompleted = false) =>
+    request<TodoListResponse>(`/api/todos?include_completed=${includeCompleted}`),
+
+  createTodo: (body: TodoInput & { title: string }) =>
+    request<Todo>('/api/todos', { method: 'POST', body: JSON.stringify(body) }),
+
+  /** Add a save to the list — the server copies the reel's title and summary in,
+   *  so the todo still reads correctly if the reel is deleted later. */
+  createTodoFromReel: (reelId: string, body: TodoInput = {}) =>
+    request<Todo>(`/api/reels/${reelId}/todo`, { method: 'POST', body: JSON.stringify(body) }),
+
+  updateTodo: (id: string, body: TodoInput) =>
+    request<Todo>(`/api/todos/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+
+  deleteTodo: (id: string) =>
+    request<{ message: string }>(`/api/todos/${id}`, { method: 'DELETE' }),
 
   // ── Account ───────────────────────────────────────────────
   getUsage: () => request<Usage>('/api/account/usage'),
