@@ -56,6 +56,13 @@ ALTER TABLE extraction_cache     FORCE  ROW LEVEL SECURITY;
 ALTER TABLE ai_action_log         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ai_action_log         FORCE  ROW LEVEL SECURITY;
 
+-- todos holds the user's to-do list: their own titles/notes, plus which saves
+-- they intend to act on. Same deny-all treatment. NOTE: this table carries
+-- `user_id` directly (a standalone to-do has no reel), so with RLS off the anon
+-- key would read every user's plans AND let them rewrite each other's rows.
+ALTER TABLE todos                 ENABLE ROW LEVEL SECURITY;
+ALTER TABLE todos                 FORCE  ROW LEVEL SECURITY;
+
 
 -- ── Verify ───────────────────────────────────────────────────────────────────
 -- Every row must show rowsecurity = true AND relforcerowsecurity = true.

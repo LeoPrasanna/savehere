@@ -53,7 +53,14 @@ Blueprint apply). See [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) and
 6. **Before any prod deploy:** uncomment the prod service in `render.yaml`, set its
    `sync:false` env vars (incl. `YOUTUBE_API_KEY`), apply
    `backend/scripts/enable_rls.sql` to the PROD Supabase project (it now includes
-   `ai_action_log`), and enable Supabase Pro.
+   `ai_action_log` **and `todos`**), and enable Supabase Pro.
+7. ⚠️ **Right after the to-do list deploys to staging: re-run `enable_rls.sql`
+   against `savehere-dev`.** The migration creates the `todos` table with RLS
+   **off**, and Supabase exposes every table over PostgREST to the publishable
+   key that ships inside the app bundle — so until the script is re-run, anyone
+   with that key can read and rewrite every user's to-dos. The script is
+   idempotent, so just run the whole thing again. This is the same trap that
+   `ai_action_log` fell into: **any new table needs a matching RLS line.**
 
 ### Shipped 2026-07-21 → 07-25 (PRs #11–#20, all merged)
 
