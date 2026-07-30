@@ -256,11 +256,28 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           </MotiView>
         )}
 
-        {/* ── TO-DO — what you actually meant to act on. Sits above Ask because
-            a dated commitment outranks a browsing prompt. Collapses to a single
-            quiet row when nothing is due, so it never fakes urgency. ── */}
-        {!loading && (
+        {/* ── Ask — above the categories/recent so it's the first thing after
+            the greeting once unlocked (owner: bring Ask up above categories). ── */}
+        {askVisible && (
           <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 140 }}>
+            <Pressable style={styles.quietRow} onPress={() => router.push('/ask')} scaleTo={0.98}>
+              <View style={[styles.quietIcon, { backgroundColor: colors.neonCyan + '1A' }]}>
+                <Icon name="ask" size={18} color={colors.neonCyan} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.quietTitle}>Ask your library</Text>
+                <Text style={styles.quietSub}>Answers pulled straight from your own saves.</Text>
+              </View>
+              <Icon name="chevron-right" size={16} color={colors.textTertiary} />
+            </Pressable>
+          </MotiView>
+        )}
+
+        {/* ── TO-DO — what you actually meant to act on. Sits directly BELOW Ask
+            (owner, 2026-07-30). Collapses to a single quiet row when nothing is
+            due, so it never fakes urgency. ── */}
+        {!loading && (
+          <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 150 }}>
             {dueSoon.length > 0 ? (
               <Pressable style={styles.todoCard} onPress={() => router.push('/todos')} scaleTo={0.98}>
                 <View style={styles.todoHead}>
@@ -308,23 +325,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
                 <Icon name="chevron-right" size={16} color={colors.textTertiary} />
               </Pressable>
             )}
-          </MotiView>
-        )}
-
-        {/* ── Ask — above the categories/recent so it's the first thing after
-            the greeting once unlocked (owner: bring Ask up above categories). ── */}
-        {askVisible && (
-          <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 150 }}>
-            <Pressable style={styles.quietRow} onPress={() => router.push('/ask')} scaleTo={0.98}>
-              <View style={[styles.quietIcon, { backgroundColor: colors.neonCyan + '1A' }]}>
-                <Icon name="ask" size={18} color={colors.neonCyan} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.quietTitle}>Ask your library</Text>
-                <Text style={styles.quietSub}>Answers pulled straight from your own saves.</Text>
-              </View>
-              <Icon name="chevron-right" size={16} color={colors.textTertiary} />
-            </Pressable>
           </MotiView>
         )}
 
