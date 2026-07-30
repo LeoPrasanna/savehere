@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import { Plus } from 'lucide-react-native';
-import { api, thumbUrl, Reel } from '../services/api';
+import { api, thumbUrl, Reel, Todo } from '../services/api';
+import { bucketOf, formatDue } from '../services/todoDates';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { AuroraBackground } from './AuroraBackground';
@@ -42,6 +43,14 @@ const GREETING_HELPERS = [
   'Pick a saved idea and turn it into a checklist you can finish.',
   "Everything you've saved — summarized and searchable in one place.",
 ];
+
+/** Priority tint for the to-do preview dots. Non-accent tokens, so this map is
+ *  safe at module level (accent-bearing values must go through `themed()`). */
+const TODO_PRIORITY_COLOR: Record<string, string> = {
+  high: colors.danger,
+  medium: colors.warning,
+  low: colors.textTertiary,
+};
 
 /** One card in the recent carousel. A horizontal strip beats a vertical list
  *  here: it shows the thumbnail at a size worth looking at, and it costs a fixed
@@ -108,6 +117,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
+  const [todos, setTodos] = useState<Todo[]>([]);
   const [selected, setSelected] = useState<Feature | null>(null);
   const [catFilter, setCatFilter] = useState<string | null>(null);
   // Reopens after an accent switch remounts the tree (one-shot session flag).
@@ -124,6 +134,8 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         .then(d => { setReels(d.items); setTotal(d.total); })
         .catch(() => setFetchError(true))
         .finally(() => setLoading(false));
+      // Separate catch: a to-do hiccup must not blank out the library view.
+      api.listTodos().then(d => setTodos(d.items)).catch(() => setTodos([]));
     }, [])
   );
   const askVisible = !loading && total >= ASK_MIN_REELS;
@@ -137,6 +149,12 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
 
   // Category chips filter the already-fetched page locally — no extra request,
   // and no filter state to hand off to the library screen.
+  // Dated items only — "Someday" has no claim on today's attention. The server
+  // already returns them date-ascending then priority, so slicing preserves
+  // "soonest first, most important within a day".
+  const dueSoon = todos.filter(t => bucketOf(t.due_date) !== 'someday');
+  const overdueCount = todos.filter(t => bucketOf(t.due_date) === 'overdue').length;
+
   const catList = Array.from(new Set(reels.map(r => r.category).filter(Boolean))) as string[];
   const visible = catFilter ? reels.filter(r => r.category === catFilter) : reels;
   const recent = visible.slice(0, RECENT_LIMIT);
@@ -235,6 +253,61 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
             <Text style={styles.progressSub}>
               Ask answers from your own saves — it works best with a few to draw on.
             </Text>
+          </MotiView>
+        )}
+
+        {/* ── TO-DO — what you actually meant to act on. Sits above Ask because
+            a dated commitment outranks a browsing prompt. Collapses to a single
+            quiet row when nothing is due, so it never fakes urgency. ── */}
+        {!loading && (
+          <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 140 }}>
+            {dueSoon.length > 0 ? (
+              <Pressable style={styles.todoCard} onPress={() => router.push('/todos')} scaleTo={0.98}>
+                <View style={styles.todoHead}>
+                  <View style={[styles.quietIcon, { backgroundColor: colors.accent + '1A' }]}>
+                    <Icon name="checkbox" size={18} color={colors.accent} />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.quietTitle}>Your to-do list</Text>
+                    <Text style={[styles.quietSub, overdueCount > 0 && styles.todoSubWarn]}>
+                      {overdueCount > 0
+                        ? `${overdueCount} overdue · ${dueSoon.length} on deck`
+                        : `${dueSoon.length} coming up`}
+                    </Text>
+                  </View>
+                  <Icon name="chevron-right" size={16} color={colors.textTertiary} />
+                </View>
+                <View style={styles.todoItems}>
+                  {dueSoon.slice(0, 3).map(t => (
+                    <View key={t.id} style={styles.todoItem}>
+                      <View style={[styles.todoDot, { backgroundColor: TODO_PRIORITY_COLOR[t.priority] }]} />
+                      <Text style={styles.todoItemText} numberOfLines={1}>{t.title}</Text>
+                      <Text style={[styles.todoWhen, bucketOf(t.due_date) === 'overdue' && styles.todoSubWarn]}>
+                        {formatDue(t.due_date)}
+                      </Text>
+                    </View>
+                  ))}
+                  {dueSoon.length > 3 && (
+                    <Text style={styles.todoMore}>+{dueSoon.length - 3} more</Text>
+                  )}
+                </View>
+              </Pressable>
+            ) : (
+              <Pressable style={styles.quietRow} onPress={() => router.push('/todos')} scaleTo={0.98}>
+                <View style={[styles.quietIcon, { backgroundColor: colors.accent + '1A' }]}>
+                  <Icon name="checkbox" size={18} color={colors.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.quietTitle}>Your to-do list</Text>
+                  <Text style={styles.quietSub}>
+                    {todos.length > 0
+                      ? `${todos.length} with no date — give one a day to see it here.`
+                      : 'Nothing due. Turn a save into something you actually finish.'}
+                  </Text>
+                </View>
+                <Icon name="chevron-right" size={16} color={colors.textTertiary} />
+              </Pressable>
+            )}
           </MotiView>
         )}
 
@@ -416,6 +489,21 @@ const styles = themed(() => StyleSheet.create({
   quietIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
   quietTitle: { color: colors.textPrimary, fontSize: font.md, fontWeight: '700' },
   quietSub: { color: colors.textSecondary, fontSize: font.xs, marginTop: 1 },
+
+  // ── To-do preview ───────────────────────────────────────────────────
+  todoCard: {
+    backgroundColor: colors.card, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.border,
+    padding: spacing.md, gap: spacing.sm,
+  },
+  todoHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2 },
+  todoSubWarn: { color: colors.danger, fontWeight: '700' },
+  todoItems: { gap: 6, paddingLeft: 2 },
+  todoItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  todoDot: { width: 6, height: 6, borderRadius: 3 },
+  todoItemText: { flex: 1, color: colors.textSecondary, fontSize: font.sm },
+  todoWhen: { color: colors.textTertiary, fontSize: font.xs },
+  todoMore: { color: colors.textTertiary, fontSize: font.xs, paddingLeft: 14 },
 
   // ── Library-first home ──────────────────────────────────────────────
   recentBlock: { gap: spacing.sm },

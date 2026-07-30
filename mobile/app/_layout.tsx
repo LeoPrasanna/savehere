@@ -30,6 +30,7 @@ function AppStack() {
       <Stack.Screen name="save" options={{ title: 'Save a Reel', presentation: 'modal' }} />
       <Stack.Screen name="ask" options={{ title: 'Ask your library' }} />
       <Stack.Screen name="rediscover" options={{ title: 'Rediscover' }} />
+      <Stack.Screen name="todos" options={{ title: 'To-do list' }} />
       <Stack.Screen name="help" options={{ title: 'What you can do' }} />
       <Stack.Screen name="profile" options={{ title: 'Edit profile' }} />
       <Stack.Screen name="reel/[id]" options={{ title: '' }} />

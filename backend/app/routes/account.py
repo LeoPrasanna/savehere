@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timedelta
 
 from app.config import settings
-from app.database import get_db, ReelDB, TaskDB, WorkoutExerciseDB, ProfileDB, AiActionLogDB
+from app.database import get_db, ReelDB, TaskDB, WorkoutExerciseDB, ProfileDB, AiActionLogDB, TodoDB
 from app.auth import get_current_user, AuthUser
 from app.quota import usage_today, _utc_today
 from app.entitlements import entitlements_for
@@ -156,6 +156,9 @@ def delete_account(user: AuthUser = Depends(get_current_user), db: Session = Dep
     user_id = user.id
     reel_ids = select(ReelDB.id).where(ReelDB.user_id == user_id)
 
+    # Todos are owned directly by the user (a standalone one has no reel), so
+    # they'd survive the reel sweep below — delete them by user_id, first.
+    db.query(TodoDB).filter(TodoDB.user_id == user_id).delete(synchronize_session=False)
     tasks_removed = (
         db.query(TaskDB)
         .filter(TaskDB.reel_id.in_(reel_ids))

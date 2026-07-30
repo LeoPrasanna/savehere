@@ -185,6 +185,47 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
 ## Mobile — Features
 
 - [ ] **Share Extension (iOS)** — same as blocker above; listed here for implementation tracking.
+- [x] **To-do list — the retention surface (2026-07-30)** — a cross-reel list of what the
+  user actually meant to do, the thing a bookmarking app needs so saves don't rot unseen.
+  **Backend:** new `todos` table + `/api/todos` CRUD + `POST /api/reels/{id}/todo`
+  (`app/routes/todos.py`, 17 tests in `tests/test_todos.py`). **Zero AI, zero quota** —
+  it's the user's own text, so it adds retention without adding COGS. **Mobile:** dedicated
+  `app/todos.tsx` (Overdue / Today / Upcoming / Someday), a reusable `TodoEditor` modal used
+  by both entry points, an "Add to to-do list" card on the reel detail screen, and a
+  Today/Upcoming preview on the home screen that collapses to one quiet row when nothing is
+  due (it never fakes urgency).
+  **Three decisions worth not relearning:**
+  1. **Not `TaskDB`.** Those rows are recipe steps: `reel_id` is `NOT NULL`, ownership is a
+     join to the parent reel, and `routes/workout.py` deletes them wholesale on regeneration
+     — todos in that table would appear inside recipe checklists AND get silently wiped.
+  2. **Deleting a reel does NOT delete its todo** (`ondelete SET NULL` + an explicit unlink in
+     `delete_reel`, since SQLite needs `PRAGMA foreign_keys`). Title/description are *copied*
+     at add time, so the todo still reads correctly afterwards. Todos are also swept on
+     account deletion — they're owned by `user_id`, so the reel sweep alone would orphan them.
+  3. **Due date is OPTIONAL** (owner proposed mandatory). Forcing a date on "I want to try
+     this sometime" makes users either abandon the add-flow or type a junk date — and junk
+     dates poison the home-screen widget, which is the entire point. Undated items land in
+     "Someday" and the widget falls back to a quiet row. One-line change in
+     `routes/models/todo.py` if this proves wrong.
+  ⚠️ **Not verifiable by the agent:** the logged-in screens need a real session, which the
+  preview browser doesn't have. Backend is covered by tests; typecheck + web export pass;
+  the date/bucket logic was proven with assertions. **Owner: do a visual pass.**
+- [ ] **To-do reminders** — a local notification the evening before / morning of a due date.
+  Free in money (`expo-notifications`, no push server), but needs the **custom dev build**
+  (doesn't work in Expo Go, and web needs the Notification API + a permission prompt), so it
+  can't be tested in the current web loop. `due_date` is already stored; this is additive.
+- [ ] **Prompt to archive the reel when its to-do is completed** — the owner asked for a
+  "delete the reel or keep it?" prompt on completion. **Deliberately not built:** reel
+  deletion cascades (summary, notes, tasks, workout, itinerary), is irreversible with no
+  trash, and would fire on a celebratory tap — and completion is precisely when the save
+  proved its worth. If library clutter is the real problem, the answer is an **archive/hide**
+  flag on `ReelDB`, not a delete. Decide which.
+- [ ] **Activity grid + streak (the habit surface)** — `todos.completed_at` is already
+  written and cleared on undo specifically to feed this. A GitHub-style grid where a square
+  lights when the user **completed something from their library** (and optionally saved).
+  ⚠️ Do **not** track "opened the app": a self-referential streak measures nothing, and when
+  it breaks it removes the only reason to open. Counting *saves* alone would also pay users
+  in AI spend to save junk — see the free auto-summary economics above.
 - [x] **Library auto-refresh while summarizing** — the home grid polls every 4s while any card is `pending` so background summaries appear without a manual reload (pull-to-refresh also available).
 - [ ] **Deep linking** — when Share Extension saves a reel, open the detail screen directly (`savehere://reel/{id}`).
 - [ ] **First-run coach-marks (3 features)** — after the existing new-user pop-ups, spotlight in sequence: how to add a reel, the Library button, Ask-my-Library. Reuse the account-age <15 min gate from the onboarding tour so existing accounts never see it.
