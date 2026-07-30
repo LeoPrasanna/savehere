@@ -21,9 +21,31 @@ class TodoResponse(BaseModel):
     created_at: Optional[datetime]
 
 
-class TodoListResponse(BaseModel):
+class TodoStats(BaseModel):
+    """Whole-list counters for the dashboard header.
+
+    Deliberately timezone-independent — no "due today"/"overdue" here. Those
+    depend on the DEVICE's calendar day and are computed client-side from the
+    list; returning a UTC-based version too would give the screen two
+    disagreeing definitions of "today".
+    """
     total: int
+    open: int
+    completed: int
+
+
+class TodoListResponse(BaseModel):
+    total: int                       # length of `items` (respects include_completed)
     items: List[TodoResponse]
+    stats: TodoStats
+
+
+class ReelTodoResponse(BaseModel):
+    """What the reel screen needs to decide whether "Add to to-do" is available.
+    `open_todo` is the incomplete one blocking the button (null = free to add)."""
+    reel_id: str
+    open_todo: Optional[TodoResponse]
+    completed_count: int
 
 
 class CreateTodoRequest(BaseModel):

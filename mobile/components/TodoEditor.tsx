@@ -4,7 +4,9 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { api, Todo, TodoPriority } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
-import { daysFromToday, nextWeekend, formatDue, parseLocal } from '../services/todoDates';
+import { DatePicker } from './DatePicker';
+import { daysFromToday, nextWeekend, formatDue } from '../services/todoDates';
+import { TODO_BRAND } from '../constants/todoBrand';
 import * as haptics from '../services/haptics';
 import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
 
@@ -46,7 +48,7 @@ export function TodoEditor({
   const [description, setDescription] = useState('');
   const [priority, setPriority] = useState<TodoPriority>('medium');
   const [due, setDue] = useState<string | null>(null);
-  const [typedDate, setTypedDate] = useState('');
+  const [calendarOpen, setCalendarOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -61,7 +63,9 @@ export function TodoEditor({
     setDescription(editing?.description ?? defaultDescription ?? '');
     setPriority(editing?.priority ?? 'medium');
     setDue(editing?.due_date ?? null);
-    setTypedDate(editing?.due_date ?? '');
+    // Open straight onto the calendar when editing something that already has a
+    // date — that's usually what you came to change.
+    setCalendarOpen(!!editing?.due_date);
     setError(null);
   }, [visible, editing, defaultTitle, defaultDescription]);
 
@@ -72,17 +76,7 @@ export function TodoEditor({
 
   const pickPreset = (value: string | null) => {
     setDue(value);
-    setTypedDate(value ?? '');
     setError(null);
-  };
-
-  const onTypedDate = (text: string) => {
-    setTypedDate(text);
-    if (!text.trim()) { setDue(null); setError(null); return; }
-    // Validated here so a typo becomes a clear message instead of a 422 after
-    // the user has already hit Save.
-    if (parseLocal(text.trim())) { setDue(text.trim()); setError(null); }
-    else setError('Use the format YYYY-MM-DD, or tap one of the chips above.');
   };
 
   const canSave = title.trim().length > 0 && !saving && !error;
@@ -123,7 +117,7 @@ export function TodoEditor({
             close-on-press overlay (react-native-web). */}
         <Pressable style={styles.card} onPress={(e) => e.stopPropagation()} scaleTo={1}>
           <View style={styles.headRow}>
-            <Text style={styles.heading}>{editing ? 'Edit to-do' : 'New to-do'}</Text>
+            <Text style={styles.heading}>{editing ? 'Edit task' : `New ${TODO_BRAND} task`}</Text>
             <Pressable onPress={onClose} scaleTo={0.9} hitSlop={8}>
               <Icon name="close" size={18} color={colors.textSecondary} />
             </Pressable>
@@ -182,15 +176,22 @@ export function TodoEditor({
                 );
               })}
             </View>
-            <TextInput
-              style={[styles.input, styles.dateInput]}
-              value={typedDate}
-              onChangeText={onTypedDate}
-              placeholder="Or a specific date — YYYY-MM-DD"
-              placeholderTextColor={colors.textTertiary}
-              autoCapitalize="none"
-              maxLength={10}
-            />
+            <Pressable
+              style={styles.calToggle}
+              onPress={() => setCalendarOpen(o => !o)}
+              scaleTo={0.98}
+            >
+              <Icon name="time" size={13} color={colors.textSecondary} />
+              <Text style={styles.calToggleText}>
+                {calendarOpen ? 'Hide calendar' : 'Pick a specific date'}
+              </Text>
+              <Text style={styles.calToggleValue}>{formatDue(due)}</Text>
+            </Pressable>
+            {calendarOpen && (
+              <View style={{ marginTop: spacing.xs }}>
+                <DatePicker value={due} onChange={(iso) => { setDue(iso); setError(null); }} />
+              </View>
+            )}
 
             <Text style={styles.label}>PRIORITY</Text>
             <View style={styles.chipRow}>
@@ -268,7 +269,15 @@ const styles = themed(() => StyleSheet.create({
     color: colors.textPrimary, fontSize: font.md,
   },
   inputMulti: { minHeight: 72, textAlignVertical: 'top' },
-  dateInput: { marginTop: spacing.xs, fontSize: font.sm },
+
+  calToggle: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
+    marginTop: spacing.xs, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm,
+    borderRadius: radius.sm, borderWidth: 1, borderColor: colors.border,
+    backgroundColor: colors.card,
+  },
+  calToggleText: { flex: 1, color: colors.textSecondary, fontSize: font.xs, fontWeight: '700' },
+  calToggleValue: { color: colors.accentLight, fontSize: font.xs, fontWeight: '800' },
 
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   chip: {

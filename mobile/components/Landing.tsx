@@ -7,6 +7,7 @@ import { MotiView } from 'moti';
 import { Plus } from 'lucide-react-native';
 import { api, thumbUrl, Reel, Todo } from '../services/api';
 import { bucketOf, formatDue } from '../services/todoDates';
+import { TODO_BRAND } from '../constants/todoBrand';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { AuroraBackground } from './AuroraBackground';
@@ -285,7 +286,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
                     <Icon name="checkbox" size={18} color={colors.accent} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.quietTitle}>Your to-do list</Text>
+                    <Text style={styles.quietTitle}>{TODO_BRAND}</Text>
                     <Text style={[styles.quietSub, overdueCount > 0 && styles.todoSubWarn]}>
                       {overdueCount > 0
                         ? `${overdueCount} overdue · ${dueSoon.length} on deck`
@@ -315,7 +316,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
                   <Icon name="checkbox" size={18} color={colors.accent} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.quietTitle}>Your to-do list</Text>
+                  <Text style={styles.quietTitle}>{TODO_BRAND}</Text>
                   <Text style={styles.quietSub}>
                     {todos.length > 0
                       ? `${todos.length} with no date — give one a day to see it here.`

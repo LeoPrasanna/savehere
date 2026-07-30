@@ -217,16 +217,41 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
   ⚠️ **Not verifiable by the agent:** the logged-in screens need a real session, which the
   preview browser doesn't have. Backend is covered by tests; typecheck + web export pass;
   the date/bucket logic was proven with assertions. **Owner: do a visual pass.**
+- [x] **To-do polish → shipped as "Follow Through" (2026-07-30)** — owner round two:
+  1. **Named.** `mobile/constants/todoBrand.ts` holds the name, the button labels and the
+     quote list. Renaming is ONE edit — nothing hardcodes it. ("Follow Through" names the
+     thing users actually fail at; alternates listed in the file.)
+  2. **No back-dated tasks.** The calendar disables past days (real enforcement, device
+     clock); the server refuses them as a backstop. ⚠️ The server allows **one day of
+     slack on purpose** — a user in Honolulu setting "today" sends what is already
+     yesterday in UTC, and a strict check would reject every negative-offset timezone.
+     Validation also only runs when the date *changes*, or renaming a task that had merely
+     slipped past its date would be impossible.
+  3. **One open task per save.** `GET /api/reels/{id}/todo` drives a deactivated button on
+     the reel screen; completing the task re-enables it (refetched on focus, so completing
+     it on the list screen frees the button when you navigate back). Completing a linked
+     task now asks **"keep the save or delete it?"** — the previously-declined prompt, built
+     as asked. Keep is the primary action and the only thing a stray tap reaches; the
+     delete button names what is lost (summary, notes, steps, workout — irreversible).
+     The task itself survives either choice.
+  4. **Dashboard.** Open / Done / Overdue tiles (Open+Done from server stats, Overdue
+     computed locally so it can't disagree with the sections below it) plus rolling
+     quotes — reusing `RollingTagline` with a new `lines` prop rather than a second roller.
+  5. **Calendar picker.** `components/DatePicker.tsx`, dependency-free. Deliberately NOT
+     `@react-native-community/datetimepicker`: another native dep that can't render in the
+     web dev loop and looks different per platform. Grid math verified across 84 months
+     incl. leap years and the 2100 non-leap trap.
 - [ ] **To-do reminders** — a local notification the evening before / morning of a due date.
   Free in money (`expo-notifications`, no push server), but needs the **custom dev build**
   (doesn't work in Expo Go, and web needs the Notification API + a permission prompt), so it
   can't be tested in the current web loop. `due_date` is already stored; this is additive.
-- [ ] **Prompt to archive the reel when its to-do is completed** — the owner asked for a
-  "delete the reel or keep it?" prompt on completion. **Deliberately not built:** reel
-  deletion cascades (summary, notes, tasks, workout, itinerary), is irreversible with no
-  trash, and would fire on a celebratory tap — and completion is precisely when the save
-  proved its worth. If library clutter is the real problem, the answer is an **archive/hide**
-  flag on `ReelDB`, not a delete. Decide which.
+- [ ] **Archive as a softer alternative to delete-on-completion** — the delete prompt IS
+  now built (owner reaffirmed it; see "To-do polish" above), with Keep as the primary
+  action and an explicit warning naming what is lost. The concern that prompted the
+  original pushback still stands though: deletion cascades and there is no trash. An
+  `archived` flag on `ReelDB` would let "clear it out of my library" mean *hide*, not
+  *destroy*, and would be the better default for that button. Worth doing if any user
+  ever reports deleting a save they wanted back.
 - [ ] **Activity grid + streak (the habit surface)** — `todos.completed_at` is already
   written and cleared on undo specifically to feed this. A GitHub-style grid where a square
   lights when the user **completed something from their library** (and optionally saved).

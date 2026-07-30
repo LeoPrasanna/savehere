@@ -3,12 +3,14 @@ import {
   View, Text, Image, ScrollView, StyleSheet,
   ActivityIndicator, Alert, Platform, TextInput, Modal,
 } from 'react-native';
-import { useLocalSearchParams, useRouter, useNavigation } from 'expo-router';
+import { useLocalSearchParams, useRouter, useNavigation, useFocusEffect } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from '../../components/Icon';
-import { api, Reel, Task, TaskListResponse, ItineraryResponse, Usage, thumbUrl } from '../../services/api';
+import { api, Reel, Task, TaskListResponse, ItineraryResponse, Usage, ReelTodo, thumbUrl } from '../../services/api';
+import { formatDue } from '../../services/todoDates';
+import { TODO_BRAND, TODO_ADD_LABEL, TODO_ADDED_LABEL } from '../../constants/todoBrand';
 import { openSourceLink } from '../../services/openLink';
 import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
@@ -31,9 +33,11 @@ export default function ReelDetailScreen() {
   const [summarizing, setSummarizing] = useState(false);
   const [taskList, setTaskList] = useState<TaskListResponse | null>(null);
   const [generatingTasks, setGeneratingTasks] = useState(false);
-  // "Add to to-do" — no AI, no quota; just copies this save onto the user's list.
+  // "Add to Follow Through" — no AI, no quota; just copies this save onto the
+  // user's list. The button deactivates while an incomplete task is outstanding
+  // (server is the source of truth, so completing it elsewhere frees it here).
   const [todoOpen, setTodoOpen] = useState(false);
-  const [todoAdded, setTodoAdded] = useState(false);
+  const [reelTodo, setReelTodo] = useState<ReelTodo | null>(null);
   const [taskError, setTaskError] = useState('');
   const [hasWorkout, setHasWorkout] = useState(false);
   const [generatingWorkout, setGeneratingWorkout] = useState(false);
@@ -85,6 +89,15 @@ export default function ReelDetailScreen() {
     api.getItinerary(id).then(setItin).catch(() => {});
     api.getUsage().then(setUsage).catch(() => {});
   }, [id]);
+
+  // Refetched on FOCUS, not just mount: the task can be completed (or deleted)
+  // over on the Follow Through screen, and coming back here must show the
+  // button re-enabled rather than a stale "already added".
+  useFocusEffect(
+    useCallback(() => {
+      api.getReelTodo(id).then(setReelTodo).catch(() => {});
+    }, [id])
+  );
 
   // The summary is generated in the background after save, so poll until it lands.
   // If polling gives up while still pending (server was down longer than the cap),
@@ -514,15 +527,22 @@ export default function ReelDetailScreen() {
         />
       </View>
 
-      {/* ── Add to to-do ─────────────────────────────────
+      {/* ── Add to Follow Through ────────────────────────
           Above the AI sections on purpose: it's free, instant, and works on
-          every save — including the ones nothing can be generated from. */}
+          every save — including the ones nothing can be generated from.
+          Deactivates while a task is outstanding so one save can't spawn a pile
+          of duplicate entries; completing it re-enables this automatically. */}
       <View style={styles.card}>
-        {todoAdded ? (
+        {reelTodo?.open_todo ? (
           <Pressable style={styles.todoDoneRow} onPress={() => router.push('/todos')} scaleTo={0.98}>
-            <Icon name="checkmark" size={16} color={colors.success} />
-            <Text style={styles.todoDoneText}>Added to your to-do list</Text>
-            <Text style={styles.todoDoneLink}>View list</Text>
+            <Icon name="checkbox" size={16} color={colors.success} />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.todoDoneText}>{TODO_ADDED_LABEL}</Text>
+              <Text style={styles.todoAddSub}>
+                Due {formatDue(reelTodo.open_todo.due_date).toLowerCase()} · complete it to add another
+              </Text>
+            </View>
+            <Text style={styles.todoDoneLink}>View</Text>
           </Pressable>
         ) : (
           <Pressable style={styles.todoAddRow} onPress={() => setTodoOpen(true)} scaleTo={0.98}>
@@ -530,8 +550,12 @@ export default function ReelDetailScreen() {
               <Icon name="add" size={16} color={colors.accent} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>Add to to-do list</Text>
-              <Text style={styles.todoAddSub}>Give this save a day, and it'll come find you.</Text>
+              <Text style={styles.cardTitle}>{TODO_ADD_LABEL}</Text>
+              <Text style={styles.todoAddSub}>
+                {reelTodo && reelTodo.completed_count > 0
+                  ? `Done ${reelTodo.completed_count}× already — add it again?`
+                  : "Give this save a day, and it'll come find you."}
+              </Text>
             </View>
             <Icon name="chevron-right" size={15} color={colors.textTertiary} />
           </Pressable>
@@ -544,7 +568,11 @@ export default function ReelDetailScreen() {
         defaultTitle={reel.title || 'Saved reel'}
         defaultDescription={reel.summary?.join('\n') || ''}
         onClose={() => setTodoOpen(false)}
-        onSaved={() => setTodoAdded(true)}
+        onSaved={(t) => setReelTodo(prev => ({
+          reel_id: id,
+          open_todo: t,
+          completed_count: prev?.completed_count ?? 0,
+        }))}
       />
 
       {/* ── Trip Itinerary (travel reels) ─────────────── */}

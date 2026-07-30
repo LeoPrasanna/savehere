@@ -13,7 +13,7 @@ The load-bearing behaviours locked here:
     sweep alone would orphan them).
 """
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -26,6 +26,16 @@ from app import ratelimit
 
 USER_A = "user-aaaa"
 USER_B = "user-bbbb"
+
+
+def in_days(n: int) -> str:
+    """A due date N days from today, as the client would send it.
+
+    Relative on purpose: hardcoded calendar dates rot into *past* dates as real
+    time passes, and past dates are now rejected — a fixed '2026-08-15' would
+    turn this suite red on its own months from now, for no real reason.
+    """
+    return (datetime.utcnow().date() + timedelta(days=n)).isoformat()
 
 
 @pytest.fixture
@@ -97,12 +107,12 @@ def test_create_accepts_optional_fields(client):
         "title": "Book flights",
         "description": "Before prices climb",
         "priority": "high",
-        "due_date": "2026-08-15",
+        "due_date": in_days(15),
     })
     assert r.status_code == 200
     body = r.json()
     assert body["priority"] == "high"
-    assert body["due_date"] == "2026-08-15"
+    assert body["due_date"] == in_days(15)
     assert body["description"] == "Before prices climb"
 
 
@@ -119,7 +129,7 @@ def test_invalid_input_is_rejected(client, payload):
 # ── Adding from a reel ──────────────────────────────────────────────────────
 
 def test_add_from_reel_copies_title_and_summary(client):
-    r = client.post("/api/reels/a1/todo", json={"due_date": "2026-08-01"})
+    r = client.post("/api/reels/a1/todo", json={"due_date": in_days(1)})
     assert r.status_code == 200
     body = r.json()
     assert body["reel_id"] == "a1"
@@ -180,7 +190,7 @@ def test_completed_items_are_hidden_unless_asked_for(client):
 
 def test_clear_due_date_moves_it_back_to_someday(client):
     todo_id = client.post(
-        "/api/todos", json={"title": "Maybe later", "due_date": "2026-09-01"}
+        "/api/todos", json={"title": "Maybe later", "due_date": in_days(30)}
     ).json()["id"]
 
     r = client.patch(f"/api/todos/{todo_id}", json={"clear_due_date": True})
@@ -191,10 +201,10 @@ def test_clear_due_date_moves_it_back_to_someday(client):
 
 def test_dated_items_come_first_then_priority(client):
     client.post("/api/todos", json={"title": "someday-high", "priority": "high"})
-    client.post("/api/todos", json={"title": "later", "due_date": "2026-09-01"})
-    client.post("/api/todos", json={"title": "soon-low", "due_date": "2026-08-01",
+    client.post("/api/todos", json={"title": "later", "due_date": in_days(30)})
+    client.post("/api/todos", json={"title": "soon-low", "due_date": in_days(2),
                                     "priority": "low"})
-    client.post("/api/todos", json={"title": "soon-high", "due_date": "2026-08-01",
+    client.post("/api/todos", json={"title": "soon-high", "due_date": in_days(2),
                                     "priority": "high"})
 
     titles = [t["title"] for t in client.get("/api/todos").json()["items"]]
@@ -229,6 +239,110 @@ def test_unauthenticated_is_rejected(ctx):
     # No `with` — the lifespan/startup hook runs migrations against the REAL DB.
     anon = TestClient(app)
     assert anon.get("/api/todos").status_code == 401
+
+
+# ── Past due dates ──────────────────────────────────────────────────────────
+
+def test_past_due_date_is_rejected(client):
+    r = client.post("/api/todos", json={"title": "Yesterday's problem", "due_date": in_days(-5)})
+    assert r.status_code == 422
+    assert "past" in r.json()["detail"].lower()
+
+
+def test_past_due_date_is_rejected_when_adding_from_a_reel(client):
+    r = client.post("/api/reels/a1/todo", json={"due_date": in_days(-5)})
+    assert r.status_code == 422
+
+
+def test_yesterday_is_accepted_as_timezone_slack(client):
+    """NOT a loophole. A user in Honolulu (UTC-10) setting "today" sends a date
+    that is already yesterday in UTC — rejecting it would break every
+    negative-offset timezone. One day is the smallest window that can't produce
+    a false rejection; the picker enforces the real rule on the device clock."""
+    r = client.post("/api/todos", json={"title": "Late-night Honolulu", "due_date": in_days(-1)})
+    assert r.status_code == 200
+
+
+def test_editing_an_overdue_task_does_not_require_moving_its_date(ctx):
+    """The client round-trips the existing due_date on every edit. If validation
+    ran unconditionally, a task that had merely slipped past its date could never
+    be renamed again."""
+    make_client, Session = ctx
+    client = make_client(USER_A)
+
+    s = Session()
+    try:
+        s.add(TodoDB(id="old1", user_id=USER_A, title="Long overdue",
+                     priority="medium", due_date=date.today() - timedelta(days=30)))
+        s.commit()
+    finally:
+        s.close()
+
+    r = client.patch("/api/todos/old1", json={
+        "title": "Renamed but still overdue",
+        "due_date": (date.today() - timedelta(days=30)).isoformat(),
+    })
+    assert r.status_code == 200
+    assert r.json()["title"] == "Renamed but still overdue"
+
+
+def test_moving_a_task_to_a_new_past_date_is_rejected(ctx):
+    make_client, Session = ctx
+    client = make_client(USER_A)
+    s = Session()
+    try:
+        s.add(TodoDB(id="old2", user_id=USER_A, title="Overdue",
+                     priority="medium", due_date=date.today() - timedelta(days=30)))
+        s.commit()
+    finally:
+        s.close()
+
+    assert client.patch("/api/todos/old2", json={"due_date": in_days(-9)}).status_code == 422
+
+
+# ── Dashboard stats ─────────────────────────────────────────────────────────
+
+def test_stats_count_the_whole_list_not_the_returned_page(client):
+    a = client.post("/api/todos", json={"title": "one"}).json()["id"]
+    client.post("/api/todos", json={"title": "two"})
+    client.post("/api/todos", json={"title": "three"})
+    client.patch(f"/api/todos/{a}", json={"completed": True})
+
+    body = client.get("/api/todos").json()
+    assert body["total"] == 2, "the default list hides completed items"
+    # …but the stats describe everything, which is the point of a dashboard.
+    assert body["stats"] == {"total": 3, "open": 2, "completed": 1}
+
+    both = client.get("/api/todos?include_completed=true").json()
+    assert both["total"] == 3
+    assert both["stats"] == {"total": 3, "open": 2, "completed": 1}
+
+
+# ── Per-reel lookup (drives the disabled "Add to to-do" button) ──────────────
+
+def test_reel_todo_lookup_reports_the_open_one(client):
+    none_yet = client.get("/api/reels/a1/todo").json()
+    assert none_yet["open_todo"] is None and none_yet["completed_count"] == 0
+
+    todo_id = client.post("/api/reels/a1/todo", json={"due_date": in_days(3)}).json()["id"]
+    blocked = client.get("/api/reels/a1/todo").json()
+    assert blocked["open_todo"]["id"] == todo_id, "button must show as already-added"
+
+    # Completing it frees the button again — that's the whole re-activation rule.
+    client.patch(f"/api/todos/{todo_id}", json={"completed": True})
+    freed = client.get("/api/reels/a1/todo").json()
+    assert freed["open_todo"] is None
+    assert freed["completed_count"] == 1
+
+
+def test_reel_todo_lookup_is_scoped_to_the_caller(ctx):
+    make_client, _ = ctx
+    a = make_client(USER_A)
+    a.post("/api/reels/a1/todo", json={})
+
+    b = make_client(USER_B)
+    # B asking about A's reel learns nothing — no open todo, no existence signal.
+    assert b.get("/api/reels/a1/todo").json()["open_todo"] is None
 
 
 # ── Account deletion ────────────────────────────────────────────────────────

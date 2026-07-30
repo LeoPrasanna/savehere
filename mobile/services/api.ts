@@ -96,9 +96,27 @@ export interface Todo {
   created_at: string | null;
 }
 
-export interface TodoListResponse {
+/** Whole-list counters for the dashboard. Deliberately has no "due today" /
+ *  "overdue" — those depend on the device's calendar day and are computed
+ *  locally, so the server never offers a second, disagreeing definition. */
+export interface TodoStats {
   total: number;
+  open: number;
+  completed: number;
+}
+
+export interface TodoListResponse {
+  total: number;          // length of `items` (respects includeCompleted)
   items: Todo[];
+  stats: TodoStats;
+}
+
+/** Drives the disabled state of the reel screen's "Add to Follow Through"
+ *  button: a non-null `open_todo` means one is already outstanding. */
+export interface ReelTodo {
+  reel_id: string;
+  open_todo: Todo | null;
+  completed_count: number;
 }
 
 export interface TodoInput {
@@ -393,6 +411,9 @@ export const api = {
   // ── To-do list (no AI, no quota) ─────────────────────────
   listTodos: (includeCompleted = false) =>
     request<TodoListResponse>(`/api/todos?include_completed=${includeCompleted}`),
+
+  /** Is there already an open to-do for this save? */
+  getReelTodo: (reelId: string) => request<ReelTodo>(`/api/reels/${reelId}/todo`),
 
   createTodo: (body: TodoInput & { title: string }) =>
     request<Todo>('/api/todos', { method: 'POST', body: JSON.stringify(body) }),
