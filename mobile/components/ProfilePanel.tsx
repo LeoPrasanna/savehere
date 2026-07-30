@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, Platform, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, Platform, ScrollView, Linking } from 'react-native';
 import { MotiView } from 'moti';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +11,10 @@ import { GlassCard } from './GlassCard';
 import { BorderBeam } from './BorderBeam';
 import { useAuth } from '../contexts/AuthContext';
 import { markReopenPanel } from '../services/sessionFlags';
+import {
+  SUPPORT_EMAIL, SUPPORT_URL, PRIVACY_URL, TERMS_URL,
+  APPLE_SUBSCRIPTIONS_URL, APPLE_REFUNDS_URL,
+} from '../constants/links';
 import { colors, spacing, font, radius, gradients, shadow, themed, accentThemes, getAccentKey, setAccentTheme } from '../constants/theme';
 
 const APP_VERSION = '1.0.0';
@@ -27,6 +31,17 @@ function trialDaysLeft(endsAt: string): string {
   if (days >= 2) return `${days} days`;
   if (days === 1) return '1 day';
   return 'a few hours';
+}
+
+/** Open an external support/legal link. A device with no mail app (or a
+ *  simulator) rejects mailto:, so fall back to showing the address rather than
+ *  letting the tap do nothing. */
+function openLink(url: string) {
+  Linking.openURL(url).catch(() => {
+    const msg = `Couldn't open that link. You can always reach us at ${SUPPORT_EMAIL}.`;
+    if (Platform.OS === 'web') window.alert(msg);
+    else Alert.alert('Link failed', msg);
+  });
 }
 
 interface Props {
@@ -164,6 +179,26 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
           {getAccentKey() === 'ember' ? ' (default)' : ''}
         </Text>
       </View>
+    </MotiView>
+  );
+
+  // Pre-filled so a support mail arrives with the three things we'd otherwise
+  // have to ask for in a round trip.
+  const supportMailto =
+    `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent('SaveHere support')}` +
+    `&body=${encodeURIComponent(`\n\n---\nApp ${APP_VERSION} · ${Platform.OS}\nAccount: ${email ?? '—'}`)}`;
+
+  const LinkRow = ({ icon, label, url, delay = 0 }: { icon: string; label: string; url: string; delay?: number }) => (
+    <MotiView
+      from={{ opacity: 0, translateX: 20 }}
+      animate={{ opacity: 1, translateX: 0 }}
+      transition={{ type: 'timing', delay, duration: 300 }}
+    >
+      <Pressable style={styles.row} onPress={() => openLink(url)} scaleTo={0.98}>
+        <Icon name={icon} size={18} color={colors.accentLight} />
+        <Text style={styles.rowLabel}>{label}</Text>
+        <Icon name="open-outline" size={14} color={colors.textTertiary} />
+      </Pressable>
     </MotiView>
   );
 
@@ -387,12 +422,28 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
           <Row icon="bell" label="Notifications" delay={1000} />
         </View>
 
+        {/* Support. Billing rows are Apple's pages on purpose — cancelling and
+            refunding an IAP is theirs to do, not ours. Everything else is ours. */}
+        <Text style={styles.sectionLabel}>SUPPORT</Text>
+        <View style={styles.menu}>
+          <LinkRow icon="information-circle" label="Help & FAQ" url={SUPPORT_URL} delay={1030} />
+          <LinkRow icon="mail" label="Contact support" url={supportMailto} delay={1050} />
+          <LinkRow icon="shield" label="Privacy Policy" url={PRIVACY_URL} delay={1100} />
+          <LinkRow icon="document-text" label="Terms of Use" url={TERMS_URL} delay={1150} />
+          {Platform.OS === 'ios' && (
+            <>
+              <LinkRow icon="repeat" label="Manage subscription" url={APPLE_SUBSCRIPTIONS_URL} delay={1200} />
+              <LinkRow icon="money" label="Refunds & billing" url={APPLE_REFUNDS_URL} delay={1250} />
+            </>
+          )}
+        </View>
+
         {/* Danger zone */}
         <Text style={styles.sectionLabel}>DANGER ZONE</Text>
         <MotiView
           from={{ opacity: 0, translateX: 20 }}
           animate={{ opacity: 1, translateX: 0 }}
-          transition={{ type: 'timing', delay: 1200, duration: 300 }}
+          transition={{ type: 'timing', delay: 1350, duration: 300 }}
         >
           <Pressable style={styles.dangerRow} onPress={() => setShowDeleteConfirm(true)} scaleTo={0.98}>
             <Icon name="trash" size={18} color={colors.danger} />

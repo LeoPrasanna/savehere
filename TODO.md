@@ -227,8 +227,40 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
 - [ ] **App Store description** — written, keyword-optimised, under 4000 characters.
 - [ ] **Keywords** — 100-character keyword field for App Store search ranking.
 - [ ] **Age rating** — complete the age rating questionnaire in App Store Connect (likely 4+).
-- [ ] **Privacy policy URL** — required for any app with network access. Host a simple one-page policy and add the URL to App Store Connect.
-- [ ] **Support URL** — a page or email address users can contact for help.
+- [x] **Privacy policy / Terms (EULA) / Support pages** — written from the actual data flows and hosted from this repo: `site/*.html` → GitHub Pages via `.github/workflows/pages.yml`. URLs live in one place, `mobile/constants/links.ts`, and are linked in-app from the Profile panel's SUPPORT section (Guideline 3.1.2 wants the EULA + privacy links in the binary, not just in metadata). The EULA includes Apple's ten required minimum terms. Apple's own pages are used only for subscription management and refunds, which is correct — apple.com/support as *our* Support URL is a Guideline 1.5 rejection.
+- [ ] **Enable GitHub Pages** — repo Settings → Pages → Source = "GitHub Actions", then confirm all three URLs load. Until this is done the links in the app 404, which App Review will hit.
+- [ ] **Create the support inbox** — `savehere.support@gmail.com` (the address baked into `links.ts` and the site) does not exist yet. Create it or change the constant; App Review mails it.
+- [ ] **Fill the legal blanks** — the pages say "SaveHere" as the operator and name India as governing law. Put the real legal entity/trading name and, if you incorporate, the registered address on both pages.
+- [ ] **Confirm the billing stack before publishing the EULA** — the terms name RevenueCat as a subprocessor and describe an auto-renewing monthly Pro subscription. If you ship pure StoreKit, or the price/period changes, edit `site/terms.html` §6 and `site/privacy.html` §4 to match. A policy that contradicts the App Privacy questionnaire is its own rejection.
+- [ ] **Make the login/onboarding legal text tappable** — `LoginScreen.tsx` and `OnboardingModal.tsx` say "Terms and Privacy Policy" as plain text. Point them at `TERMS_URL` / `PRIVACY_URL`.
+- [ ] **App Privacy questionnaire** — answer it from `site/privacy.html` so the two agree. Collected & linked to the user: email, name (optional), user content (saved links, notes, AI output), product interaction (AI action counts). Tracking: **none** *while ads are non-personalized* — see the ads plan below; enabling personalization flips this answer and makes an ATT prompt mandatory.
+
+### Free-tier ads — see [`docs/ADS.md`](docs/ADS.md) for the full plan
+
+Owner decision 2026-07-29: the free tier earns **individual Pro actions** by watching
+a rewarded ad ("Watch an ad to create the workout"). Locked choices: Google AdMob via
+`react-native-google-mobile-ads`, **rewarded video only** (no banners, no interstitials),
+**non-personalized**, free tier only, **capped at 2 unlocks/day**, server-verified.
+
+⚠️ **Unit economics — this is why the cap exists.** A Haiku 4.5 workout/recipe call costs
+~$0.006–0.008 ($1/MTok in, $5/MTok out, `max_tokens` 1000–1400). A rewarded view pays
+~$0.01–0.03 in the US but only ~$0.002–0.006 in India. **In our primary market each
+ad-unlocked action is net negative.** Treat this as a Pro sampler and upsell trigger, not
+a revenue line. Uncapped it is both an unbounded subsidy and a replacement for the
+subscription it exists to sell.
+
+- [ ] **Native/dev build working** — the ad SDK cannot run in Expo Go. This gates every other ads task.
+- [ ] **AdMob account** — app registered, tax/payment details completed, one iOS **rewarded** ad unit created, **server-side verification enabled** with our callback URL.
+- [ ] **`app-ads.txt` at the developer-site root** — AdMob crawls the root of the domain on the App Store listing, i.e. `leoprasanna.github.io/app-ads.txt`, which the `savehere` repo does not control. Fix by creating a `leoprasanna.github.io` repo **or** buying the domain (now the better option — one purchase covers support URL + app-ads.txt + marketing URL). Missing/invalid = most programmatic demand won't bid.
+- [ ] **Backend: `ad_credits` table + `POST /api/ads/reward` (SSV callback)** — **build this first.** Google calls it, not the app; verify the signature against Google's public keys, key idempotency on `transaction_id`, refuse past the daily cap. A client-asserted "I watched it" endpoint is spoofable with a proxy and hands out unlimited Pro.
+- [ ] **Entitlement seam** — when `entitlements_for()` denies a free user a derived action, try `spend_ad_credit()` before returning 403. The ad buys past the *feature* gate only; `charge_ai_action()` still runs. Atomic/race-safe like `app/quota.py`.
+- [ ] **Expose credits in `/api/account/usage`** — `ad_credits: {earned, spent, limit}` so the UI can say "1 free unlock left today" without guessing.
+- [ ] **UMP consent before `mobileAds().initialize()`** — required for EEA/UK traffic by Google's EU user consent policy regardless of personalization. Wrong order = a CMP integration that looks fine and isn't compliant.
+- [ ] **`useAdUnlock()` — preload + all seven button states** — preload on screen mount (rewarded ads take 2–10s); Pro/trial never see the offer; never guess before tier loads; **no-fill must degrade to a message + upsell, not hang** (fill in India is materially worse than the US); cap-reached state is the upsell moment.
+- [ ] **`custom_data` = Supabase user id on every ad request** — that's how the SSV callback knows who to credit.
+- [ ] **Test ad unit IDs in dev and TestFlight** — completing a live rewarded ad during QA is invalid traffic; that terminates the AdMob account with earnings forfeited.
+- [ ] **Rewrite the "no advertising" claims** — `site/privacy.html` has five statements that ads would make false (plus a new Advertising section and Google/AdMob in the subprocessor table), and `site/index.html` has one. **These ship in the same release as the SDK — not before, not after.**
+- [ ] **Add the ad-unlock mechanic + cap to `site/terms.html`** §6/§7, and "no ads, unlimited derived actions" to the Pro benefits and paywall copy.
 - [ ] **EAS Build setup** — configure `eas.json` with `production` profile, bundle ID (`com.yourname.savehere`), Apple signing certificate and provisioning profile.
 - [ ] **TestFlight beta** — distribute to testers via TestFlight before submitting for review.
 
