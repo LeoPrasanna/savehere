@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from datetime import datetime
+from datetime import datetime, date, timedelta
 
 from app.database import get_db, ReelDB, TodoDB
 from app.routes.models.todo import (
-    TodoResponse, TodoListResponse, CreateTodoRequest,
-    CreateTodoFromReelRequest, UpdateTodoRequest,
+    TodoResponse, TodoListResponse, TodoStats, ReelTodoResponse,
+    CreateTodoRequest, CreateTodoFromReelRequest, UpdateTodoRequest,
 )
 from app.ratelimit import rate_limit
 from app.auth import get_current_user, AuthUser
@@ -60,6 +60,27 @@ def _sort_key(t: TodoDB):
     )
 
 
+PAST_DUE_DETAIL = "A to-do can't be due in the past — pick today or a later date."
+
+
+def _reject_past_due(due: date | None) -> None:
+    """A new due date must not be in the past.
+
+    ⚠️ The one-day slack is deliberate, not sloppiness. The client sends a date
+    in ITS OWN calendar, and local dates span UTC-12 to UTC+14 — so a user in
+    Honolulu setting "today" legitimately sends what is already *yesterday* in
+    UTC. Comparing strictly against the UTC date would reject valid input for
+    every negative-offset timezone. One day is the smallest window that cannot
+    produce a false rejection.
+
+    The precise rule is enforced where the calendar actually is: the picker
+    disables past days against the device clock. This is the backstop that
+    stops a hand-crafted request, not the primary UX gate.
+    """
+    if due is not None and due < datetime.utcnow().date() - timedelta(days=1):
+        raise HTTPException(status_code=422, detail=PAST_DUE_DETAIL)
+
+
 def _summary_as_description(reel: ReelDB) -> str | None:
     """The reel's bullet summary flattened into the todo's description, so the
     todo still says what the save was about after the reel is gone."""
@@ -76,17 +97,43 @@ def list_todos(include_completed: bool = False,
     """The whole open list in one call — the client buckets it into
     overdue/today/upcoming/someday against the DEVICE's clock, because "today"
     is local and this server is UTC."""
-    q = db.query(TodoDB).filter(TodoDB.user_id == user.id)
-    if not include_completed:
-        q = q.filter(TodoDB.completed == False)  # noqa: E712 — SQL, not Python truthiness
-    items = sorted(q.all(), key=_sort_key)
-    return TodoListResponse(total=len(items), items=[_to_response(t) for t in items])
+    all_rows = db.query(TodoDB).filter(TodoDB.user_id == user.id).all()
+    done = sum(1 for t in all_rows if t.completed)
+    stats = TodoStats(total=len(all_rows), open=len(all_rows) - done, completed=done)
+
+    rows = all_rows if include_completed else [t for t in all_rows if not t.completed]
+    items = sorted(rows, key=_sort_key)
+    return TodoListResponse(
+        total=len(items),
+        items=[_to_response(t) for t in items],
+        stats=stats,
+    )
+
+
+@router.get("/reels/{reel_id}/todo", response_model=ReelTodoResponse)
+def get_reel_todo(reel_id: str, user: AuthUser = Depends(get_current_user),
+                  db: Session = Depends(get_db)):
+    """Whether this save already has an open to-do — drives the disabled state of
+    the reel screen's "Add to to-do" button. Scoped to the caller, so probing
+    someone else's reel id just reports nothing rather than confirming it exists."""
+    rows = (
+        db.query(TodoDB)
+        .filter(TodoDB.user_id == user.id, TodoDB.reel_id == reel_id)
+        .all()
+    )
+    open_rows = sorted([t for t in rows if not t.completed], key=_sort_key)
+    return ReelTodoResponse(
+        reel_id=reel_id,
+        open_todo=_to_response(open_rows[0]) if open_rows else None,
+        completed_count=sum(1 for t in rows if t.completed),
+    )
 
 
 @router.post("/todos", response_model=TodoResponse,
              dependencies=[Depends(rate_limit(60, 60, "todo_create"))])
 def create_todo(body: CreateTodoRequest,
                 user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    _reject_past_due(body.due_date)
     _assert_under_cap(user, db)
     todo = TodoDB(
         user_id=user.id,
@@ -111,6 +158,7 @@ def create_todo_from_reel(reel_id: str, body: CreateTodoFromReelRequest,
     reel = db.query(ReelDB).filter(ReelDB.id == reel_id, ReelDB.user_id == user.id).first()
     if not reel:
         raise HTTPException(status_code=404, detail="Reel not found")
+    _reject_past_due(body.due_date)
     _assert_under_cap(user, db)
 
     title = (body.title or reel.title or "Saved reel").strip()[:200]
@@ -143,7 +191,11 @@ def update_todo(todo_id: str, body: UpdateTodoRequest,
         todo.priority = body.priority
     if body.clear_due_date:
         todo.due_date = None
-    elif body.due_date is not None:
+    elif body.due_date is not None and body.due_date != todo.due_date:
+        # Only validated when the date actually CHANGES. Otherwise renaming a
+        # task that has already slipped past its date would be impossible —
+        # the client round-trips the existing (now past) due_date on every edit.
+        _reject_past_due(body.due_date)
         todo.due_date = body.due_date
 
     if body.completed is not None and bool(todo.completed) != body.completed:

@@ -1,14 +1,16 @@
 import { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Modal } from 'react-native';
+import { useRouter, useFocusEffect, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
-import { api, Todo } from '../services/api';
+import { api, Todo, TodoStats } from '../services/api';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { TodoEditor } from '../components/TodoEditor';
+import { RollingTagline } from '../components/RollingTagline';
 import { bucketOf, formatDue, Bucket } from '../services/todoDates';
+import { TODO_BRAND, TODO_QUOTES } from '../constants/todoBrand';
 import * as haptics from '../services/haptics';
 import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
 
@@ -26,6 +28,15 @@ const SECTIONS: { key: Bucket; label: string }[] = [
   { key: 'upcoming', label: 'UPCOMING' },
   { key: 'someday', label: 'SOMEDAY' },
 ];
+
+function StatTile({ label, value, tint }: { label: string; value: number; tint?: string }) {
+  return (
+    <View style={styles.stat}>
+      <Text style={[styles.statValue, tint ? { color: tint } : null]}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
 
 function TodoRow({ todo, onToggle, onEdit, onOpenReel, onDelete }: {
   todo: Todo;
@@ -71,19 +82,25 @@ function TodoRow({ todo, onToggle, onEdit, onOpenReel, onDelete }: {
 
 export default function TodosScreen() {
   const router = useRouter();
+  const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [stats, setStats] = useState<TodoStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Todo | null>(null);
+  // Set when a reel-linked task is completed: the "delete the saved card?" ask.
+  const [finished, setFinished] = useState<Todo | null>(null);
+  const [deletingReel, setDeletingReel] = useState(false);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
       const d = await api.listTodos();
       setTodos(d.items);
+      setStats(d.stats);
       setError(null);
     } catch (e: any) {
       setError(e?.message || "Couldn't load your list.");
@@ -93,7 +110,10 @@ export default function TodosScreen() {
     }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  useFocusEffect(useCallback(() => {
+    navigation.setOptions({ title: TODO_BRAND });
+    load();
+  }, [load, navigation]));
 
   const toggle = async (todo: Todo) => {
     const next = !todo.completed;
@@ -101,12 +121,34 @@ export default function TodosScreen() {
     // the undo. It drops off the list on the next load, which is the natural
     // moment for it to disappear.
     setTodos(ts => ts.map(t => (t.id === todo.id ? { ...t, completed: next } : t)));
+    setStats(s => s && { ...s, open: s.open + (next ? -1 : 1), completed: s.completed + (next ? 1 : -1) });
     next ? haptics.success() : haptics.tap();
     try {
       await api.updateTodo(todo.id, { completed: next });
+      // Only on the way TO done, and only when there's actually a save to act on.
+      if (next && todo.reel_id) setFinished({ ...todo, completed: true });
     } catch (e: any) {
       setTodos(ts => ts.map(t => (t.id === todo.id ? { ...t, completed: !next } : t)));
+      setStats(s => s && { ...s, open: s.open + (next ? 1 : -1), completed: s.completed + (next ? -1 : 1) });
       setError(e?.message || "Couldn't update that.");
+    }
+  };
+
+  /** "Yes, delete the saved card." The task itself survives — the server
+   *  unlinks it rather than cascading, so the record of what you did remains. */
+  const deleteLinkedReel = async () => {
+    if (!finished?.reel_id) return;
+    setDeletingReel(true);
+    try {
+      await api.deleteReel(finished.reel_id);
+      haptics.warning();
+      setFinished(null);
+      load();
+    } catch (e: any) {
+      setError(e?.message || "Couldn't delete that save.");
+      setFinished(null);
+    } finally {
+      setDeletingReel(false);
     }
   };
 
@@ -138,6 +180,10 @@ export default function TodosScreen() {
     .map(s => ({ ...s, items: todos.filter(t => bucketOf(t.due_date) === s.key) }))
     .filter(s => s.items.length > 0);
 
+  // Computed here, not server-side: "overdue" depends on the DEVICE's calendar
+  // day, and a UTC-derived count would disagree with the sections below it.
+  const overdueCount = todos.filter(t => !t.completed && bucketOf(t.due_date) === 'overdue').length;
+
   if (loading) {
     return <View style={styles.center}><ActivityIndicator color={colors.accent} size="large" /></View>;
   }
@@ -159,6 +205,20 @@ export default function TodosScreen() {
           />
         }
       >
+        {/* ── Dashboard: where you stand, plus something worth reading ──── */}
+        <View style={styles.dash}>
+          <View style={styles.statRow}>
+            <StatTile label="OPEN" value={stats?.open ?? 0} />
+            <StatTile label="DONE" value={stats?.completed ?? 0} tint={colors.success} />
+            <StatTile
+              label="OVERDUE"
+              value={overdueCount}
+              tint={overdueCount > 0 ? colors.danger : undefined}
+            />
+          </View>
+          <RollingTagline compact lines={TODO_QUOTES} style={styles.quotes} />
+        </View>
+
         {error && (
           <Pressable style={styles.errorBanner} onPress={() => load()} scaleTo={0.99}>
             <Icon name="alert-circle" size={14} color={colors.danger} />
@@ -169,10 +229,10 @@ export default function TodosScreen() {
         {todos.length === 0 && !error ? (
           <View style={styles.empty}>
             <Icon name="checkbox" size={44} color={colors.textTertiary} />
-            <Text style={styles.emptyTitle}>Nothing on your list</Text>
+            <Text style={styles.emptyTitle}>Nothing to follow through on</Text>
             <Text style={styles.emptyText}>
-              Add something you want to get done — or open a save and tap “Add to to-do” to
-              turn it into a real plan.
+              Add something you want to get done — or open a save and tap “Add to {TODO_BRAND}”
+              to turn it into a real plan.
             </Text>
           </View>
         ) : (
@@ -209,7 +269,7 @@ export default function TodosScreen() {
         <Pressable style={styles.addWrap} onPress={openNew} scaleTo={0.97}>
           <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.addBtn}>
             <Icon name="add" size={18} color="#FFF" />
-            <Text style={styles.addText}>New to-do</Text>
+            <Text style={styles.addText}>New task</Text>
           </LinearGradient>
         </Pressable>
       </View>
@@ -220,6 +280,42 @@ export default function TodosScreen() {
         onClose={() => { setEditorOpen(false); setEditing(null); }}
         onSaved={onSaved}
       />
+
+      {/* ── Done → keep or delete the save it came from ────────────────────
+          "Keep it" is the primary action and the only thing a stray tap can
+          reach: deleting a reel cascades to its summary, notes, tasks, workout
+          and itinerary, and there is no trash to recover it from. The delete
+          button is styled as the destructive secondary and says what is lost. */}
+      <Modal visible={!!finished} transparent animationType="fade" onRequestClose={() => setFinished(null)} statusBarTranslucent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIcon}>
+              <Icon name="celebrate" size={26} color={colors.success} />
+            </View>
+            <Text style={styles.modalTitle}>Done — nice one.</Text>
+            <Text style={styles.modalBody} numberOfLines={3}>“{finished?.title}”</Text>
+            <Text style={styles.modalAsk}>
+              You've followed through on this one. Want to clear the saved card out of your
+              library too?
+            </Text>
+            <Text style={styles.modalWarn}>
+              Deleting also removes its summary, notes, any generated steps or workout — and
+              it can't be undone. Your completed task stays either way.
+            </Text>
+
+            <Pressable style={styles.keepWrap} onPress={() => setFinished(null)} scaleTo={0.97}>
+              <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.keepBtn}>
+                <Text style={styles.keepText}>Keep the save</Text>
+              </LinearGradient>
+            </Pressable>
+            <Pressable style={styles.dangerBtn} onPress={deleteLinkedReel} scaleTo={0.97} disabled={deletingReel}>
+              {deletingReel
+                ? <ActivityIndicator color={colors.danger} size="small" />
+                : <Text style={styles.dangerText}>Delete the saved card</Text>}
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -228,6 +324,48 @@ const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.lg, flexGrow: 1 },
+
+  // ── Dashboard header ────────────────────────────────────────────────
+  dash: {
+    backgroundColor: colors.card, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.border,
+    padding: spacing.md, gap: spacing.sm,
+  },
+  statRow: { flexDirection: 'row' },
+  stat: { flex: 1, alignItems: 'center', gap: 2 },
+  statValue: { color: colors.textPrimary, fontSize: font.xxl, fontWeight: '800', lineHeight: 34 },
+  statLabel: { color: colors.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 1.1 },
+  quotes: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.xs },
+
+  // ── Completion prompt ───────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.68)',
+    alignItems: 'center', justifyContent: 'center', padding: spacing.lg,
+  },
+  modalCard: {
+    width: '100%', maxWidth: 420,
+    backgroundColor: colors.surface, borderRadius: radius.lg,
+    borderWidth: 1, borderColor: colors.border, padding: spacing.lg,
+    alignItems: 'center', gap: spacing.sm, ...shadow.md,
+  },
+  modalIcon: {
+    width: 54, height: 54, borderRadius: radius.full,
+    backgroundColor: colors.success + '1E',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  modalTitle: { color: colors.textPrimary, fontSize: font.xl, fontWeight: '800', textAlign: 'center' },
+  modalBody: { color: colors.textSecondary, fontSize: font.sm, textAlign: 'center', fontStyle: 'italic' },
+  modalAsk: { color: colors.textPrimary, fontSize: font.sm, lineHeight: 21, textAlign: 'center', marginTop: spacing.xs },
+  modalWarn: { color: colors.textTertiary, fontSize: font.xs, lineHeight: 17, textAlign: 'center' },
+  keepWrap: { width: '100%', borderRadius: radius.md, marginTop: spacing.sm },
+  keepBtn: { borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
+  keepText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
+  dangerBtn: {
+    width: '100%', borderRadius: radius.md, paddingVertical: spacing.sm + 4,
+    alignItems: 'center', justifyContent: 'center', minHeight: 44,
+    borderWidth: 1, borderColor: colors.danger + '55',
+  },
+  dangerText: { color: colors.danger, fontSize: font.sm, fontWeight: '700' },
 
   errorBanner: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,

@@ -27,16 +27,28 @@ export const APP_TAGLINES = [
 
 const INTERVAL_MS = 4000;
 
-export function RollingTagline({ style }: { style?: StyleProp<ViewStyle> }) {
+interface Props {
+  style?: StyleProp<ViewStyle>;
+  /** Override the copy — e.g. the to-do dashboard rolls quotes through the same
+   *  animation. Defaults to the app taglines used on login/landing. */
+  lines?: readonly string[];
+  /** Small variant for denser surfaces (the to-do header). */
+  compact?: boolean;
+}
+
+export function RollingTagline({ style, lines = APP_TAGLINES, compact }: Props) {
   // Start on a random line so it feels fresh each open, then advance one at a time.
-  const [i, setI] = useState(() => Math.floor(Math.random() * APP_TAGLINES.length));
+  const [i, setI] = useState(() => Math.floor(Math.random() * lines.length));
   useEffect(() => {
-    const t = setInterval(() => setI(n => (n + 1) % APP_TAGLINES.length), INTERVAL_MS);
+    const t = setInterval(() => setI(n => (n + 1) % lines.length), INTERVAL_MS);
     return () => clearInterval(t);
-  }, []);
+  }, [lines.length]);
+
+  // A shorter list swapped in after mount could leave the index out of range.
+  const line = lines[i % lines.length];
 
   return (
-    <View style={[styles.viewport, style]}>
+    <View style={[styles.viewport, compact && styles.viewportCompact, style]}>
       <AnimatePresence>
         <MotiView
           key={i}
@@ -46,7 +58,7 @@ export function RollingTagline({ style }: { style?: StyleProp<ViewStyle> }) {
           exit={{ opacity: 0, translateY: -22, scale: 0.94 }}
           transition={{ type: 'timing', duration: 600 }}
         >
-          <Text style={styles.text}>{APP_TAGLINES[i]}</Text>
+          <Text style={[styles.text, compact && styles.textCompact]}>{line}</Text>
         </MotiView>
       </AnimatePresence>
     </View>
@@ -55,6 +67,8 @@ export function RollingTagline({ style }: { style?: StyleProp<ViewStyle> }) {
 
 const styles = themed(() => StyleSheet.create({
   viewport: { height: 52, overflow: 'hidden', alignSelf: 'stretch' },
+  viewportCompact: { height: 42 },
+  textCompact: { fontSize: font.sm, lineHeight: 18, fontStyle: 'italic', fontWeight: '500' },
   slot: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     alignItems: 'center', justifyContent: 'center',
