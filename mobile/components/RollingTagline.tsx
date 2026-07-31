@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { MotiView, AnimatePresence } from 'moti';
 import { colors, spacing, font, themed } from '../constants/theme';
@@ -45,18 +45,58 @@ interface Props {
   numberOfLines?: number;
   /** Left-align instead of centring — for a line that sits beside fixed text. */
   alignLeft?: boolean;
+  /** Random order instead of walking the list top to bottom. */
+  shuffle?: boolean;
+}
+
+/**
+ * A shuffle BAG, not `Math.random()` per tick.
+ *
+ * Picking independently at random would repeat lines back-to-back and leave
+ * others unseen for ages — which reads as broken, not random. Dealing a fresh
+ * permutation and walking it means every line shows once per cycle, in an order
+ * that changes each pass. `avoidFirst` stops a new deal from opening on the
+ * line the previous one just closed with, which is the one repeat a bag can
+ * still produce.
+ */
+function shuffledIndices(n: number, avoidFirst?: number): number[] {
+  const a = Array.from({ length: n }, (_, i) => i);
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  if (n > 1 && avoidFirst !== undefined && a[0] === avoidFirst) {
+    [a[0], a[1]] = [a[1], a[0]];
+  }
+  return a;
 }
 
 export function RollingTagline({
   style, lines = APP_TAGLINES, compact, textStyle, height,
-  intervalMs = INTERVAL_MS, numberOfLines, alignLeft,
+  intervalMs = INTERVAL_MS, numberOfLines, alignLeft, shuffle,
 }: Props) {
-  // Start on a random line so it feels fresh each open, then advance one at a time.
+  // Start on a random line so it feels fresh each open.
   const [i, setI] = useState(() => Math.floor(Math.random() * lines.length));
+
+  const bag = useRef<number[]>([]);
+  const pos = useRef(0);
+
   useEffect(() => {
-    const t = setInterval(() => setI(n => (n + 1) % lines.length), intervalMs);
+    // A changed list invalidates the current deal.
+    bag.current = [];
+    pos.current = 0;
+    const t = setInterval(() => setI(current => {
+      const len = lines.length;
+      if (len <= 1) return 0;
+      if (!shuffle) return (current + 1) % len;
+      if (pos.current >= bag.current.length) {
+        bag.current = shuffledIndices(len, current);
+        pos.current = 0;
+      }
+      return bag.current[pos.current++];
+    }), intervalMs);
     return () => clearInterval(t);
-  }, [lines.length, intervalMs]);
+  }, [lines.length, intervalMs, shuffle]);
 
   // A shorter list swapped in after mount could leave the index out of range.
   const line = lines[i % lines.length];

@@ -436,6 +436,7 @@ export default function TodosScreen() {
             intervalMs={5200}
             numberOfLines={1}
             alignLeft
+            shuffle
             textStyle={styles.heroText}
             style={styles.heroRoll}
           />
@@ -457,7 +458,7 @@ export default function TodosScreen() {
               tint={overdueCount > 0 ? colors.danger : undefined}
             />
           </View>
-          <RollingTagline compact lines={TODO_QUOTES} style={styles.quotes} />
+          <RollingTagline compact shuffle lines={TODO_QUOTES} style={styles.quotes} />
         </View>
 
         {error && (
