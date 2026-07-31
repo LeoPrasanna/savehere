@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { useRouter, useFocusEffect, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,6 +35,12 @@ const SECTIONS: { key: Bucket; label: string }[] = [
   { key: 'upcoming', label: 'UPCOMING' },
   { key: 'someday', label: 'SOMEDAY' },
 ];
+
+/** How long a deleted task can be taken back. Long enough to notice and react,
+ *  short enough that the bar isn't loitering over the list. */
+const UNDO_MS = 2000;
+/** Clears the New task bar (its 50px button plus the bar's own padding). */
+const UNDO_ABOVE_BAR = 74;
 
 /** Only the name + emoji rolls — "My" is fixed beside it, so it reads as one
  *  steady phrase with a changing tail rather than the whole title flickering. */
@@ -160,6 +166,10 @@ export default function TodosScreen() {
   const [editing, setEditing] = useState<Todo | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  // Declared up here because load() reads it — see the delete/undo block below
+  // for what it's for.
+  const pending = useRef<{ todo: Todo; timer: ReturnType<typeof setTimeout> } | null>(null);
+  const [undoFor, setUndoFor] = useState<Todo | null>(null);
   // Only for the profile panel's "saves" counter. Fetched when the panel opens
   // rather than on mount — this screen otherwise has no reason to touch reels.
   const [reelTotal, setReelTotal] = useState<number | undefined>(undefined);
@@ -174,7 +184,10 @@ export default function TodosScreen() {
       // The device's own date decides what "today" means for the goal — see
       // services/todoSettings.ts and the completed_on column.
       const d = await api.listTodos(settings.showCompleted, todayISO());
-      setTodos(d.items);
+      // A refresh inside the undo window would otherwise resurrect the row the
+      // user just deleted — the server hasn't been told yet, by design.
+      const dropped = pending.current?.todo.id;
+      setTodos(dropped ? d.items.filter(t => t.id !== dropped) : d.items);
       setStats(d.stats);
       setError(null);
     } catch (e: any) {
@@ -276,16 +289,73 @@ export default function TodosScreen() {
     }
   };
 
-  const remove = async (todo: Todo) => {
-    const before = todos;
+  /**
+   * Delete with a 2-second window to take it back.
+   *
+   * The row vanishes instantly but the DELETE is DEFERRED, not sent-and-undone:
+   * undoing is then a cancelled timer rather than a re-create, so the task keeps
+   * its id, its creation date and its completion stamp. Re-creating would mint a
+   * new row and silently rewrite that history.
+   *
+   * Leaving the screen with one still pending commits it immediately (see the
+   * unmount effect) — the user did ask for it; only the grace period is lost.
+   */
+
+  const commitDelete = useCallback((id: string) => {
+    api.deleteTodo(id).catch(() => {/* best effort; the row is already gone */});
+  }, []);
+
+  const flushPending = useCallback(() => {
+    if (!pending.current) return;
+    clearTimeout(pending.current.timer);
+    commitDelete(pending.current.todo.id);
+    pending.current = null;
+  }, [commitDelete]);
+
+  // Anything still in the grace window when the screen goes away gets committed.
+  useEffect(() => flushPending, [flushPending]);
+
+  const remove = (todo: Todo) => {
+    // A second delete inside the window commits the first — one undo slot keeps
+    // the interaction honest instead of stacking toasts nobody reads.
+    flushPending();
     setTodos(ts => ts.filter(t => t.id !== todo.id));
+    setStats(s => s && {
+      ...s,
+      total: Math.max(0, s.total - 1),
+      open: todo.completed ? s.open : Math.max(0, s.open - 1),
+      completed: todo.completed ? Math.max(0, s.completed - 1) : s.completed,
+    });
     haptics.warning();
-    try {
-      await api.deleteTodo(todo.id);
-    } catch (e: any) {
-      setTodos(before);
-      setError(e?.message || "Couldn't delete that.");
-    }
+    setUndoFor(todo);
+
+    const timer = setTimeout(() => {
+      commitDelete(todo.id);
+      pending.current = null;
+      setUndoFor(null);
+    }, UNDO_MS);
+    pending.current = { todo, timer };
+  };
+
+  const undoDelete = () => {
+    if (!pending.current) return;
+    clearTimeout(pending.current.timer);
+    const { todo } = pending.current;
+    pending.current = null;
+    setUndoFor(null);
+    haptics.tap();
+    // Back instantly so the undo feels immediate…
+    setTodos(ts => [...ts, todo]);
+    setStats(s => s && {
+      ...s,
+      total: s.total + 1,
+      open: todo.completed ? s.open : s.open + 1,
+      completed: todo.completed ? s.completed + 1 : s.completed,
+    });
+    // …then a quiet refetch restores its real position. Sorting locally would
+    // mean a second copy of the server's date-then-priority rule, which is
+    // exactly the kind of duplicate that drifts.
+    load();
   };
 
   const onSaved = (saved: Todo) => {
@@ -332,35 +402,34 @@ export default function TodosScreen() {
           />
         }
       >
-        {/* ── Quick nav. Home and Library sit together as a pair (they're the
-            two places you'd leave for); the hamburger keeps its own slot. The
-            stack header's own Home button is suppressed below so there aren't
-            two of them on one screen. ── */}
-        <View style={styles.navRow}>
-          <View style={styles.navPair}>
-            <Pressable style={styles.navBtn} onPress={goHome} scaleTo={0.94} hitSlop={6}>
-              <Icon name="home" size={16} color={colors.textPrimary} />
-              <Text style={styles.navBtnText}>Home</Text>
-            </Pressable>
-            <View style={styles.navSplit} />
-            <Pressable style={styles.navBtn} onPress={openLibrary} scaleTo={0.94} hitSlop={6}>
-              <Icon name="bookmark" size={16} color={colors.textPrimary} />
-              <Text style={styles.navBtnText}>Library</Text>
-            </Pressable>
-          </View>
-          <View style={{ flex: 1 }} />
-          <Pressable style={styles.iconBtn} onPress={openPanel} scaleTo={0.9} hitSlop={8}>
-            <Icon name="menu" size={18} color={colors.textPrimary} />
+        {/* ── Header actions. Same trio the Library screen uses (index.tsx):
+            two hairline circles around one gradient circle, so this page reads
+            as part of the app rather than its own thing. The centre slot holds
+            whatever that screen's primary destination is — Save uses "+", this
+            one uses the Library mark. ── */}
+        <View style={styles.headerActions}>
+          <Pressable style={styles.menuBtn} onPress={goHome} scaleTo={0.9}>
+            <Icon name="home" size={20} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable style={styles.saveBtnWrap} onPress={openLibrary} scaleTo={0.9}>
+            <LinearGradient
+              colors={gradients.primary}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={styles.saveBtn}
+            >
+              <Icon name="bookmark" size={19} color="#FFF" />
+            </LinearGradient>
+          </Pressable>
+          <Pressable style={styles.menuBtn} onPress={openPanel} scaleTo={0.9}>
+            <Icon name="menu" size={20} color={colors.textPrimary} />
           </Pressable>
         </View>
 
-        {/* ── Hero: "MY" in the accent colour, the rolling name right beside it.
-            Inline (owner) — so the pair owns a full row on its own and the
-            rolling half is clamped to one line. The longest names still just
-            fit at this size; anything longer would ellipsize rather than wrap
-            out of the viewport. ── */}
+        {/* ── Hero: "My" — big M, smaller y — then the rolling name. Nested
+            <Text> rather than two siblings, so the two sizes share one baseline
+            automatically instead of being nudged into alignment by hand. ── */}
         <View style={styles.heroRow}>
-          <Text style={styles.heroFixed}>MY</Text>
+          <Text style={styles.heroM}>M<Text style={styles.heroY}>y</Text></Text>
           <RollingTagline
             lines={ROLL_LINES}
             height={34}
@@ -436,6 +505,33 @@ export default function TodosScreen() {
           ))
         )}
       </ScrollView>
+
+      {/* ── Undo bar. Sits above the New task button and rises from beneath
+          it, so it reads as coming from the bar rather than dropping over the
+          list. Works for completed and incomplete tasks alike. ── */}
+      <AnimatePresence>
+        {undoFor && (
+          <MotiView
+            key="undo"
+            from={{ opacity: 0, translateY: 48 }}
+            animate={{ opacity: 1, translateY: 0 }}
+            exit={{ opacity: 0, translateY: 48 }}
+            transition={{ type: 'timing', duration: 240 }}
+            style={[styles.undoWrap, { bottom: insets.bottom + UNDO_ABOVE_BAR }]}
+            pointerEvents="box-none"
+          >
+            <View style={styles.undoBar}>
+              <Icon name="trash" size={14} color={colors.textSecondary} />
+              <Text style={styles.undoText} numberOfLines={1}>
+                Deleted “{undoFor.title}”
+              </Text>
+              <Pressable onPress={undoDelete} scaleTo={0.94} hitSlop={8} style={styles.undoBtn}>
+                <Text style={styles.undoBtnText}>Undo</Text>
+              </Pressable>
+            </View>
+          </MotiView>
+        )}
+      </AnimatePresence>
 
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.sm }]}>
         <Pressable style={styles.addWrap} onPress={openNew} scaleTo={0.97}>
@@ -515,42 +611,38 @@ const styles = themed(() => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.lg, flexGrow: 1 },
 
-  // ── Quick nav ───────────────────────────────────────────────────────
-  navRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // Home and Library share one pill with a hairline between them, so they read
-  // as a pair of related destinations rather than two unrelated buttons.
-  navPair: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.card, borderRadius: radius.full,
+  // ── Header actions — copied from the Library screen's header so the two
+  // pages share one visual language. Keep in sync with app/index.tsx.
+  headerActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm },
+  saveBtnWrap: { borderRadius: radius.full, ...shadow.glow },
+  saveBtn: {
+    width: 38, height: 38, borderRadius: radius.full,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  menuBtn: {
+    width: 38, height: 38, borderRadius: radius.full,
+    backgroundColor: colors.card,
     borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
   },
-  navBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: spacing.md, paddingVertical: 9,
-  },
-  navBtnText: { color: colors.textPrimary, fontSize: font.xs, fontWeight: '700' },
-  navSplit: { width: 1, height: 18, backgroundColor: colors.border },
 
   // ── Hero ────────────────────────────────────────────────────────────
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // Accent-coloured, so it tracks whichever Appearance theme is active.
-  heroFixed: {
-    color: colors.accent, fontSize: font.xxl,
-    fontWeight: '800', letterSpacing: 0.5, lineHeight: 34,
+  heroM: {
+    color: colors.accent, fontSize: font.display,
+    fontWeight: '800', letterSpacing: -0.5, lineHeight: 38,
   },
+  heroY: { fontSize: font.xl },
   heroRoll: { flex: 1, alignSelf: 'auto' },
-  // A notch smaller than "MY" deliberately. Inline means the rolling half only
-  // gets the row minus "MY", and the longest entries ("Program of Entertainment
-  // 🎪", "Things as They Happened ⏳") would ellipsize at 28px on a narrow
-  // phone. 22 keeps every name whole while "MY" still anchors the line.
+  // A notch smaller than the "M" deliberately. Inline means the rolling half
+  // only gets the row minus "My", and the longest entries ("Program of
+  // Entertainment 🎪", "Things as They Happened ⏳") would ellipsize at display
+  // size on a narrow phone. This keeps every name whole while "My" still
+  // anchors the line.
   heroText: {
     fontSize: font.xl, fontWeight: '800', color: colors.textPrimary,
     textAlign: 'left', paddingHorizontal: 0, lineHeight: 30, fontStyle: 'normal',
-  },
-  iconBtn: {
-    width: 38, height: 38, borderRadius: radius.full,
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
   },
   gearBtn: {
     width: 50, height: 50, borderRadius: radius.md,
@@ -654,6 +746,24 @@ const styles = themed(() => StyleSheet.create({
   sourceText: { color: colors.accentLight, fontSize: 10, fontWeight: '700' },
 
   del: { paddingTop: 2 },
+
+  // ── Undo bar ────────────────────────────────────────────────────────
+  undoWrap: { position: 'absolute', left: 0, right: 0, paddingHorizontal: spacing.lg },
+  undoBar: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    // Accent-tinted rather than a flat grey slab: the light highlight is what
+    // makes it register as "something just happened, you can still act".
+    backgroundColor: colors.cardElevated,
+    borderRadius: radius.md, borderWidth: 1, borderColor: colors.accent + '55',
+    paddingLeft: spacing.md, paddingRight: spacing.xs, paddingVertical: spacing.sm,
+    ...shadow.md,
+  },
+  undoText: { flex: 1, color: colors.textSecondary, fontSize: font.xs },
+  undoBtn: {
+    paddingHorizontal: spacing.md, paddingVertical: 6,
+    borderRadius: radius.full, backgroundColor: colors.accent + '22',
+  },
+  undoBtnText: { color: colors.accentLight, fontSize: font.xs, fontWeight: '800' },
 
   bottomBar: {
     position: 'absolute', left: 0, right: 0, bottom: 0,

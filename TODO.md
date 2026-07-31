@@ -297,6 +297,21 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
   distraction. ⚠️ `openLibrary` must call `markEnteredLibrary()` before navigating: `/`
   renders the landing page OR the library off that flag, so without it the Library button
   would land on the greeting.
+- [x] **To-do header consistency + undo-delete (2026-07-31)**
+  1. **"My"** — big accent `M`, smaller `y`, as one nested `<Text>` so the two sizes share a
+     baseline automatically instead of being nudged into line by hand.
+  2. **Header now reuses the Library screen's trio** (`app/index.tsx`): two hairline circles
+     around one gradient circle. The centre slot holds that screen's primary destination —
+     Library uses "+" for Save, this one uses the bookmark mark. ⚠️ These styles are
+     duplicated, not shared: **keep `headerActions`/`menuBtn`/`saveBtn` in sync with
+     `app/index.tsx`**, or the two pages drift apart again.
+  3. **Undo on delete (2 s)** — bar rises from behind the New task button, accent-tinted.
+     ⚠️ The `DELETE` is **deferred, not sent-and-undone**: undo cancels a timer, so the task
+     keeps its id, `created_at` and `completed_on`. Re-creating would mint a new row and
+     silently rewrite that history. Leaving the screen commits any pending delete
+     immediately (unmount effect), and a refresh landing inside the window filters the
+     pending id out so the row can't resurrect itself. Undo re-inserts optimistically, then
+     re-fetches so the server stays the single authority on ordering.
 - [ ] **To-do reminders** — a local notification the evening before / morning of a due date.
   Free in money (`expo-notifications`, no push server), but needs the **custom dev build**
   (doesn't work in Expo Go, and web needs the Notification API + a permission prompt), so it
