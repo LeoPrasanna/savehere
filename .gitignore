@@ -8,6 +8,17 @@
 # touches the repo, which is the safer way to add one.)
 .mcp.json
 
+# ── Agent skills (npx skills add) ───────────────────────────
+# `skills-lock.json` IS committed — it records the source repo and content hash,
+# so any environment can restore the same skill with `npx skills add`. These two
+# are the regenerable halves, same split as package-lock.json vs node_modules:
+#   .agents/       ~600 KB of vendored third-party docs and assets
+#   .claude/skills/ symlinks written with ABSOLUTE machine paths — committing
+#                   one would point at /c/Users/<this machine>/… and break
+#                   everywhere else, Codespaces included.
+.agents/
+.claude/skills/
+
 # ── Python ─────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
