@@ -312,6 +312,15 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
      immediately (unmount effect), and a refresh landing inside the window filters the
      pending id out so the row can't resurrect itself. Undo re-inserts optimistically, then
      re-fetches so the server stays the single authority on ordering.
+- [x] **Rolling names are random, not sequential (2026-07-31)** — `RollingTagline` gained an
+  opt-in `shuffle` prop (on for the to-do hero and its quotes; the landing/login taglines
+  keep their existing order). Uses a **shuffle bag**, not `Math.random()` per tick: picking
+  independently would repeat lines back-to-back and starve others for ages, which reads as
+  broken rather than random. Each pass deals a fresh permutation, so every name shows once
+  per cycle in a different order, and a new deal never opens on the line the last one closed
+  with. Verified with assertions over 500 deals + simulated refills (permutation, no
+  back-to-back repeats across bag boundaries, varied order, even exposure, and n=1/n=2
+  don't hang).
 - [ ] **To-do reminders** — a local notification the evening before / morning of a due date.
   Free in money (`expo-notifications`, no push server), but needs the **custom dev build**
   (doesn't work in Expo Go, and web needs the Notification API + a permission prompt), so it
