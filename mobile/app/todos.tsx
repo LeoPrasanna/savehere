@@ -12,6 +12,8 @@ import { RollingTagline } from '../components/RollingTagline';
 import { TodoGoalBar } from '../components/TodoGoalBar';
 import { TodoSettingsSheet } from '../components/TodoSettingsSheet';
 import { ProfilePanel } from '../components/ProfilePanel';
+import { goHome } from '../components/HomeButton';
+import { markEnteredLibrary } from '../services/sessionFlags';
 import { bucketOf, formatDue, todayISO, Bucket } from '../services/todoDates';
 import { useTodoSettings } from '../services/todoSettings';
 import { TODO_QUOTES, TODO_ROLL_NAMES, TODO_ADD_LABEL } from '../constants/todoBrand';
@@ -37,6 +39,28 @@ const SECTIONS: { key: Bucket; label: string }[] = [
 /** Only the name + emoji rolls — "My" is fixed beside it, so it reads as one
  *  steady phrase with a changing tail rather than the whole title flickering. */
 const ROLL_LINES = TODO_ROLL_NAMES.map(n => `${n.name} ${n.emoji}`);
+
+/** Settings button that spins a full turn each time it's pressed.
+ *  Press-triggered rather than always-spinning on purpose: perpetual motion in
+ *  the corner of a list you're trying to read is a distraction, not a delight. */
+function SpinningGear({ onPress }: { onPress: () => void }) {
+  const [turns, setTurns] = useState(0);
+  return (
+    <Pressable
+      style={styles.gearBtn}
+      onPress={() => { setTurns(t => t + 1); onPress(); }}
+      scaleTo={0.9}
+      hitSlop={8}
+    >
+      <MotiView
+        animate={{ rotate: `${turns * 360}deg` }}
+        transition={{ type: 'timing', duration: 520 }}
+      >
+        <Icon name="settings" size={20} color={colors.textPrimary} />
+      </MotiView>
+    </Pressable>
+  );
+}
 
 function StatTile({ label, value, tint }: { label: string; value: number; tint?: string }) {
   return (
@@ -162,10 +186,28 @@ export default function TodosScreen() {
   }, [settings.showCompleted]);
 
   useFocusEffect(useCallback(() => {
-    // The rolling hero is the page title, so the nav bar stays bare.
-    navigation.setOptions({ title: '' });
+    // The rolling hero is the page title, so the nav bar stays bare — and the
+    // stack's global Home button is dropped here because this screen has its own
+    // Home/Library pair in the body. Two home buttons on one screen is worse
+    // than none.
+    navigation.setOptions({ title: '', headerRight: () => null });
     if (settingsReady) load();
   }, [load, navigation, settingsReady]));
+
+  /** `/` renders the landing page OR the library off a session flag; setting it
+   *  first is what makes this land on the library rather than the greeting. */
+  const openLibrary = () => {
+    markEnteredLibrary();
+    router.replace('/');
+  };
+
+  const openPanel = () => {
+    setMenuOpen(true);
+    // Only for the panel's saves counter, and only the first time it's opened.
+    if (reelTotal === undefined) {
+      api.listReels({ limit: 1 }).then(d => setReelTotal(d.total)).catch(() => {});
+    }
+  };
 
   const toggle = async (todo: Todo) => {
     const next = !todo.completed;
@@ -290,43 +332,43 @@ export default function TodosScreen() {
           />
         }
       >
-        {/* ── Hero. "My" is fixed; only the name + emoji rolls beneath it.
-            Stacked rather than inline so the rolling half gets the full card
-            width — "My Program of Entertainment 🎪" on one line does not fit a
-            narrow phone, and truncating a name mid-word looks broken. ── */}
-        <View style={styles.heroBlock}>
-          <View style={styles.heroTopRow}>
-            <Text style={styles.heroFixed}>MY</Text>
-            <View style={{ flex: 1 }} />
-            <Pressable
-              style={styles.iconBtn}
-              onPress={() => setSettingsOpen(true)}
-              scaleTo={0.9}
-              hitSlop={8}
-            >
-              <Icon name="settings" size={18} color={colors.textSecondary} />
+        {/* ── Quick nav. Home and Library sit together as a pair (they're the
+            two places you'd leave for); the hamburger keeps its own slot. The
+            stack header's own Home button is suppressed below so there aren't
+            two of them on one screen. ── */}
+        <View style={styles.navRow}>
+          <View style={styles.navPair}>
+            <Pressable style={styles.navBtn} onPress={goHome} scaleTo={0.94} hitSlop={6}>
+              <Icon name="home" size={16} color={colors.textPrimary} />
+              <Text style={styles.navBtnText}>Home</Text>
             </Pressable>
-            <Pressable
-              style={styles.iconBtn}
-              onPress={() => {
-                setMenuOpen(true);
-                if (reelTotal === undefined) {
-                  api.listReels({ limit: 1 }).then(d => setReelTotal(d.total)).catch(() => {});
-                }
-              }}
-              scaleTo={0.9}
-              hitSlop={8}
-            >
-              <Icon name="menu" size={18} color={colors.textPrimary} />
+            <View style={styles.navSplit} />
+            <Pressable style={styles.navBtn} onPress={openLibrary} scaleTo={0.94} hitSlop={6}>
+              <Icon name="bookmark" size={16} color={colors.textPrimary} />
+              <Text style={styles.navBtnText}>Library</Text>
             </Pressable>
           </View>
+          <View style={{ flex: 1 }} />
+          <Pressable style={styles.iconBtn} onPress={openPanel} scaleTo={0.9} hitSlop={8}>
+            <Icon name="menu" size={18} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+
+        {/* ── Hero: "MY" in the accent colour, the rolling name right beside it.
+            Inline (owner) — so the pair owns a full row on its own and the
+            rolling half is clamped to one line. The longest names still just
+            fit at this size; anything longer would ellipsize rather than wrap
+            out of the viewport. ── */}
+        <View style={styles.heroRow}>
+          <Text style={styles.heroFixed}>MY</Text>
           <RollingTagline
             lines={ROLL_LINES}
-            height={36}
+            height={34}
             intervalMs={5200}
             numberOfLines={1}
             alignLeft
             textStyle={styles.heroText}
+            style={styles.heroRoll}
           />
         </View>
 
@@ -402,6 +444,9 @@ export default function TodosScreen() {
             <Text style={styles.addText}>New task</Text>
           </LinearGradient>
         </Pressable>
+        {/* Settings live bottom-right (owner) — out of the reading path, still
+            one thumb-reach away on a phone. */}
+        <SpinningGear onPress={() => setSettingsOpen(true)} />
       </View>
 
       <TodoEditor
@@ -470,19 +515,45 @@ const styles = themed(() => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.lg, flexGrow: 1 },
 
-  // ── Hero ────────────────────────────────────────────────────────────
-  heroBlock: { gap: 2 },
-  heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  heroFixed: {
-    color: colors.textTertiary, fontSize: font.xs,
-    fontWeight: '800', letterSpacing: 2,
+  // ── Quick nav ───────────────────────────────────────────────────────
+  navRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Home and Library share one pill with a hairline between them, so they read
+  // as a pair of related destinations rather than two unrelated buttons.
+  navPair: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: colors.card, borderRadius: radius.full,
+    borderWidth: 1, borderColor: colors.border,
   },
+  navBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: spacing.md, paddingVertical: 9,
+  },
+  navBtnText: { color: colors.textPrimary, fontSize: font.xs, fontWeight: '700' },
+  navSplit: { width: 1, height: 18, backgroundColor: colors.border },
+
+  // ── Hero ────────────────────────────────────────────────────────────
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Accent-coloured, so it tracks whichever Appearance theme is active.
+  heroFixed: {
+    color: colors.accent, fontSize: font.xxl,
+    fontWeight: '800', letterSpacing: 0.5, lineHeight: 34,
+  },
+  heroRoll: { flex: 1, alignSelf: 'auto' },
+  // A notch smaller than "MY" deliberately. Inline means the rolling half only
+  // gets the row minus "MY", and the longest entries ("Program of Entertainment
+  // 🎪", "Things as They Happened ⏳") would ellipsize at 28px on a narrow
+  // phone. 22 keeps every name whole while "MY" still anchors the line.
   heroText: {
     fontSize: font.xl, fontWeight: '800', color: colors.textPrimary,
     textAlign: 'left', paddingHorizontal: 0, lineHeight: 30, fontStyle: 'normal',
   },
   iconBtn: {
     width: 38, height: 38, borderRadius: radius.full,
+    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  gearBtn: {
+    width: 50, height: 50, borderRadius: radius.md,
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
     alignItems: 'center', justifyContent: 'center',
   },
@@ -586,11 +657,12 @@ const styles = themed(() => StyleSheet.create({
 
   bottomBar: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
     paddingHorizontal: spacing.lg, paddingTop: spacing.sm,
     backgroundColor: colors.background,
     borderTopWidth: 1, borderTopColor: colors.border,
   },
-  addWrap: { borderRadius: radius.md, ...shadow.glow },
+  addWrap: { flex: 1, borderRadius: radius.md, ...shadow.glow },
   addBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
     borderRadius: radius.md, height: 50,

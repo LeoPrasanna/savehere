@@ -285,6 +285,18 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
   4. **Hamburger added** to the list screen. `ProfilePanel`'s `reels` prop is only a
      fallback for counters it otherwise reads from `/api/account/usage`, so this screen
      passes `[]` and fetches just the reel `total` lazily when the panel opens.
+- [x] **To-do hero + nav layout (2026-07-31)** — **"MY"** is now large and **accent-coloured**
+  (so it tracks the active Appearance theme — it lives in the `themed()` sheet, which is
+  what makes accent switching repaint it), with the rolling name inline beside it. The
+  rolling half sits one notch smaller (22 vs 28): inline means it only gets the row minus
+  "MY", and the longest entries would ellipsize at 28 on a narrow phone. **Home + Library**
+  share one pill with a hairline between them, above the hero; the stack's global Home
+  button is suppressed on this screen so there aren't two. **Settings moved bottom-right**,
+  beside "New task", and spins a full turn on press — press-triggered rather than
+  perpetually spinning, because constant motion beside a list you're reading is a
+  distraction. ⚠️ `openLibrary` must call `markEnteredLibrary()` before navigating: `/`
+  renders the landing page OR the library off that flag, so without it the Library button
+  would land on the greeting.
 - [ ] **To-do reminders** — a local notification the evening before / morning of a due date.
   Free in money (`expo-notifications`, no push server), but needs the **custom dev build**
   (doesn't work in Expo Go, and web needs the Notification API + a permission prompt), so it
