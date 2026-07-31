@@ -311,11 +311,60 @@ def test_stats_count_the_whole_list_not_the_returned_page(client):
     body = client.get("/api/todos").json()
     assert body["total"] == 2, "the default list hides completed items"
     # …but the stats describe everything, which is the point of a dashboard.
-    assert body["stats"] == {"total": 3, "open": 2, "completed": 1}
+    assert _counts(body["stats"]) == {"total": 3, "open": 2, "completed": 1}
 
     both = client.get("/api/todos?include_completed=true").json()
     assert both["total"] == 3
-    assert both["stats"] == {"total": 3, "open": 2, "completed": 1}
+    assert _counts(both["stats"]) == {"total": 3, "open": 2, "completed": 1}
+
+
+def _counts(stats: dict) -> dict:
+    """Just the tier counters. `completed_today` is asserted separately — it is
+    None unless the caller says what day it is where they are."""
+    return {k: stats[k] for k in ("total", "open", "completed")}
+
+
+# ── Daily goal (completed_on is a LOCAL calendar date) ──────────────────────
+
+def test_completion_records_the_clients_local_day(client):
+    todo_id = client.post("/api/todos", json={"title": "Ship it"}).json()["id"]
+    r = client.patch(f"/api/todos/{todo_id}", json={"completed": True, "completed_on": "2026-03-14"})
+    assert r.json()["completed_on"] == "2026-03-14", "the DEVICE decides what day it is"
+
+
+def test_uncompleting_clears_the_local_day_too(client):
+    todo_id = client.post("/api/todos", json={"title": "Undo me"}).json()["id"]
+    client.patch(f"/api/todos/{todo_id}", json={"completed": True, "completed_on": "2026-03-14"})
+    undone = client.patch(f"/api/todos/{todo_id}", json={"completed": False}).json()
+    assert undone["completed_on"] is None, "an undo must not leave a phantom goal credit"
+
+
+def test_completed_today_counts_only_the_requested_local_day(client):
+    ids = [client.post("/api/todos", json={"title": f"t{i}"}).json()["id"] for i in range(3)]
+    client.patch(f"/api/todos/{ids[0]}", json={"completed": True, "completed_on": "2026-03-14"})
+    client.patch(f"/api/todos/{ids[1]}", json={"completed": True, "completed_on": "2026-03-14"})
+    client.patch(f"/api/todos/{ids[2]}", json={"completed": True, "completed_on": "2026-03-13"})
+
+    assert client.get("/api/todos?today=2026-03-14").json()["stats"]["completed_today"] == 2
+    assert client.get("/api/todos?today=2026-03-13").json()["stats"]["completed_today"] == 1
+    assert client.get("/api/todos?today=2026-03-15").json()["stats"]["completed_today"] == 0
+
+
+def test_completed_today_is_null_when_the_client_does_not_say_what_today_is(client):
+    todo_id = client.post("/api/todos", json={"title": "done"}).json()["id"]
+    client.patch(f"/api/todos/{todo_id}", json={"completed": True, "completed_on": "2026-03-14"})
+    # None, NOT 0 — "we weren't told" must never render as "you've done nothing".
+    assert client.get("/api/todos").json()["stats"]["completed_today"] is None
+
+
+def test_the_goal_resets_across_a_local_day_boundary(client):
+    """The reset is a consequence of keying on the local date, not a scheduled
+    job — so there is nothing to run at midnight and nothing to get stuck."""
+    todo_id = client.post("/api/todos", json={"title": "yesterday's win"}).json()["id"]
+    client.patch(f"/api/todos/{todo_id}", json={"completed": True, "completed_on": in_days(-1)})
+
+    assert client.get(f"/api/todos?today={in_days(-1)}").json()["stats"]["completed_today"] == 1
+    assert client.get(f"/api/todos?today={in_days(0)}").json()["stats"]["completed_today"] == 0
 
 
 # ── Per-reel lookup (drives the disabled "Add to to-do" button) ──────────────

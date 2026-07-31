@@ -3,14 +3,17 @@ import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, 
 import { useRouter, useFocusEffect, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { MotiView } from 'moti';
+import { MotiView, AnimatePresence } from 'moti';
 import { api, Todo, TodoStats } from '../services/api';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { TodoEditor } from '../components/TodoEditor';
 import { RollingTagline } from '../components/RollingTagline';
-import { bucketOf, formatDue, Bucket } from '../services/todoDates';
-import { TODO_BRAND, TODO_QUOTES } from '../constants/todoBrand';
+import { TodoGoalBar } from '../components/TodoGoalBar';
+import { TodoSettingsSheet } from '../components/TodoSettingsSheet';
+import { bucketOf, formatDue, todayISO, Bucket } from '../services/todoDates';
+import { useTodoSettings } from '../services/todoSettings';
+import { TODO_QUOTES, TODO_ROLL_NAMES, TODO_ADD_LABEL } from '../constants/todoBrand';
 import * as haptics from '../services/haptics';
 import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
 
@@ -20,14 +23,18 @@ const PRIORITY_COLOR: Record<string, string> = {
   low: colors.textTertiary,
 };
 
-/** Rendered in this order. "Someday" last on purpose — undated items are the
- *  ones you're least committed to, and burying them keeps the top honest. */
+/** "Someday" sits last by default — undated items are the ones you're least
+ *  committed to, and burying them keeps the top of the list honest. Settings can
+ *  flip it for people who work the other way round. */
 const SECTIONS: { key: Bucket; label: string }[] = [
   { key: 'overdue', label: 'OVERDUE' },
   { key: 'today', label: 'TODAY' },
   { key: 'upcoming', label: 'UPCOMING' },
   { key: 'someday', label: 'SOMEDAY' },
 ];
+
+/** "My Docket 📜" — the list screen's rolling hero. */
+const ROLL_LINES = TODO_ROLL_NAMES.map(n => `My ${n.name} ${n.emoji}`);
 
 function StatTile({ label, value, tint }: { label: string; value: number; tint?: string }) {
   return (
@@ -46,12 +53,46 @@ function TodoRow({ todo, onToggle, onEdit, onOpenReel, onDelete }: {
   onDelete: () => void;
 }) {
   const overdue = bucketOf(todo.due_date) === 'overdue' && !todo.completed;
+  const done = todo.completed;
   return (
-    <View style={styles.row}>
+    // The whole row eases back when it's done: it stays readable (so tapping
+    // again to undo is obvious) but visibly stops competing with what's left.
+    <MotiView
+      animate={{ opacity: done ? 0.62 : 1, scale: done ? 0.99 : 1 }}
+      transition={{ type: 'timing', duration: 260 }}
+      style={[styles.row, done && styles.rowDone]}
+    >
       <Pressable onPress={onToggle} scaleTo={0.85} hitSlop={8} style={styles.check}>
-        <View style={[styles.checkBox, todo.completed && styles.checkBoxOn]}>
-          {todo.completed && <Icon name="checkmark" size={13} color="#FFF" />}
+        <View style={[styles.checkBox, done && styles.checkBoxOn]}>
+          <AnimatePresence>
+            {done && (
+              <MotiView
+                // Springs in from nothing so the tick lands with some weight —
+                // this is the moment the whole feature is asking the user to enjoy.
+                from={{ scale: 0, opacity: 0, rotate: '-45deg' }}
+                animate={{ scale: 1, opacity: 1, rotate: '0deg' }}
+                exit={{ scale: 0, opacity: 0 }}
+                transition={{ type: 'spring', damping: 11, stiffness: 220 }}
+              >
+                <Icon name="checkmark" size={13} color="#FFF" />
+              </MotiView>
+            )}
+          </AnimatePresence>
         </View>
+
+        {/* One-shot ring that expands and fades the instant it's ticked. */}
+        <AnimatePresence>
+          {done && (
+            <MotiView
+              key={`burst-${todo.id}`}
+              pointerEvents="none"
+              from={{ scale: 0.7, opacity: 0.55 }}
+              animate={{ scale: 2.1, opacity: 0 }}
+              transition={{ type: 'timing', duration: 520 }}
+              style={styles.burst}
+            />
+          )}
+        </AnimatePresence>
       </Pressable>
 
       <Pressable style={styles.rowBody} onPress={onEdit} scaleTo={0.99}>
@@ -76,7 +117,7 @@ function TodoRow({ todo, onToggle, onEdit, onOpenReel, onDelete }: {
       <Pressable onPress={onDelete} scaleTo={0.85} hitSlop={8} style={styles.del}>
         <Icon name="trash" size={15} color={colors.textTertiary} />
       </Pressable>
-    </View>
+    </MotiView>
   );
 }
 
@@ -91,6 +132,8 @@ export default function TodosScreen() {
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Todo | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { settings, update: updateSettings, ready: settingsReady } = useTodoSettings();
   // Set when a reel-linked task is completed: the "delete the saved card?" ask.
   const [finished, setFinished] = useState<Todo | null>(null);
   const [deletingReel, setDeletingReel] = useState(false);
@@ -98,7 +141,9 @@ export default function TodosScreen() {
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     try {
-      const d = await api.listTodos();
+      // The device's own date decides what "today" means for the goal — see
+      // services/todoSettings.ts and the completed_on column.
+      const d = await api.listTodos(settings.showCompleted, todayISO());
       setTodos(d.items);
       setStats(d.stats);
       setError(null);
@@ -108,12 +153,13 @@ export default function TodosScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [settings.showCompleted]);
 
   useFocusEffect(useCallback(() => {
-    navigation.setOptions({ title: TODO_BRAND });
-    load();
-  }, [load, navigation]));
+    // The rolling hero is the page title, so the nav bar stays bare.
+    navigation.setOptions({ title: '' });
+    if (settingsReady) load();
+  }, [load, navigation, settingsReady]));
 
   const toggle = async (todo: Todo) => {
     const next = !todo.completed;
@@ -121,15 +167,37 @@ export default function TodosScreen() {
     // the undo. It drops off the list on the next load, which is the natural
     // moment for it to disappear.
     setTodos(ts => ts.map(t => (t.id === todo.id ? { ...t, completed: next } : t)));
-    setStats(s => s && { ...s, open: s.open + (next ? -1 : 1), completed: s.completed + (next ? 1 : -1) });
+    setStats(s => s && {
+      ...s,
+      open: s.open + (next ? -1 : 1),
+      completed: s.completed + (next ? 1 : -1),
+      completed_today: s.completed_today === null
+        ? null
+        : Math.max(0, s.completed_today + (next ? 1 : -1)),
+    });
     next ? haptics.success() : haptics.tap();
     try {
-      await api.updateTodo(todo.id, { completed: next });
-      // Only on the way TO done, and only when there's actually a save to act on.
-      if (next && todo.reel_id) setFinished({ ...todo, completed: true });
+      await api.updateTodo(todo.id, {
+        completed: next,
+        // Stamped from the DEVICE, so the daily goal counts against the user's
+        // own calendar day rather than the server's UTC one.
+        completed_on: next ? todayISO() : null,
+      });
+      // Only on the way TO done, only when there's a save to act on, and only if
+      // the user hasn't switched the prompt off.
+      if (next && todo.reel_id && settings.askDeleteSaveOnDone) {
+        setFinished({ ...todo, completed: true });
+      }
     } catch (e: any) {
       setTodos(ts => ts.map(t => (t.id === todo.id ? { ...t, completed: !next } : t)));
-      setStats(s => s && { ...s, open: s.open + (next ? 1 : -1), completed: s.completed + (next ? -1 : 1) });
+      setStats(s => s && {
+        ...s,
+        open: s.open + (next ? 1 : -1),
+        completed: s.completed + (next ? -1 : 1),
+        completed_today: s.completed_today === null
+          ? null
+          : Math.max(0, s.completed_today + (next ? -1 : 1)),
+      });
       setError(e?.message || "Couldn't update that.");
     }
   };
@@ -176,7 +244,10 @@ export default function TodosScreen() {
   const openNew = () => { setEditing(null); setEditorOpen(true); };
   const openEdit = (t: Todo) => { setEditing(t); setEditorOpen(true); };
 
-  const grouped = SECTIONS
+  const order = settings.somedayFirst
+    ? [SECTIONS[3], SECTIONS[0], SECTIONS[1], SECTIONS[2]]
+    : SECTIONS;
+  const grouped = order
     .map(s => ({ ...s, items: todos.filter(t => bucketOf(t.due_date) === s.key) }))
     .filter(s => s.items.length > 0);
 
@@ -205,8 +276,32 @@ export default function TodosScreen() {
           />
         }
       >
+        {/* ── Hero: the list's own rolling name, with settings alongside ── */}
+        <View style={styles.heroRow}>
+          <RollingTagline
+            lines={ROLL_LINES}
+            height={44}
+            intervalMs={5200}
+            textStyle={styles.heroText}
+            style={styles.hero}
+          />
+          <Pressable
+            style={styles.gear}
+            onPress={() => setSettingsOpen(true)}
+            scaleTo={0.9}
+            hitSlop={8}
+          >
+            <Icon name="settings" size={18} color={colors.textSecondary} />
+          </Pressable>
+        </View>
+
         {/* ── Dashboard: where you stand, plus something worth reading ──── */}
         <View style={styles.dash}>
+          {/* Rendered only once settings have loaded, so the bar can't flash the
+              default goal and then snap to the user's real one. */}
+          {settingsReady && stats?.completed_today !== null && stats?.completed_today !== undefined && (
+            <TodoGoalBar done={stats.completed_today} goal={settings.dailyGoal} />
+          )}
           <View style={styles.statRow}>
             <StatTile label="OPEN" value={stats?.open ?? 0} />
             <StatTile label="DONE" value={stats?.completed ?? 0} tint={colors.success} />
@@ -231,7 +326,7 @@ export default function TodosScreen() {
             <Icon name="checkbox" size={44} color={colors.textTertiary} />
             <Text style={styles.emptyTitle}>Nothing to follow through on</Text>
             <Text style={styles.emptyText}>
-              Add something you want to get done — or open a save and tap “Add to {TODO_BRAND}”
+              Add something you want to get done — or open a save and tap “{TODO_ADD_LABEL}”
               to turn it into a real plan.
             </Text>
           </View>
@@ -277,8 +372,16 @@ export default function TodosScreen() {
       <TodoEditor
         visible={editorOpen}
         editing={editing}
+        defaultPriority={settings.defaultPriority}
         onClose={() => { setEditorOpen(false); setEditing(null); }}
         onSaved={onSaved}
+      />
+
+      <TodoSettingsSheet
+        visible={settingsOpen}
+        settings={settings}
+        onChange={updateSettings}
+        onClose={() => setSettingsOpen(false)}
       />
 
       {/* ── Done → keep or delete the save it came from ────────────────────
@@ -324,6 +427,19 @@ const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.lg, flexGrow: 1 },
+
+  // ── Hero ────────────────────────────────────────────────────────────
+  heroRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  hero: { flex: 1, alignSelf: 'auto' },
+  heroText: {
+    fontSize: font.xxl, fontWeight: '800', color: colors.textPrimary,
+    textAlign: 'left', paddingHorizontal: 0, lineHeight: 34, fontStyle: 'normal',
+  },
+  gear: {
+    width: 38, height: 38, borderRadius: radius.full,
+    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
 
   // ── Dashboard header ────────────────────────────────────────────────
   dash: {
@@ -397,6 +513,12 @@ const styles = themed(() => StyleSheet.create({
   },
   checkBoxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
 
+  rowDone: { borderColor: colors.success + '55' },
+  burst: {
+    position: 'absolute', top: 1, left: 0,
+    width: 21, height: 21, borderRadius: radius.full,
+    borderWidth: 2, borderColor: colors.success,
+  },
   rowBody: { flex: 1, gap: 3 },
   rowTitle: { color: colors.textPrimary, fontSize: font.md, fontWeight: '600', lineHeight: 21 },
   rowTitleDone: { color: colors.textTertiary, textDecorationLine: 'line-through' },

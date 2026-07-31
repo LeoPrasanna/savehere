@@ -93,6 +93,10 @@ export interface Todo {
   due_date: string | null;
   completed: boolean;
   completed_at: string | null;
+  /** The user's LOCAL calendar day it was ticked off ("YYYY-MM-DD"). This, not
+   *  completed_at, is what the daily goal counts — a UTC instant would move
+   *  someone's streak by a day either side of the international date line. */
+  completed_on: string | null;
   created_at: string | null;
 }
 
@@ -103,6 +107,10 @@ export interface TodoStats {
   total: number;
   open: number;
   completed: number;
+  /** Only present when listTodos() was given the device's local date. `null`
+   *  means "didn't ask" — never render it as 0, that reads as "you've done
+   *  nothing today" when we simply never told the server what today is. */
+  completed_today: number | null;
 }
 
 export interface TodoListResponse {
@@ -125,6 +133,9 @@ export interface TodoInput {
   priority?: TodoPriority;
   due_date?: string | null;
   completed?: boolean;
+  /** The device's local date, sent when ticking something off so the daily goal
+   *  counts against the user's own calendar day. */
+  completed_on?: string | null;
   /** due_date is nullable, so omitted and null look identical in JSON — this is
    *  the explicit "move it back to Someday". */
   clear_due_date?: boolean;
@@ -409,8 +420,12 @@ export const api = {
     request<{ message: string }>(`/api/tasks/${taskId}`, { method: 'DELETE' }),
 
   // ── To-do list (no AI, no quota) ─────────────────────────
-  listTodos: (includeCompleted = false) =>
-    request<TodoListResponse>(`/api/todos?include_completed=${includeCompleted}`),
+  /** `today` is the caller's LOCAL date; pass it to get `stats.completed_today`
+   *  for the daily goal without downloading every completed row. */
+  listTodos: (includeCompleted = false, today?: string) =>
+    request<TodoListResponse>(
+      `/api/todos?include_completed=${includeCompleted}${today ? `&today=${today}` : ''}`
+    ),
 
   /** Is there already an open to-do for this save? */
   getReelTodo: (reelId: string) => request<ReelTodo>(`/api/reels/${reelId}/todo`),

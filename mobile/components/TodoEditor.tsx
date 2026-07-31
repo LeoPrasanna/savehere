@@ -6,7 +6,6 @@ import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { DatePicker } from './DatePicker';
 import { daysFromToday, nextWeekend, formatDue } from '../services/todoDates';
-import { TODO_BRAND } from '../constants/todoBrand';
 import * as haptics from '../services/haptics';
 import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
 
@@ -16,9 +15,8 @@ const PRIORITIES: { key: TodoPriority; label: string; color: string }[] = [
   { key: 'low', label: 'Low', color: colors.textSecondary },
 ];
 
-/** Quick-pick dates cover essentially every real to-do. Deliberately NOT a
- *  calendar picker: that needs a native-only dependency and behaves differently
- *  on web. The text field below handles the rare specific date. */
+/** Quick-picks for the dates people actually choose. The calendar below covers
+ *  anything else — these just save four taps for the common cases. */
 const DATE_PRESETS = (): { label: string; value: string | null }[] => ([
   { label: 'Today', value: daysFromToday(0) },
   { label: 'Tomorrow', value: daysFromToday(1) },
@@ -39,10 +37,13 @@ interface Props {
   defaultDescription?: string;
   /** Present = edit an existing todo instead of creating one. */
   editing?: Todo | null;
+  /** Starting priority for a NEW task, from the user's list settings. */
+  defaultPriority?: TodoPriority;
 }
 
 export function TodoEditor({
   visible, onClose, onSaved, reelId, defaultTitle, defaultDescription, editing,
+  defaultPriority = 'medium',
 }: Props) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -61,13 +62,13 @@ export function TodoEditor({
     openedAt.current = Date.now();
     setTitle(editing?.title ?? defaultTitle ?? '');
     setDescription(editing?.description ?? defaultDescription ?? '');
-    setPriority(editing?.priority ?? 'medium');
+    setPriority(editing?.priority ?? defaultPriority);
     setDue(editing?.due_date ?? null);
     // Open straight onto the calendar when editing something that already has a
     // date — that's usually what you came to change.
     setCalendarOpen(!!editing?.due_date);
     setError(null);
-  }, [visible, editing, defaultTitle, defaultDescription]);
+  }, [visible, editing, defaultTitle, defaultDescription, defaultPriority]);
 
   const dismiss = () => {
     if (Date.now() - openedAt.current < 350) return;
@@ -117,7 +118,7 @@ export function TodoEditor({
             close-on-press overlay (react-native-web). */}
         <Pressable style={styles.card} onPress={(e) => e.stopPropagation()} scaleTo={1}>
           <View style={styles.headRow}>
-            <Text style={styles.heading}>{editing ? 'Edit task' : `New ${TODO_BRAND} task`}</Text>
+            <Text style={styles.heading}>{editing ? 'Edit task' : 'New task'}</Text>
             <Pressable onPress={onClose} scaleTo={0.9} hitSlop={8}>
               <Icon name="close" size={18} color={colors.textSecondary} />
             </Pressable>

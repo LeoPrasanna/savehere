@@ -12,7 +12,6 @@ import { Confetti } from '../components/Confetti';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { colors, font, typeface, onAccentChange, setAccentTheme, ACCENT_STORAGE_KEY } from '../constants/theme';
-import { TODO_BRAND } from '../constants/todoBrand';
 
 function AppStack() {
   return (
@@ -31,7 +30,8 @@ function AppStack() {
       <Stack.Screen name="save" options={{ title: 'Save a Reel', presentation: 'modal' }} />
       <Stack.Screen name="ask" options={{ title: 'Ask your library' }} />
       <Stack.Screen name="rediscover" options={{ title: 'Rediscover' }} />
-      <Stack.Screen name="todos" options={{ title: TODO_BRAND }} />
+      {/* Title stays blank — the screen's own rolling hero is the title. */}
+      <Stack.Screen name="todos" options={{ title: '' }} />
       <Stack.Screen name="help" options={{ title: 'What you can do' }} />
       <Stack.Screen name="profile" options={{ title: 'Edit profile' }} />
       <Stack.Screen name="reel/[id]" options={{ title: '' }} />

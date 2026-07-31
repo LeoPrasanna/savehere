@@ -1,32 +1,59 @@
 /**
- * The to-do feature's product name and copy, in ONE place.
- *
- * Renaming is a single edit here — the screen title, the home-screen row, the
- * reel-detail button and the empty states all read from these constants. Do not
- * hardcode the name anywhere else.
- *
- * Why "Follow Through": it names the thing the user actually fails at. A
- * bookmarking app's whole failure mode is saving something and never acting on
- * it, and this list exists to close exactly that gap — so the name states the
- * promise rather than describing the widget ("To-do list" could be any app).
- *
- * Alternatives considered, if this one doesn't land: "Momentum", "Next Up",
- * "The Shortlist", "Loose Ends".
+ * Names and copy for the to-do feature, in ONE place. Nothing else hardcodes
+ * them — renaming anything here changes every surface at once.
  */
-export const TODO_BRAND = 'Follow Through';
 
-/** Used where the name alone is ambiguous ("Follow Through" as a nav title is
- *  clear; on a button it needs the verb). */
-export const TODO_ADD_LABEL = `Add to ${TODO_BRAND}`;
-export const TODO_ADDED_LABEL = `On your ${TODO_BRAND} list`;
+/** The home screen calls it one steady thing. A name that rolled on the home
+ *  screen too would just read as noise next to the user's actual saves. */
+export const TODO_LANDING_TITLE = 'Things on your slate';
+
+/** Reel-detail button copy, kept in the same "slate" language as the home row. */
+export const TODO_ADD_LABEL = 'Add to your slate';
+export const TODO_ADDED_LABEL = 'On your slate';
 
 /**
- * Vertically rolled through the dashboard header. Short, famous, attributed —
- * these are widely circulated aphorisms, quoted in full and credited (the
- * attributions are the commonly cited ones).
+ * The list screen's hero cycles through these — "My Docket 📜", "My Almanac 🌙".
+ * It's the one place the feature gets to be playful, because it's a screen the
+ * user opens on purpose rather than lands on.
  *
- * Keep each to a single line so it fits the roller's viewport without wrapping
- * to a third line.
+ * Keep every entry readable directly after "My", and keep it short enough not
+ * to wrap on a narrow phone.
+ */
+export interface TodoRollName {
+  name: string;
+  emoji: string;
+}
+
+export const TODO_ROLL_NAMES: readonly TodoRollName[] = [
+  { name: 'Order of the Day', emoji: '🗓️' },
+  { name: 'Checklist', emoji: '✅' },
+  { name: 'Docket', emoji: '📜' },
+  { name: 'Catalogue', emoji: '📚' },
+  { name: 'List of Items', emoji: '🧾' },
+  { name: 'Schedule of Operation', emoji: '⚙️' },
+  { name: 'Order of Events', emoji: '🎞️' },
+  { name: 'Synopsis', emoji: '📝' },
+  { name: 'Playbill', emoji: '🎭' },
+  { name: 'Listicle', emoji: '🔟' },
+  { name: 'Almanac', emoji: '🌙' },
+  { name: 'Program of Entertainment', emoji: '🎪' },
+  { name: 'Worksheet', emoji: '📄' },
+  { name: 'Things as They Happened', emoji: '⏳' },
+  { name: 'Own Lexicon', emoji: '📖' },
+  { name: 'To-do List', emoji: '📃' },
+  { name: 'Digest', emoji: '🍵' },
+  { name: 'Planner', emoji: '📆' },
+  { name: 'Log Book', emoji: '📔' },
+  { name: 'Roadmap', emoji: '🗺️' },
+  { name: 'Prospectus', emoji: '📈' },
+];
+
+/**
+ * Rolled through the dashboard header. Short, famous, attributed — widely
+ * circulated aphorisms, quoted in full and credited (attributions are the
+ * commonly cited ones).
+ *
+ * Keep each to one line so it fits the roller without wrapping to a third.
  */
 export const TODO_QUOTES = [
   '"The secret of getting ahead is getting started." — Mark Twain',
