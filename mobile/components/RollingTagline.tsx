@@ -41,9 +41,16 @@ interface Props {
   height?: number;
   /** Seconds between lines. */
   intervalMs?: number;
+  /** Clamp each line (a long rolling name must not wrap out of the viewport). */
+  numberOfLines?: number;
+  /** Left-align instead of centring — for a line that sits beside fixed text. */
+  alignLeft?: boolean;
 }
 
-export function RollingTagline({ style, lines = APP_TAGLINES, compact, textStyle, height, intervalMs = INTERVAL_MS }: Props) {
+export function RollingTagline({
+  style, lines = APP_TAGLINES, compact, textStyle, height,
+  intervalMs = INTERVAL_MS, numberOfLines, alignLeft,
+}: Props) {
   // Start on a random line so it feels fresh each open, then advance one at a time.
   const [i, setI] = useState(() => Math.floor(Math.random() * lines.length));
   useEffect(() => {
@@ -59,13 +66,18 @@ export function RollingTagline({ style, lines = APP_TAGLINES, compact, textStyle
       <AnimatePresence>
         <MotiView
           key={i}
-          style={styles.slot}
+          style={[styles.slot, alignLeft && styles.slotLeft]}
           from={{ opacity: 0, translateY: 22, scale: 0.94 }}
           animate={{ opacity: 1, translateY: 0, scale: 1 }}
           exit={{ opacity: 0, translateY: -22, scale: 0.94 }}
           transition={{ type: 'timing', duration: 600 }}
         >
-          <Text style={[styles.text, compact && styles.textCompact, textStyle]}>{line}</Text>
+          <Text
+            style={[styles.text, compact && styles.textCompact, textStyle]}
+            numberOfLines={numberOfLines}
+          >
+            {line}
+          </Text>
         </MotiView>
       </AnimatePresence>
     </View>
@@ -75,6 +87,7 @@ export function RollingTagline({ style, lines = APP_TAGLINES, compact, textStyle
 const styles = themed(() => StyleSheet.create({
   viewport: { height: 52, overflow: 'hidden', alignSelf: 'stretch' },
   viewportCompact: { height: 42 },
+  slotLeft: { alignItems: 'flex-start' },
   textCompact: { fontSize: font.sm, lineHeight: 18, fontStyle: 'italic', fontWeight: '500' },
   slot: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
