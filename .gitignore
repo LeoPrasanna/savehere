@@ -1,6 +1,13 @@
 # ── Secrets ────────────────────────────────────────────────
 .env
 
+# MCP server config. `claude mcp add --scope project` writes the server's
+# credentials here in plaintext — an auth header or token, straight into the
+# repo. Ignored so a project-scoped install can't be committed by accident.
+# (The default `--scope local` writes to ~/.claude.json instead and never
+# touches the repo, which is the safer way to add one.)
+.mcp.json
+
 # ── Python ─────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
