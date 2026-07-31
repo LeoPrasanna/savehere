@@ -5,9 +5,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import { Plus } from 'lucide-react-native';
-import { api, thumbUrl, Reel, Todo } from '../services/api';
-import { bucketOf, formatDue } from '../services/todoDates';
-import { TODO_BRAND } from '../constants/todoBrand';
+import { api, thumbUrl, Reel, Todo, TodoStats } from '../services/api';
+import { bucketOf, todayISO } from '../services/todoDates';
+import { useTodoSettings } from '../services/todoSettings';
+import { TodoGoalBar } from './TodoGoalBar';
+import { TODO_LANDING_TITLE } from '../constants/todoBrand';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { AuroraBackground } from './AuroraBackground';
@@ -52,6 +54,46 @@ const TODO_PRIORITY_COLOR: Record<string, string> = {
   medium: colors.warning,
   low: colors.textTertiary,
 };
+
+/** One half of the home screen's Today | Upcoming pair. Caps at three rows: the
+ *  block is a glance, not the list — the whole card taps through to the real one. */
+function TodoColumn({ label, items, emptyText, warn }: {
+  label: string;
+  items: Todo[];
+  emptyText: string;
+  warn?: boolean;
+}) {
+  const shown = items.slice(0, 3);
+  return (
+    <View style={styles.todoCol}>
+      <View style={styles.todoColHead}>
+        <Text style={styles.todoColLabel}>{label}</Text>
+        {items.length > 0 && <Text style={styles.todoColCount}>{items.length}</Text>}
+      </View>
+      {shown.length === 0 ? (
+        <Text style={styles.todoColEmpty}>{emptyText}</Text>
+      ) : (
+        shown.map(t => {
+          const late = warn && bucketOf(t.due_date) === 'overdue';
+          return (
+            <View key={t.id} style={styles.todoItem}>
+              <View style={[styles.todoDot, { backgroundColor: TODO_PRIORITY_COLOR[t.priority] }]} />
+              <Text
+                style={[styles.todoItemText, late && styles.todoSubWarn]}
+                numberOfLines={1}
+              >
+                {t.title}
+              </Text>
+            </View>
+          );
+        })
+      )}
+      {items.length > shown.length && (
+        <Text style={styles.todoMore}>+{items.length - shown.length} more</Text>
+      )}
+    </View>
+  );
+}
 
 /** One card in the recent carousel. A horizontal strip beats a vertical list
  *  here: it shows the thumbnail at a size worth looking at, and it costs a fixed
@@ -119,6 +161,8 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState(false);
   const [todos, setTodos] = useState<Todo[]>([]);
+  const [todoStats, setTodoStats] = useState<TodoStats | null>(null);
+  const { settings: todoSettings, ready: todoSettingsReady } = useTodoSettings();
   const [selected, setSelected] = useState<Feature | null>(null);
   const [catFilter, setCatFilter] = useState<string | null>(null);
   // Reopens after an accent switch remounts the tree (one-shot session flag).
@@ -136,7 +180,10 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         .catch(() => setFetchError(true))
         .finally(() => setLoading(false));
       // Separate catch: a to-do hiccup must not blank out the library view.
-      api.listTodos().then(d => setTodos(d.items)).catch(() => setTodos([]));
+      // `todayISO()` is the DEVICE's date — it's what the daily goal counts against.
+      api.listTodos(false, todayISO())
+        .then(d => { setTodos(d.items); setTodoStats(d.stats); })
+        .catch(() => { setTodos([]); setTodoStats(null); });
     }, [])
   );
   const askVisible = !loading && total >= ASK_MIN_REELS;
@@ -153,8 +200,14 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   // Dated items only — "Someday" has no claim on today's attention. The server
   // already returns them date-ascending then priority, so slicing preserves
   // "soonest first, most important within a day".
-  const dueSoon = todos.filter(t => bucketOf(t.due_date) !== 'someday');
-  const overdueCount = todos.filter(t => bucketOf(t.due_date) === 'overdue').length;
+  // Two columns, so two lists. Overdue folds into "Today" rather than getting a
+  // column of its own — it IS today's work, just late, and a third column would
+  // not survive a narrow phone.
+  const overdue = todos.filter(t => bucketOf(t.due_date) === 'overdue');
+  const todayItems = [...overdue, ...todos.filter(t => bucketOf(t.due_date) === 'today')];
+  const upcomingItems = todos.filter(t => bucketOf(t.due_date) === 'upcoming');
+  const dueSoon = [...todayItems, ...upcomingItems];
+  const overdueCount = overdue.length;
 
   const catList = Array.from(new Set(reels.map(r => r.category).filter(Boolean))) as string[];
   const visible = catFilter ? reels.filter(r => r.category === catFilter) : reels;
@@ -275,9 +328,12 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         )}
 
         {/* ── TO-DO — what you actually meant to act on. Sits directly BELOW Ask
-            (owner, 2026-07-30). Collapses to a single quiet row when nothing is
-            due, so it never fakes urgency. ── */}
-        {!loading && (
+            (owner). Today and Upcoming run SIDE BY SIDE so one glance covers
+            both horizons; overdue folds into Today because it is today's work,
+            just late. Collapses to a single quiet row when nothing is due, so
+            it never manufactures urgency. Hidden entirely if the user turns it
+            off in the list's settings. ── */}
+        {!loading && todoSettingsReady && todoSettings.showOnHome && (
           <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 150 }}>
             {dueSoon.length > 0 ? (
               <Pressable style={styles.todoCard} onPress={() => router.push('/todos')} scaleTo={0.98}>
@@ -286,7 +342,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
                     <Icon name="checkbox" size={18} color={colors.accent} />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.quietTitle}>{TODO_BRAND}</Text>
+                    <Text style={styles.quietTitle}>{TODO_LANDING_TITLE}</Text>
                     <Text style={[styles.quietSub, overdueCount > 0 && styles.todoSubWarn]}>
                       {overdueCount > 0
                         ? `${overdueCount} overdue · ${dueSoon.length} on deck`
@@ -295,19 +351,20 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
                   </View>
                   <Icon name="chevron-right" size={16} color={colors.textTertiary} />
                 </View>
-                <View style={styles.todoItems}>
-                  {dueSoon.slice(0, 3).map(t => (
-                    <View key={t.id} style={styles.todoItem}>
-                      <View style={[styles.todoDot, { backgroundColor: TODO_PRIORITY_COLOR[t.priority] }]} />
-                      <Text style={styles.todoItemText} numberOfLines={1}>{t.title}</Text>
-                      <Text style={[styles.todoWhen, bucketOf(t.due_date) === 'overdue' && styles.todoSubWarn]}>
-                        {formatDue(t.due_date)}
-                      </Text>
-                    </View>
-                  ))}
-                  {dueSoon.length > 3 && (
-                    <Text style={styles.todoMore}>+{dueSoon.length - 3} more</Text>
-                  )}
+
+                {todoStats?.completed_today != null && (
+                  <TodoGoalBar
+                    done={todoStats.completed_today}
+                    goal={todoSettings.dailyGoal}
+                    compact
+                    style={styles.todoGoal}
+                  />
+                )}
+
+                <View style={styles.todoCols}>
+                  <TodoColumn label="TODAY" items={todayItems} emptyText="Nothing due" warn />
+                  <View style={styles.todoColDivider} />
+                  <TodoColumn label="UPCOMING" items={upcomingItems} emptyText="Clear ahead" />
                 </View>
               </Pressable>
             ) : (
@@ -316,7 +373,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
                   <Icon name="checkbox" size={18} color={colors.accent} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.quietTitle}>{TODO_BRAND}</Text>
+                  <Text style={styles.quietTitle}>{TODO_LANDING_TITLE}</Text>
                   <Text style={styles.quietSub}>
                     {todos.length > 0
                       ? `${todos.length} with no date — give one a day to see it here.`
@@ -499,12 +556,23 @@ const styles = themed(() => StyleSheet.create({
   },
   todoHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2 },
   todoSubWarn: { color: colors.danger, fontWeight: '700' },
-  todoItems: { gap: 6, paddingLeft: 2 },
-  todoItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  todoDot: { width: 6, height: 6, borderRadius: 3 },
-  todoItemText: { flex: 1, color: colors.textSecondary, fontSize: font.sm },
-  todoWhen: { color: colors.textTertiary, fontSize: font.xs },
-  todoMore: { color: colors.textTertiary, fontSize: font.xs, paddingLeft: 14 },
+  todoGoal: { marginTop: 2 },
+
+  // Two columns, hairline-divided. Each is flex:1 with minWidth:0 so a long
+  // task title truncates inside its own column instead of shoving the other one
+  // off the card — the failure mode of every naive side-by-side layout.
+  todoCols: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  todoCol: { flex: 1, minWidth: 0, gap: 5 },
+  todoColDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
+  todoColHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  todoColLabel: { color: colors.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
+  todoColCount: { color: colors.textTertiary, fontSize: 10, fontWeight: '700' },
+  todoColEmpty: { color: colors.textTertiary, fontSize: font.xs, fontStyle: 'italic' },
+
+  todoItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  todoDot: { width: 5, height: 5, borderRadius: 3 },
+  todoItemText: { flex: 1, color: colors.textSecondary, fontSize: font.xs },
+  todoMore: { color: colors.textTertiary, fontSize: 10, marginTop: 1 },
 
   // ── Library-first home ──────────────────────────────────────────────
   recentBlock: { gap: spacing.sm },

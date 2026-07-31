@@ -10,7 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Icon } from '../../components/Icon';
 import { api, Reel, Task, TaskListResponse, ItineraryResponse, Usage, ReelTodo, thumbUrl } from '../../services/api';
 import { formatDue } from '../../services/todoDates';
-import { TODO_BRAND, TODO_ADD_LABEL, TODO_ADDED_LABEL } from '../../constants/todoBrand';
+import { TODO_ADD_LABEL, TODO_ADDED_LABEL } from '../../constants/todoBrand';
 import { openSourceLink } from '../../services/openLink';
 import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';

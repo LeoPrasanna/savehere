@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, StyleProp, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { MotiView, AnimatePresence } from 'moti';
 import { colors, spacing, font, themed } from '../constants/theme';
 
@@ -34,21 +34,28 @@ interface Props {
   lines?: readonly string[];
   /** Small variant for denser surfaces (the to-do header). */
   compact?: boolean;
+  /** Restyle the rolling line — e.g. the to-do screen rolls its own name as a
+   *  page hero rather than a caption. */
+  textStyle?: StyleProp<TextStyle>;
+  /** Viewport height must grow with the text, or a hero line gets clipped. */
+  height?: number;
+  /** Seconds between lines. */
+  intervalMs?: number;
 }
 
-export function RollingTagline({ style, lines = APP_TAGLINES, compact }: Props) {
+export function RollingTagline({ style, lines = APP_TAGLINES, compact, textStyle, height, intervalMs = INTERVAL_MS }: Props) {
   // Start on a random line so it feels fresh each open, then advance one at a time.
   const [i, setI] = useState(() => Math.floor(Math.random() * lines.length));
   useEffect(() => {
-    const t = setInterval(() => setI(n => (n + 1) % lines.length), INTERVAL_MS);
+    const t = setInterval(() => setI(n => (n + 1) % lines.length), intervalMs);
     return () => clearInterval(t);
-  }, [lines.length]);
+  }, [lines.length, intervalMs]);
 
   // A shorter list swapped in after mount could leave the index out of range.
   const line = lines[i % lines.length];
 
   return (
-    <View style={[styles.viewport, compact && styles.viewportCompact, style]}>
+    <View style={[styles.viewport, compact && styles.viewportCompact, height ? { height } : null, style]}>
       <AnimatePresence>
         <MotiView
           key={i}
@@ -58,7 +65,7 @@ export function RollingTagline({ style, lines = APP_TAGLINES, compact }: Props) 
           exit={{ opacity: 0, translateY: -22, scale: 0.94 }}
           transition={{ type: 'timing', duration: 600 }}
         >
-          <Text style={[styles.text, compact && styles.textCompact]}>{line}</Text>
+          <Text style={[styles.text, compact && styles.textCompact, textStyle]}>{line}</Text>
         </MotiView>
       </AnimatePresence>
     </View>

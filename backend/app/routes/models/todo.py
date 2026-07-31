@@ -18,6 +18,7 @@ class TodoResponse(BaseModel):
     due_date: Optional[date]        # null = "Someday"; a device-local calendar date
     completed: bool
     completed_at: Optional[datetime]
+    completed_on: Optional[date]    # the user's LOCAL day — what the daily goal counts
     created_at: Optional[datetime]
 
 
@@ -32,6 +33,10 @@ class TodoStats(BaseModel):
     total: int
     open: int
     completed: int
+    # Only populated when the caller passes its local date as ?today=YYYY-MM-DD.
+    # Null means "didn't ask" — never render it as a zero, that would read as
+    # "you've done nothing today" when we simply weren't told what today is.
+    completed_today: Optional[int] = None
 
 
 class TodoListResponse(BaseModel):
@@ -73,6 +78,11 @@ class UpdateTodoRequest(BaseModel):
     priority: Optional[Priority] = None
     due_date: Optional[date] = None
     completed: Optional[bool] = None
+    # The client's LOCAL calendar date, sent when ticking something off. Only the
+    # device knows what day it is for the user; the server falls back to its own
+    # UTC date if this is omitted, which is right for a stray API call and wrong
+    # by up to a day for a real user — so the app always sends it.
+    completed_on: Optional[date] = None
     # due_date is nullable, so "omitted" and "set to null" are indistinguishable
     # in the JSON. This flag is the explicit "move it back to Someday".
     clear_due_date: bool = False

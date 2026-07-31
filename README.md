@@ -35,7 +35,7 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 - 🍳 **Recipes & checklists** — step-by-step instructions extracted from how-to / cooking content
 - 🏋️ **Workout plans** — exercises with sets/reps/rest, plus a guided session player
 - 🧳 **Trip itineraries** — travel saves become a day-by-day plan built **only** from places the reel actually mentions; when the reel states no day plan the grouping is AI-organised and labelled as such
-- ✅ **Follow Through** — a cross-reel list of what you actually meant to do. Add any save to it (title + summary are copied in, so it still reads after the reel is gone), pick a date from an inline calendar, set a priority, and the home screen surfaces what's overdue and due next. Past dates are refused, one open task per save, and finishing one asks whether to clear the save out of your library. **Zero AI cost** — it's your own text, not a generation
+- ✅ **Your slate** — a cross-reel list of what you actually meant to do. Add any save to it (title + summary are copied in, so it still reads after the reel is gone), pick a date from an inline calendar, set a priority, and the home screen shows Today and Upcoming side by side. Past dates are refused, one open task per save, finishing one asks whether to clear the save from your library, and a **daily goal** tracks completions against the device's own calendar day. **Zero AI cost** — it's your own text, not a generation
 - ✍️ **Manual control** — AI generates once, then you add / edit / delete items yourself (no repeat AI cost)
 
 ### Find & rediscover
@@ -57,7 +57,7 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 - Per-user daily AI quota (the real cost ceiling) + per-reel AI caps + per-IP burst guard
 - Usage drill-down — see exactly what today's AI actions were spent on
 - `/health` and `/health/extract` self-test endpoints; image proxy for CDN-blocked thumbnails
-- Backend test suite — **251 pytest tests** across 24 files
+- Backend test suite — **256 pytest tests** across 24 files
 
 ---
 
@@ -155,12 +155,12 @@ savehere/
 │   │   ├── routes/                # reels, workout (tasks/recipes/workouts/itineraries), ask, todos, account, billing
 │   │   └── services/              # extractor, summarizer, workout_extractor, librarian, search, transcriber
 │   ├── scripts/                   # set_tier.py, dev_tier.py, enable_rls.sql
-│   └── tests/                     # pytest suite (251 tests)
+│   └── tests/                     # pytest suite (256 tests)
 ├── mobile/                        # Expo Router app
 │   ├── app/                       # library, save, reel detail, ask, rediscover, todos, help, workout
-│   ├── components/                # ReelCard, TaskList, TodoEditor, DatePicker, Landing, ProfilePanel, Icon, …
-│   ├── constants/                 # theme, features, todoBrand (the Follow Through name + quotes)
-│   └── services/                  # api.ts (typed client), todoDates.ts (local-calendar helpers), …
+│   ├── components/                # ReelCard, TaskList, TodoEditor, DatePicker, TodoGoalBar, Landing, Icon, …
+│   ├── constants/                 # theme, features, todoBrand (names, rolling titles, quotes)
+│   └── services/                  # api.ts (typed client), todoDates.ts + todoSettings.ts, …
 ├── docs/
 │   ├── CONTEXT.md                 # architecture + decisions handoff
 │   └── REMOTE_DEV.md              # Codespaces + Claude Code setup guide
@@ -193,7 +193,7 @@ All `/api/*` routes require a Supabase `Bearer` token and are scoped to the call
 | `POST` `GET` | `/api/reels/{id}/itinerary` | Generate (×3 max) / fetch a trip itinerary — travel only, **Pro** |
 | `POST` | `/api/ask` | Ask a question answered from your library — **Pro** |
 | `POST` | `/api/ask/stream` | Same, streamed token-by-token + trailing sources — **Pro** |
-| `GET` | `/api/todos` | The open list, date-then-priority ordered, plus whole-list stats (`?include_completed=true` for done items) |
+| `GET` | `/api/todos` | The open list, date-then-priority ordered, plus stats (`?include_completed=true`; `?today=YYYY-MM-DD` adds today's completion count for the daily goal) |
 | `POST` | `/api/todos` | Create a to-do — only `title` is required (no AI, no quota) |
 | `GET` `POST` | `/api/reels/{id}/todo` | Check for / create this save's task — title + summary copied in, `reel_id` linked |
 | `PATCH` / `DELETE` | `/api/todos/{id}` | Edit / complete / delete a to-do |
@@ -236,7 +236,7 @@ Plus: **retrieval, not dumping** — ask sends only the most relevant saves to t
 ## 🧪 Testing
 
 ```bash
-cd backend && python -m pytest tests/ -q     # 251 tests across 24 files
+cd backend && python -m pytest tests/ -q     # 256 tests across 24 files
 cd mobile  && npm run typecheck              # mobile type check (uses --stack-size=16000)
 cd mobile  && npx expo export --platform web # validate the web build
 ```

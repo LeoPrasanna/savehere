@@ -152,7 +152,14 @@ class TodoDB(Base):
     priority = Column(String, nullable=False, default="medium")   # high | medium | low
     due_date = Column(Date, nullable=True)                        # null = "Someday"
     completed = Column(Boolean, nullable=False, default=False)
-    completed_at = Column(DateTime, nullable=True)                # feeds the activity grid
+    completed_at = Column(DateTime, nullable=True)                # UTC instant — ordering/audit
+    # The user's LOCAL calendar day at the moment they ticked it off, sent by the
+    # client. `completed_at` alone can't answer "did I hit today's goal?" — a task
+    # finished at 9 p.m. in Delhi is stamped 15:30 UTC the same day, but one
+    # finished at 9 p.m. in Los Angeles is stamped 04:00 UTC the NEXT day, so a
+    # UTC-derived "today" would move someone's daily streak by a day. Same
+    # reasoning as `due_date`: calendar days are local, and we store them as given.
+    completed_on = Column(Date, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

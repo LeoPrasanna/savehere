@@ -241,6 +241,33 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
      `@react-native-community/datetimepicker`: another native dep that can't render in the
      web dev loop and looks different per platform. Grid math verified across 84 months
      incl. leap years and the 2100 non-leap trap.
+- [x] **To-do round three: goals, settings, side-by-side home block (2026-07-31)**
+  1. **Naming split.** The home screen says one steady thing — **"Things on your slate"**;
+     the list screen's own hero *rolls* through "My Docket 📜 / My Almanac 🌙 / …"
+     (`TODO_ROLL_NAMES`). A rolling name on the home screen would just be noise beside the
+     user's actual saves. The nav header on that screen is deliberately blank — the rolling
+     hero IS the title.
+  2. **Home block is now two columns**, Today | Upcoming. **Overdue folds into Today**
+     rather than taking a third column: it *is* today's work, just late, and three columns
+     don't survive a narrow phone. Each column is `flex:1` + `minWidth:0` so a long title
+     truncates inside its own column instead of shoving the other off the card.
+  3. **Completion animation** — the tick springs in, a ring bursts outward, the row eases
+     back to 62% opacity but stays readable so tapping again to undo is obvious.
+  4. **Daily goal** (default 5, settable 0/3/5/8/10, 0 = off) with a progress bar on both
+     surfaces. ⚠️ **The reset is structural, not scheduled:** the new `todos.completed_on`
+     column stores the DEVICE's calendar day, so "today" rolls over at the user's own
+     midnight. There is no cron to run and nothing that can get stuck showing yesterday's
+     number. `completed_at` (UTC) is kept for ordering/audit but is NOT what the goal counts
+     — a task finished at 9 p.m. in Los Angeles is stamped the *next* UTC day.
+     `stats.completed_today` is `null`, never `0`, when the client didn't say what day it is.
+  5. **Settings sheet** (gear on the list screen): daily goal, show-on-home, default
+     priority, keep-completed-visible, Someday-first, and **a switch for the
+     "delete the saved card?" prompt** — it's the kind of ask that gets old fast.
+     Device-local (`services/todoSettings.ts`), not server-side: these are display choices,
+     and a round-trip before first paint isn't worth it. Move to `profiles` if sync is asked
+     for. ⚠️ Bug caught by its own check: `Number(null)` is `0` in JS, and `0` is meaningful
+     here ("goal off") — so a corrupt stored value used to silently switch the goal off
+     instead of falling back to the default. Now only real numbers/numeric strings count.
 - [ ] **To-do reminders** — a local notification the evening before / morning of a due date.
   Free in money (`expo-notifications`, no push server), but needs the **custom dev build**
   (doesn't work in Expo Go, and web needs the Notification API + a permission prompt), so it

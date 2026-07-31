@@ -31,6 +31,7 @@ def _to_response(t: TodoDB) -> TodoResponse:
         due_date=t.due_date,
         completed=bool(t.completed),
         completed_at=t.completed_at,
+        completed_on=t.completed_on,
         created_at=t.created_at,
     )
 
@@ -92,14 +93,29 @@ def _summary_as_description(reel: ReelDB) -> str | None:
 
 
 @router.get("/todos", response_model=TodoListResponse)
-def list_todos(include_completed: bool = False,
+def list_todos(include_completed: bool = False, today: date | None = None,
                user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """The whole open list in one call — the client buckets it into
     overdue/today/upcoming/someday against the DEVICE's clock, because "today"
-    is local and this server is UTC."""
+    is local and this server is UTC.
+
+    `today` is the caller's own calendar date. Pass it to get `completed_today`
+    in the stats (what the daily goal measures) without shipping every completed
+    row back just so the client can count them.
+    """
     all_rows = db.query(TodoDB).filter(TodoDB.user_id == user.id).all()
     done = sum(1 for t in all_rows if t.completed)
-    stats = TodoStats(total=len(all_rows), open=len(all_rows) - done, completed=done)
+    stats = TodoStats(
+        total=len(all_rows),
+        open=len(all_rows) - done,
+        completed=done,
+        # Left as None when `today` wasn't supplied — the client must not render
+        # a missing answer as a zero.
+        completed_today=(
+            sum(1 for t in all_rows if t.completed and t.completed_on == today)
+            if today is not None else None
+        ),
+    )
 
     rows = all_rows if include_completed else [t for t in all_rows if not t.completed]
     items = sorted(rows, key=_sort_key)
@@ -200,9 +216,15 @@ def update_todo(todo_id: str, body: UpdateTodoRequest,
 
     if body.completed is not None and bool(todo.completed) != body.completed:
         todo.completed = body.completed
-        # The timestamp is what the activity grid / streak reads. Cleared on
-        # un-completing so an undo doesn't leave a phantom "done" day behind.
+        # Both are cleared on un-completing, so an undo can't leave a phantom
+        # "done" day inflating the daily goal or a future activity grid.
         todo.completed_at = datetime.utcnow() if body.completed else None
+        todo.completed_on = (
+            # The client's local day when it tells us; the server's UTC day only
+            # as a fallback for a caller that didn't (off by up to a day, which
+            # is why the app always sends it).
+            (body.completed_on or datetime.utcnow().date()) if body.completed else None
+        )
 
     db.commit()
     db.refresh(todo)
