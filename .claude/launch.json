@@ -9,6 +9,12 @@
       "port": 8090
     },
     {
+      "name": "site",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "4173", "--directory", "site"],
+      "port": 4173
+    },
+    {
       "name": "backend",
       "cwd": "backend",
       "runtimeExecutable": "python",
