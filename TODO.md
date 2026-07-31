@@ -268,6 +268,23 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
      for. ⚠️ Bug caught by its own check: `Number(null)` is `0` in JS, and `0` is meaningful
      here ("goal off") — so a corrupt stored value used to silently switch the goal off
      instead of falling back to the default. Now only real numbers/numeric strings count.
+- [x] **To-do UX fixes (2026-07-31)** — four owner reports, all root-caused:
+  1. **Home button went to the library, not home.** Not a to-do bug — `goHome()` was
+     missing `clearEnteredLibrary()`. The `/` route renders EITHER the landing page or the
+     library depending on that session flag, so once you'd opened the library the house
+     icon dropped you back there for the rest of the session, from *every* screen.
+     `sessionFlags.ts` had documented "Going Home must clear this" all along; the call was
+     simply never made. Fixed in `HomeButton.tsx`, so it's fixed app-wide.
+  2. **"Done — nice one." was slow.** It was rendered *after* `await api.updateTodo(...)`,
+     so a cold Render instance left the user staring at a ticked box for seconds. Now shown
+     immediately and dismissed if the update fails. Safe to be optimistic: the prompt only
+     *offers* a deletion, which is its own separately confirmed action.
+  3. **"My" is now fixed**, with only the name + emoji rolling. Stacked (small "MY" label
+     above, big rolling name below) rather than inline — "My Program of Entertainment 🎪"
+     on one line does not fit a narrow phone, and truncating a name mid-word looks broken.
+  4. **Hamburger added** to the list screen. `ProfilePanel`'s `reels` prop is only a
+     fallback for counters it otherwise reads from `/api/account/usage`, so this screen
+     passes `[]` and fetches just the reel `total` lazily when the panel opens.
 - [ ] **To-do reminders** — a local notification the evening before / morning of a due date.
   Free in money (`expo-notifications`, no push server), but needs the **custom dev build**
   (doesn't work in Expo Go, and web needs the Notification API + a permission prompt), so it

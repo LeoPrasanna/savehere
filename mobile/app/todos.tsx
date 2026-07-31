@@ -11,6 +11,7 @@ import { TodoEditor } from '../components/TodoEditor';
 import { RollingTagline } from '../components/RollingTagline';
 import { TodoGoalBar } from '../components/TodoGoalBar';
 import { TodoSettingsSheet } from '../components/TodoSettingsSheet';
+import { ProfilePanel } from '../components/ProfilePanel';
 import { bucketOf, formatDue, todayISO, Bucket } from '../services/todoDates';
 import { useTodoSettings } from '../services/todoSettings';
 import { TODO_QUOTES, TODO_ROLL_NAMES, TODO_ADD_LABEL } from '../constants/todoBrand';
@@ -33,8 +34,9 @@ const SECTIONS: { key: Bucket; label: string }[] = [
   { key: 'someday', label: 'SOMEDAY' },
 ];
 
-/** "My Docket 📜" — the list screen's rolling hero. */
-const ROLL_LINES = TODO_ROLL_NAMES.map(n => `My ${n.name} ${n.emoji}`);
+/** Only the name + emoji rolls — "My" is fixed beside it, so it reads as one
+ *  steady phrase with a changing tail rather than the whole title flickering. */
+const ROLL_LINES = TODO_ROLL_NAMES.map(n => `${n.name} ${n.emoji}`);
 
 function StatTile({ label, value, tint }: { label: string; value: number; tint?: string }) {
   return (
@@ -133,6 +135,10 @@ export default function TodosScreen() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Todo | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  // Only for the profile panel's "saves" counter. Fetched when the panel opens
+  // rather than on mount — this screen otherwise has no reason to touch reels.
+  const [reelTotal, setReelTotal] = useState<number | undefined>(undefined);
   const { settings, update: updateSettings, ready: settingsReady } = useTodoSettings();
   // Set when a reel-linked task is completed: the "delete the saved card?" ask.
   const [finished, setFinished] = useState<Todo | null>(null);
@@ -176,6 +182,17 @@ export default function TodosScreen() {
         : Math.max(0, s.completed_today + (next ? 1 : -1)),
     });
     next ? haptics.success() : haptics.tap();
+
+    // Shown IMMEDIATELY, before the request — not after it. Waiting on the round
+    // trip meant a cold Render instance could leave the user staring at a ticked
+    // box for seconds before anything acknowledged it. The prompt only offers to
+    // delete a save, and that deletion is its own explicit confirmed action, so
+    // there is nothing unsafe about asking optimistically; a failed update
+    // dismisses it again below.
+    if (next && todo.reel_id && settings.askDeleteSaveOnDone) {
+      setFinished({ ...todo, completed: true });
+    }
+
     try {
       await api.updateTodo(todo.id, {
         completed: next,
@@ -183,12 +200,9 @@ export default function TodosScreen() {
         // own calendar day rather than the server's UTC one.
         completed_on: next ? todayISO() : null,
       });
-      // Only on the way TO done, only when there's a save to act on, and only if
-      // the user hasn't switched the prompt off.
-      if (next && todo.reel_id && settings.askDeleteSaveOnDone) {
-        setFinished({ ...todo, completed: true });
-      }
     } catch (e: any) {
+      // The tick didn't stick, so the celebration mustn't stand either.
+      setFinished(null);
       setTodos(ts => ts.map(t => (t.id === todo.id ? { ...t, completed: !next } : t)));
       setStats(s => s && {
         ...s,
@@ -276,23 +290,44 @@ export default function TodosScreen() {
           />
         }
       >
-        {/* ── Hero: the list's own rolling name, with settings alongside ── */}
-        <View style={styles.heroRow}>
+        {/* ── Hero. "My" is fixed; only the name + emoji rolls beneath it.
+            Stacked rather than inline so the rolling half gets the full card
+            width — "My Program of Entertainment 🎪" on one line does not fit a
+            narrow phone, and truncating a name mid-word looks broken. ── */}
+        <View style={styles.heroBlock}>
+          <View style={styles.heroTopRow}>
+            <Text style={styles.heroFixed}>MY</Text>
+            <View style={{ flex: 1 }} />
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => setSettingsOpen(true)}
+              scaleTo={0.9}
+              hitSlop={8}
+            >
+              <Icon name="settings" size={18} color={colors.textSecondary} />
+            </Pressable>
+            <Pressable
+              style={styles.iconBtn}
+              onPress={() => {
+                setMenuOpen(true);
+                if (reelTotal === undefined) {
+                  api.listReels({ limit: 1 }).then(d => setReelTotal(d.total)).catch(() => {});
+                }
+              }}
+              scaleTo={0.9}
+              hitSlop={8}
+            >
+              <Icon name="menu" size={18} color={colors.textPrimary} />
+            </Pressable>
+          </View>
           <RollingTagline
             lines={ROLL_LINES}
-            height={44}
+            height={36}
             intervalMs={5200}
+            numberOfLines={1}
+            alignLeft
             textStyle={styles.heroText}
-            style={styles.hero}
           />
-          <Pressable
-            style={styles.gear}
-            onPress={() => setSettingsOpen(true)}
-            scaleTo={0.9}
-            hitSlop={8}
-          >
-            <Icon name="settings" size={18} color={colors.textSecondary} />
-          </Pressable>
         </View>
 
         {/* ── Dashboard: where you stand, plus something worth reading ──── */}
@@ -377,6 +412,13 @@ export default function TodosScreen() {
         onSaved={onSaved}
       />
 
+      <ProfilePanel
+        visible={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        reels={[]}
+        total={reelTotal}
+      />
+
       <TodoSettingsSheet
         visible={settingsOpen}
         settings={settings}
@@ -429,13 +471,17 @@ const styles = themed(() => StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.lg, flexGrow: 1 },
 
   // ── Hero ────────────────────────────────────────────────────────────
-  heroRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  hero: { flex: 1, alignSelf: 'auto' },
-  heroText: {
-    fontSize: font.xxl, fontWeight: '800', color: colors.textPrimary,
-    textAlign: 'left', paddingHorizontal: 0, lineHeight: 34, fontStyle: 'normal',
+  heroBlock: { gap: 2 },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  heroFixed: {
+    color: colors.textTertiary, fontSize: font.xs,
+    fontWeight: '800', letterSpacing: 2,
   },
-  gear: {
+  heroText: {
+    fontSize: font.xl, fontWeight: '800', color: colors.textPrimary,
+    textAlign: 'left', paddingHorizontal: 0, lineHeight: 30, fontStyle: 'normal',
+  },
+  iconBtn: {
     width: 38, height: 38, borderRadius: radius.full,
     backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
     alignItems: 'center', justifyContent: 'center',
