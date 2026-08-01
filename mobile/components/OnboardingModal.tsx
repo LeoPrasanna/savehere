@@ -1,97 +1,163 @@
 import { useState, useEffect, useRef } from 'react';
-import {
-  View, Text, StyleSheet, Modal, Dimensions, Animated, Platform, useWindowDimensions,
-} from 'react-native';
-import { MotiView } from 'moti';
-import { LinearGradient } from 'expo-linear-gradient';
+import { View, Text, StyleSheet, Modal, Dimensions, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import {
-  Sparkles, Brain, Dumbbell, ChefHat, BookOpen, Zap, ArrowRight,
-} from 'lucide-react-native';
 import { Pressable } from './Pressable';
-import { GlassCard } from './GlassCard';
-import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
+import { Label, Body, Rule, Rail, FilledButton } from './kit';
+import { colors, spacing, font, tracking, typeface, motion, themed } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 
 const ONBOARDING_KEY = '@savehere:onboarding:v1';
 const { width: SCREEN_W } = Dimensions.get('window');
 
-interface OnboardingStep {
+/**
+ * First-run tour, full-bleed on the canvas.
+ *
+ * Structure follows the brief's reference: title, a short paragraph, one square
+ * hero, a progress indicator, and a persistent CTA pinned at the bottom. What
+ * differs is everything about the execution — the hero is a monochrome
+ * geometric figure rather than a photograph, the progress is a numbered rail
+ * rather than dots (whose active dot is that app's only spot of colour, which
+ * this system cannot have), and the CTA is square rather than a white pill.
+ */
+
+type Figure = 'grid' | 'ask' | 'plan' | 'steps' | 'check' | 'save';
+
+interface Step {
+  eyebrow: string;
   title: string;
-  subtitle: string;
   description: string;
-  icon: React.ReactNode;
-  gradient: readonly string[];
-  accent: string;
+  figure: Figure;
 }
 
-const STEPS: OnboardingStep[] = themed(() => [
+const STEPS: Step[] = [
   {
-    title: 'Welcome to SaveHere',
-    subtitle: 'Your AI-powered second brain',
+    eyebrow: 'Welcome',
+    title: 'A contact sheet\nfor everything you save.',
     description:
-      'You start with a 10-day full trial — unlimited saves and 30 AI actions a day, no credit card needed. After that you keep your whole library, with 3 AI actions a day and up to 20 saves. Pro removes the limits.',
-    icon: <Sparkles size={40} color="#FFF" />,
-    gradient: gradients.hologram,
-    accent: colors.hologram,
+      'You start with a 10-day full trial — unlimited saves and 30 AI actions a day, no card needed. After that you keep your whole library, with 3 AI actions a day and up to 20 saves. Pro removes the limits.',
+    figure: 'grid',
   },
   {
-    title: 'Ask Your Library',
-    subtitle: 'Chat with everything you\'ve saved',
+    eyebrow: 'Ask',
+    title: 'Ask your own library.',
     description:
-      'Ask natural questions like "What was that high-protein recipe?" or "Remind me of the shoulder workout." SaveHere answers using only your saved content — no generic web results.',
-    icon: <Brain size={40} color="#FFF" />,
-    gradient: gradients.cool,
-    accent: '#5FC9BD',
+      'Ask in plain words — "what was that high-protein recipe?" — and get an answer built only from what you saved, with the sources it used. No generic web results.',
+    figure: 'ask',
   },
   {
-    title: 'Build Workouts',
-    subtitle: 'Turn fitness reels into guided plans',
+    eyebrow: 'Workouts',
+    title: 'Turn a gym reel\ninto a real plan.',
     description:
-      'Save any gym or fitness video, then tap "Build Workout." We extract exercises, sets, reps, and rest times into a hands-free session player with countdown timers.',
-    icon: <Dumbbell size={40} color="#FFF" />,
-    gradient: gradients.vibrant,
-    accent: '#FF6B8A',
+      'Save any fitness video and tap Build Workout. Exercises, sets, reps and rest times become a hands-free session with countdown timers.',
+    figure: 'plan',
   },
   {
-    title: 'Extract Recipes',
-    subtitle: 'Cook-along steps from any food reel',
+    eyebrow: 'Recipes',
+    title: 'Cook along,\nstep by step.',
     description:
-      'Save a cooking video and tap "Get Recipe." We pull out ingredients and numbered steps you can tick off as you cook. Edit anything anytime.',
-    icon: <ChefHat size={40} color="#FFF" />,
-    gradient: ['#FFB84D', '#FF8A5B'] as const,
-    accent: '#FFB84D',
+      'Save a cooking video and tap Get Recipe. Ingredients and numbered steps you can tick off as you go. Edit anything, any time.',
+    figure: 'steps',
   },
   {
-    title: 'Study Actions',
-    subtitle: 'Checklists from tutorials & how-tos',
+    eyebrow: 'Study',
+    title: 'Do the thing,\nnot just watch it.',
     description:
-      'Save a tutorial or lesson and turn it into an actionable checklist. Actually do what the video teaches instead of just watching it.',
-    icon: <BookOpen size={40} color="#FFF" />,
-    gradient: gradients.primary,
-    accent: colors.accent,
+      'Save a tutorial or lesson and turn it into an actionable checklist — so what the video teaches actually gets done.',
+    figure: 'check',
   },
   {
-    title: 'You\'re All Set',
-    subtitle: 'Start saving your first reel',
+    eyebrow: 'Ready',
+    title: 'Save your first link.',
     description:
-      'Tap the big + button to save a link from YouTube, Instagram, TikTok, or LinkedIn. The AI summary and tags appear automatically. Happy learning!',
-    icon: <Zap size={40} color="#FFF" />,
-    gradient: gradients.success,
-    accent: colors.success,
+      'Tap + to save from YouTube, Instagram, TikTok or LinkedIn. The summary and tags appear on their own.',
+    figure: 'save',
   },
-]);
+];
+
+/**
+ * The hero slot.
+ *
+ * The reference is image-led and this app ships no photography, so rather than
+ * fake a picture the slot holds an abstract monochrome figure built from the
+ * system's own primitives — frames, rules and hairlines. mono's imagery rule
+ * sanctions exactly this: "illustrations are abstract, using a monochromatic
+ * palette to match the UI, with strong geometric shapes, dots and lines."
+ *
+ * Fixed 1:1 so the slot never reflows between steps.
+ */
+function StepFigure({ kind }: { kind: Figure }) {
+  return (
+    <View style={styles.figure}>
+      {kind === 'grid' && (
+        <View style={styles.fGrid}>
+          {Array.from({ length: 9 }).map((_, i) => (
+            <View key={i} style={[styles.fCell, (i === 1 || i === 5 || i === 6) && styles.fCellOn]} />
+          ))}
+        </View>
+      )}
+
+      {kind === 'ask' && (
+        <View style={styles.fStack}>
+          <View style={styles.fBarWide} />
+          <View style={styles.fBarMid} />
+          <View style={styles.fGap} />
+          <View style={[styles.fBarWide, styles.fOn]} />
+          <View style={[styles.fBarMid, styles.fOn]} />
+          <View style={[styles.fBarShort, styles.fOn]} />
+        </View>
+      )}
+
+      {kind === 'plan' && (
+        <View style={styles.fStack}>
+          {[3, 4, 5, 4].map((n, r) => (
+            <View key={r} style={styles.fRow}>
+              {Array.from({ length: 5 }).map((_, c) => (
+                <View key={c} style={[styles.fDot, c < n && styles.fOn]} />
+              ))}
+            </View>
+          ))}
+        </View>
+      )}
+
+      {kind === 'steps' && (
+        <View style={styles.fStack}>
+          {[0, 1, 2, 3].map(i => (
+            <View key={i} style={styles.fStepRow}>
+              <Text style={styles.fNum}>{String(i + 1).padStart(2, '0')}</Text>
+              <View style={[styles.fBarWide, i === 0 && styles.fOn]} />
+            </View>
+          ))}
+        </View>
+      )}
+
+      {kind === 'check' && (
+        <View style={styles.fStack}>
+          {[true, true, false, false].map((done, i) => (
+            <View key={i} style={styles.fStepRow}>
+              <View style={[styles.fBox, done && styles.fBoxOn]} />
+              <View style={[styles.fBarWide, done && styles.fOn]} />
+            </View>
+          ))}
+        </View>
+      )}
+
+      {kind === 'save' && (
+        <View style={styles.fPlusWrap}>
+          <View style={styles.fPlusV} />
+          <View style={styles.fPlusH} />
+        </View>
+      )}
+    </View>
+  );
+}
 
 export function OnboardingModal() {
   const [visible, setVisible] = useState(false);
   const [step, setStep] = useState(0);
   const [checked, setChecked] = useState(false);
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const { session } = useAuth();
-  const cardWidth = Math.min(width - spacing.lg * 2, 400);
-  const progress = useRef(new Animated.Value(0)).current;
   const slideX = useRef(new Animated.Value(0)).current;
   const fadeIn = useRef(new Animated.Value(0)).current;
 
@@ -113,7 +179,7 @@ export function OnboardingModal() {
       if (!val && isFreshAccount) {
         setVisible(true);
         setStep(0);
-        Animated.timing(fadeIn, { toValue: 1, duration: 300, useNativeDriver: true }).start();
+        Animated.timing(fadeIn, { toValue: 1, duration: motion.micro, useNativeDriver: true }).start();
       } else if (!val) {
         AsyncStorage.setItem(storageKey, 'completed');
       }
@@ -121,27 +187,15 @@ export function OnboardingModal() {
     });
   }, [storageKey]);
 
-  useEffect(() => {
-    Animated.timing(progress, {
-      toValue: (step + 1) / STEPS.length,
-      duration: 400,
-      useNativeDriver: false,
-    }).start();
-  }, [step]);
-
   const goNext = () => {
     if (step < STEPS.length - 1) {
       Animated.timing(slideX, {
-        toValue: -SCREEN_W,
-        duration: 250,
-        useNativeDriver: true,
+        toValue: -SCREEN_W, duration: motion.micro, useNativeDriver: true,
       }).start(() => {
         setStep((s) => s + 1);
         slideX.setValue(SCREEN_W);
         Animated.timing(slideX, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: true,
+          toValue: 0, duration: motion.micro, useNativeDriver: true,
         }).start();
       });
     } else {
@@ -150,7 +204,7 @@ export function OnboardingModal() {
   };
 
   const finish = () => {
-    Animated.timing(fadeIn, { toValue: 0, duration: 200, useNativeDriver: true }).start(() => {
+    Animated.timing(fadeIn, { toValue: 0, duration: motion.micro, useNativeDriver: true }).start(() => {
       if (storageKey) AsyncStorage.setItem(storageKey, 'completed');
       setVisible(false);
     });
@@ -158,135 +212,38 @@ export function OnboardingModal() {
 
   const current = STEPS[step];
   const isLast = step === STEPS.length - 1;
-  const isFirst = step === 0;
-  const topSafe = insets.top + spacing.md;
 
   if (!checked) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="none" statusBarTranslucent>
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: fadeIn }]}>
-        {/* Dark solid overlay to dim the app behind */}
-        <View style={styles.backdrop} pointerEvents="none">
-          <LinearGradient
-            colors={['rgba(11,10,15,0.92)', 'rgba(11,10,15,0.96)', 'rgba(11,10,15,0.92)']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
+    <Modal visible={visible} transparent={false} animationType="fade" statusBarTranslucent>
+      <Animated.View style={[styles.screen, { opacity: fadeIn }]}>
+        {/* Top: which step, out of how many. No Skip — first-run onboarding is
+            shown once to a brand-new account and must be seen in full; the only
+            way out is stepping through to the end (decided 2026-07-20). */}
+        <View style={[styles.top, { paddingTop: insets.top + spacing.md }]}>
+          <Label wide>{current.eyebrow}</Label>
+          <Rail step={step + 1} total={STEPS.length} />
         </View>
+        <Rule />
 
-        <View style={[styles.overlay, { paddingTop: topSafe, paddingBottom: insets.bottom + spacing.lg }]}>
-          {/* Top bar: Progress + Skip */}
-          <View style={[styles.topBar, { paddingHorizontal: spacing.lg }]}>
-            <View style={styles.progressWrap}>
-              <View style={styles.progressTrack}>
-                <Animated.View
-                  style={[
-                    styles.progressFill,
-                    { width: progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) },
-                  ]}
-                >
-                  <LinearGradient
-                    colors={gradients.hologram}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                    style={StyleSheet.absoluteFill}
-                  />
-                </Animated.View>
-              </View>
-              <Text style={styles.progressText}>
-                {step + 1} / {STEPS.length}
-              </Text>
-            </View>
-            {/* No Skip: first-run onboarding is shown once to a brand-new
-                account and must be seen in full — the only way out is stepping
-                through to "Get Started" (decided 2026-07-20). */}
-          </View>
+        <Animated.View style={[styles.page, { transform: [{ translateX: slideX }] }]}>
+          <Text style={styles.title}>{current.title}</Text>
+          <Body style={styles.desc}>{current.description}</Body>
+          <StepFigure kind={current.figure} />
+        </Animated.View>
 
-          {/* Card */}
-          <View style={styles.cardContainer}>
-            <Animated.View style={{ transform: [{ translateX: slideX }], width: cardWidth }}>
-              <GlassCard tint="none" intensity="high" style={styles.card}>
-                {/* Animated accent glow behind icon */}
-                <MotiView
-                  from={{ opacity: 0.3, scale: 0.8 }}
-                  animate={{ opacity: 0.6, scale: 1.2 }}
-                  transition={{ type: 'timing', duration: 3000, loop: true, repeatReverse: true }}
-                  style={[
-                    styles.iconGlow,
-                    { backgroundColor: current.accent },
-                  ]}
-                />
-
-                {/* Icon circle */}
-                <MotiView
-                  from={{ opacity: 0, scale: 0.5 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ type: 'spring', damping: 12, stiffness: 150 }}
-                  style={styles.iconWrap}
-                >
-                  <LinearGradient
-                    colors={current.gradient as [string, string]}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-                    style={styles.iconGrad}
-                  >
-                    {current.icon}
-                  </LinearGradient>
-                  {/* Orbit ring */}
-                  <MotiView
-                    from={{ rotate: '0deg' }}
-                    animate={{ rotate: '360deg' }}
-                    transition={{ type: 'timing', duration: 8000, loop: true }}
-                    style={[styles.orbitRing, { borderColor: current.accent + '40' }]}
-                  />
-                </MotiView>
-
-                {/* Text */}
-                <MotiView
-                  from={{ opacity: 0, translateY: 12 }}
-                  animate={{ opacity: 1, translateY: 0 }}
-                  transition={{ type: 'timing', duration: 400, delay: 150 }}
-                  style={styles.textBlock}
-                >
-                  <Text style={styles.title}>{current.title}</Text>
-                  <Text style={styles.subtitle}>{current.subtitle}</Text>
-                  <Text style={styles.description}>{current.description}</Text>
-                </MotiView>
-
-                {/* Dots */}
-                <View style={styles.dotsRow}>
-                  {STEPS.map((_, i) => (
-                    <View
-                      key={i}
-                      style={[
-                        styles.dot,
-                        i === step && { backgroundColor: current.accent, width: 24 },
-                        i < step && { backgroundColor: colors.textSecondary },
-                      ]}
-                    />
-                  ))}
-                </View>
-
-                {/* CTA */}
-                <Pressable onPress={goNext} scaleTo={0.97} style={styles.ctaWrap}>
-                  <LinearGradient
-                    colors={(isLast ? gradients.success : current.gradient) as [string, string]}
-                    start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
-                    style={styles.cta}
-                  >
-                    <Text style={styles.ctaText}>{isLast ? 'Get Started' : 'Next'}</Text>
-                    <ArrowRight size={18} color="#FFF" />
-                  </LinearGradient>
-                </Pressable>
-
-                {isFirst && (
-                  <Text style={styles.terms}>
-                    By continuing, you agree to our Terms and Privacy Policy.
-                  </Text>
-                )}
-              </GlassCard>
-            </Animated.View>
-          </View>
+        <View style={[styles.foot, { paddingBottom: insets.bottom + spacing.lg }]}>
+          <FilledButton
+            label={isLast ? 'Start saving' : 'Next'}
+            trailing="→"
+            onPress={goNext}
+          />
+          {step === 0 && (
+            <Label style={styles.terms}>
+              By continuing you agree to our Terms and Privacy Policy
+            </Label>
+          )}
         </View>
       </Animated.View>
     </Modal>
@@ -294,166 +251,65 @@ export function OnboardingModal() {
 }
 
 const styles = themed(() => StyleSheet.create({
-  backdrop: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    zIndex: 1,
-  },
-  overlay: {
-    flex: 1,
-    zIndex: 2,
-  },
-  topBar: {
+  screen: { flex: 1, backgroundColor: colors.background },
+  top: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: spacing.sm,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-  },
-  progressWrap: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
-  progressTrack: {
-    flex: 1,
-    height: 4,
-    backgroundColor: colors.border,
-    borderRadius: radius.full,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: radius.full,
-    overflow: 'hidden',
-  },
-  progressText: {
-    color: colors.textSecondary,
-    fontSize: font.xs,
-    fontWeight: '700',
-    minWidth: 36,
-    textAlign: 'right',
-  },
-  skipBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.md,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
-  skipText: {
-    color: colors.textSecondary,
-    fontSize: font.sm,
-    fontWeight: '700',
-  },
-  cardContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
     paddingHorizontal: spacing.lg,
+    paddingBottom: spacing.md,
   },
-  card: {
-    padding: spacing.lg,
-    alignItems: 'center',
-    gap: spacing.md,
-  },
-  iconGlow: {
-    position: 'absolute',
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    opacity: 0.3,
-    top: 24,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 40 },
-      default: { elevation: 0 },
-    }),
-  },
-  iconWrap: {
-    width: 96,
-    height: 96,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconGrad: {
-    width: 80,
-    height: 80,
-    borderRadius: radius.full,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...shadow.glow,
-  },
-  orbitRing: {
-    position: 'absolute',
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    borderWidth: 1.5,
-    borderStyle: 'dashed',
-  },
-  textBlock: {
-    alignItems: 'center',
-    gap: spacing.xs,
-    paddingHorizontal: spacing.sm,
-  },
+
+  page: { flex: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
   title: {
     color: colors.textPrimary,
-    fontSize: font.xl,
-    fontWeight: '900',
-    textAlign: 'center',
-    letterSpacing: -0.5,
+    fontFamily: typeface.display,
+    fontSize: font.xxl,
+    lineHeight: font.xxl * 1.12,
+    letterSpacing: tracking.title,
   },
-  subtitle: {
-    color: colors.accentLight,
-    fontSize: font.sm,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  description: {
-    color: colors.textSecondary,
-    fontSize: font.sm,
-    lineHeight: 20,
-    textAlign: 'center',
-    marginTop: spacing.xs,
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    gap: 6,
-    marginTop: spacing.xs,
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.border,
-  },
-  ctaWrap: {
-    width: '100%',
-    borderRadius: radius.md,
-    ...shadow.glow,
-    marginTop: spacing.xs,
-  },
-  cta: {
-    flexDirection: 'row',
+  desc: { marginTop: spacing.md, fontSize: font.sm, lineHeight: 21, maxWidth: 460 },
+
+  // ── Figure slot ──
+  figure: {
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
-    borderRadius: radius.md,
-    paddingVertical: spacing.md,
-    minHeight: 52,
+    marginTop: spacing.lg,
   },
-  ctaText: {
-    color: '#FFF',
-    fontSize: font.md,
-    fontWeight: '900',
+  fGrid: {
+    width: 168, height: 168,
+    flexDirection: 'row', flexWrap: 'wrap',
   },
-  terms: {
+  fCell: {
+    width: '33.333%', height: '33.333%',
+    borderWidth: 0.5, borderColor: colors.ghostLine,
+  },
+  fCellOn: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
+
+  fStack: { width: 200, gap: spacing.sm },
+  fRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
+  fStepRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
+  fBarWide: { flex: 1, height: 6, backgroundColor: colors.ghostLine },
+  fBarMid: { width: '66%', height: 6, backgroundColor: colors.ghostLine },
+  fBarShort: { width: '38%', height: 6, backgroundColor: colors.ghostLine },
+  fGap: { height: spacing.md },
+  fDot: { width: 14, height: 14, borderWidth: 1, borderColor: colors.ghostLine },
+  fBox: { width: 14, height: 14, borderWidth: 1, borderColor: colors.ghostLine },
+  fBoxOn: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
+  fOn: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
+  fNum: {
     color: colors.textTertiary,
-    fontSize: 10,
-    textAlign: 'center',
-    marginTop: spacing.xs,
+    fontFamily: typeface.label,
+    fontSize: font.xs,
+    letterSpacing: tracking.label,
+    fontVariant: ['tabular-nums'],
+    width: 20,
   },
+  fPlusWrap: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center' },
+  fPlusV: { position: 'absolute', width: 1, height: 120, backgroundColor: colors.textPrimary },
+  fPlusH: { position: 'absolute', height: 1, width: 120, backgroundColor: colors.textPrimary },
+
+  foot: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.md },
+  terms: { textAlign: 'center' },
 }));

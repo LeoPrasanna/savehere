@@ -20,10 +20,18 @@ import { TODO_QUOTES, TODO_ROLL_NAMES, TODO_ADD_LABEL } from '../constants/todoB
 import * as haptics from '../services/haptics';
 import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
 
-const PRIORITY_COLOR: Record<string, string> = {
-  high: colors.danger,
-  medium: colors.warning,
-  low: colors.textTertiary,
+/**
+ * Priority marks.
+ *
+ * ⚠️ This was a COLOUR map (red / amber / grey). The system is achromatic, so
+ * priority is carried by mark shape instead — solid, hollow, hairline. That is
+ * also the accessible version: red-vs-amber was never distinguishable to a
+ * red-green colourblind reader, which is most of the people who can't read it.
+ */
+const PRIORITY_MARK: Record<string, 'filled' | 'hollow' | 'faint'> = {
+  high: 'filled',
+  medium: 'hollow',
+  low: 'faint',
 };
 
 /** "Someday" sits last by default — undated items are the ones you're least
@@ -106,7 +114,7 @@ function TodoRow({ todo, onToggle, onEdit, onOpenReel, onDelete }: {
                 exit={{ scale: 0, opacity: 0 }}
                 transition={{ type: 'spring', damping: 11, stiffness: 220 }}
               >
-                <Icon name="checkmark" size={13} color="#FFF" />
+                <Icon name="checkmark" size={13} color={colors.onAction} />
               </MotiView>
             )}
           </AnimatePresence>
@@ -135,7 +143,11 @@ function TodoRow({ todo, onToggle, onEdit, onOpenReel, onDelete }: {
           <Text style={styles.rowDesc} numberOfLines={2}>{todo.description}</Text>
         )}
         <View style={styles.metaRow}>
-          <View style={[styles.dot, { backgroundColor: PRIORITY_COLOR[todo.priority] }]} />
+          <View style={[
+            styles.dot,
+            PRIORITY_MARK[todo.priority] === 'filled' && styles.dotFilled,
+            PRIORITY_MARK[todo.priority] === 'faint' && styles.dotFaint,
+          ]} />
           <Text style={[styles.meta, overdue && styles.metaOverdue]}>{formatDue(todo.due_date)}</Text>
           {todo.reel_id && (
             <Pressable onPress={onOpenReel} scaleTo={0.94} hitSlop={6} style={styles.sourceChip}>
@@ -417,7 +429,7 @@ export default function TodosScreen() {
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
               style={styles.saveBtn}
             >
-              <Icon name="bookmark" size={19} color="#FFF" />
+              <Icon name="bookmark" size={19} color={colors.onAction} />
             </LinearGradient>
           </Pressable>
           <Pressable style={styles.menuBtn} onPress={openPanel} scaleTo={0.9}>
@@ -537,7 +549,7 @@ export default function TodosScreen() {
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.sm }]}>
         <Pressable style={styles.addWrap} onPress={openNew} scaleTo={0.97}>
           <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.addBtn}>
-            <Icon name="add" size={18} color="#FFF" />
+            <Icon name="add" size={18} color={colors.onAction} />
             <Text style={styles.addText}>New task</Text>
           </LinearGradient>
         </Pressable>
@@ -685,7 +697,7 @@ const styles = themed(() => StyleSheet.create({
   modalWarn: { color: colors.textTertiary, fontSize: font.xs, lineHeight: 17, textAlign: 'center' },
   keepWrap: { width: '100%', borderRadius: radius.md, marginTop: spacing.sm },
   keepBtn: { borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
-  keepText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
+  keepText: { color: colors.onAction, fontSize: font.md, fontWeight: '800' },
   dangerBtn: {
     width: '100%', borderRadius: radius.md, paddingVertical: spacing.sm + 4,
     alignItems: 'center', justifyContent: 'center', minHeight: 44,
@@ -735,7 +747,10 @@ const styles = themed(() => StyleSheet.create({
   rowDesc: { color: colors.textSecondary, fontSize: font.xs, lineHeight: 17 },
 
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginTop: 2 },
-  dot: { width: 6, height: 6, borderRadius: 3 },
+  // Priority by SHAPE, not hue — see PRIORITY_MARK at the top of this file.
+  dot: { width: 7, height: 7, borderWidth: 1, borderColor: colors.textSecondary },
+  dotFilled: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
+  dotFaint: { borderColor: colors.ghostLine },
   meta: { color: colors.textTertiary, fontSize: font.xs },
   metaOverdue: { color: colors.danger, fontWeight: '700' },
 
@@ -778,5 +793,5 @@ const styles = themed(() => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
     borderRadius: radius.md, height: 50,
   },
-  addText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
+  addText: { color: colors.onAction, fontSize: font.md, fontWeight: '800' },
 }));

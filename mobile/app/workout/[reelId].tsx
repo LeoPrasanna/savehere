@@ -88,16 +88,16 @@ export default function WorkoutPlanScreen() {
         {/* Gradient header */}
         <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
           <View style={styles.headerIcon}>
-            <Icon name="barbell" size={22} color="#FFF" />
+            <Icon name="barbell" size={22} color={colors.onAction} />
           </View>
           <Text style={styles.workoutName}>{plan.workout_name}</Text>
           <View style={styles.statRow}>
             <View style={styles.statChip}>
               <Text style={styles.statChipText}>{plan.difficulty}</Text>
             </View>
-            <View style={styles.statChip}><Icon name="time" size={12} color="#FFF" /><Text style={styles.statChipText}>{plan.estimated_minutes} min</Text></View>
-            <View style={styles.statChip}><Icon name="fitness" size={12} color="#FFF" /><Text style={styles.statChipText}>{plan.exercises.length} moves</Text></View>
-            <View style={styles.statChip}><Icon name="repeat" size={12} color="#FFF" /><Text style={styles.statChipText}>{totalSets} sets</Text></View>
+            <View style={styles.statChip}><Icon name="time" size={12} color={colors.onAction} /><Text style={styles.statChipText}>{plan.estimated_minutes} min</Text></View>
+            <View style={styles.statChip}><Icon name="fitness" size={12} color={colors.onAction} /><Text style={styles.statChipText}>{plan.exercises.length} moves</Text></View>
+            <View style={styles.statChip}><Icon name="repeat" size={12} color={colors.onAction} /><Text style={styles.statChipText}>{totalSets} sets</Text></View>
           </View>
         </LinearGradient>
 
@@ -147,7 +147,7 @@ export default function WorkoutPlanScreen() {
       <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         <Pressable style={styles.startWrap} onPress={() => router.push(`/workout/session/${reelId}`)} scaleTo={0.97}>
           <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.startBtn}>
-            <Icon name="play" size={20} color="#FFF" />
+            <Icon name="play" size={20} color={colors.onAction} />
             <Text style={styles.startBtnText}>Start Workout</Text>
           </LinearGradient>
         </Pressable>
@@ -167,14 +167,14 @@ const styles = themed(() => StyleSheet.create({
     width: 44, height: 44, borderRadius: radius.md,
     backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center',
   },
-  workoutName: { color: '#FFF', fontSize: font.xl, fontWeight: '800', letterSpacing: -0.5 },
+  workoutName: { color: colors.onAction, fontSize: font.xl, fontWeight: '800', letterSpacing: -0.5 },
   statRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexWrap: 'wrap', marginTop: spacing.xs },
   statChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
     backgroundColor: 'rgba(0,0,0,0.25)', borderRadius: radius.full,
     paddingHorizontal: spacing.sm + 2, paddingVertical: 5,
   },
-  statChipText: { color: '#FFF', fontSize: font.xs, fontWeight: '700', textTransform: 'capitalize' },
+  statChipText: { color: colors.onAction, fontSize: font.xs, fontWeight: '700', textTransform: 'capitalize' },
 
   card: {
     backgroundColor: colors.card, borderRadius: radius.lg,
@@ -224,5 +224,5 @@ const styles = themed(() => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
     borderRadius: radius.md, padding: spacing.md, minHeight: 56,
   },
-  startBtnText: { color: '#FFF', fontSize: font.lg, fontWeight: '800' },
+  startBtnText: { color: colors.onAction, fontSize: font.lg, fontWeight: '800' },
 }));

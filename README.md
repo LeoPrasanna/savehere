@@ -44,6 +44,21 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 - 🧭 **Rediscover** — resurfaces older saves so they don't get forgotten
 - 💬 **Ask your library** — natural-language questions answered from your own saves, with sources, **streamed token-by-token** (first words in ~1.4 s instead of a 3 s wall of silence)
 
+### Design
+
+- ⬛ **"Contact Sheet"** — an achromatic system: absolute black or white canvas, one
+  foreground tone, 1px hairline seams, **zero radius, zero shadows, no accent hue
+  anywhere in the chrome**. The reasoning is in the reference lock at the top of
+  [`mobile/constants/theme.ts`](mobile/constants/theme.ts): the app's cards are
+  *thumbnails*, each arriving with its own palette, so the interface deliberately
+  spends no colour of its own — the saved content is the only colour on screen.
+- 🌗 **Light / Dark / System**, switched live from the profile panel. Everything that
+  colour used to encode is re-encoded so it survives an achromatic palette *and*
+  colourblindness: priority is mark shape, severity is a stated heading plus border
+  weight, platform is a tracked wordmark, progress is discrete marks
+- 🅰️ **Space Grotesk + DM Sans**, both at light weights — hierarchy is carried by
+  size, weight and letter-spacing rather than colour
+
 ### Accounts, tiers & safety
 
 - 🔐 **Supabase auth** — every route scoped to the caller; ownership 404s, JWT verified against JWKS (no shared secret)
@@ -157,9 +172,9 @@ savehere/
 │   ├── scripts/                   # set_tier.py, dev_tier.py, enable_rls.sql
 │   └── tests/                     # pytest suite (256 tests)
 ├── mobile/                        # Expo Router app
-│   ├── app/                       # library, save, reel detail, ask, rediscover, todos, help, workout
-│   ├── components/                # ReelCard, TaskList, TodoEditor, DatePicker, TodoGoalBar, Landing, Icon, …
-│   ├── constants/                 # theme, features, todoBrand (names, rolling titles, quotes)
+│   ├── app/                       # library, save, reel detail, ask, rediscover, todos, help, pro, workout
+│   ├── components/                # kit.tsx (design primitives), ReelCard, TaskList, TodoEditor, Landing, Icon, …
+│   ├── constants/                 # theme (design system + reference lock), pricing, features, todoBrand
 │   └── services/                  # api.ts (typed client), todoDates.ts + todoSettings.ts, …
 ├── docs/
 │   ├── CONTEXT.md                 # architecture + decisions handoff

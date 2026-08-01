@@ -168,7 +168,7 @@ const styles = themed(() => StyleSheet.create({
   daySelected: { backgroundColor: colors.accent },
   dayText: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '600' },
   dayTextPast: { color: colors.textTertiary, opacity: 0.45 },
-  dayTextSelected: { color: '#FFF', fontWeight: '800' },
+  dayTextSelected: { color: colors.onAction },
 
   footer: { marginTop: spacing.xs },
   footBtn: {

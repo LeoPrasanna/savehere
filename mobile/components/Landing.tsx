@@ -2,9 +2,6 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, ScrollView, Modal, Image, Animated } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { MotiView } from 'moti';
-import { Plus } from 'lucide-react-native';
 import { api, thumbUrl, Reel, Todo, TodoStats } from '../services/api';
 import { bucketOf, todayISO } from '../services/todoDates';
 import { useTodoSettings } from '../services/todoSettings';
@@ -12,20 +9,19 @@ import { TodoGoalBar } from './TodoGoalBar';
 import { TODO_LANDING_TITLE } from '../constants/todoBrand';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
-import { AuroraBackground } from './AuroraBackground';
 import { ProfilePanel } from './ProfilePanel';
-import { colors, spacing, font, radius, gradients, shadow, typeface, themed } from '../constants/theme';
+import { Label, Body, Title, Rule, Index, GhostButton, FilledButton, Wordmark } from './kit';
+import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { consumeReopenPanel } from '../services/sessionFlags';
 import { FEATURES, Feature } from '../constants/features';
 import { RollingTagline } from './RollingTagline';
-import { HolographicShimmer } from './HolographicShimmer';
 import { ASK_MIN_REELS } from '../constants/limits';
 
 // How many saves the home screen shows before handing off to the full library.
 const RECENT_LIMIT = 10;
-/** Carousel card width — also the snap interval, so scrolling settles on a card. */
-const RECENT_CARD_W = 150;
+/** Carousel frame width — also the snap interval, so scrolling settles on a frame. */
+const RECENT_CARD_W = 138;
 /** Only fetch what this screen renders. The landing used to pull 24 reels for a
  *  list it never showed; the carousel needs a fraction of that, and a smaller
  *  payload is the whole reason the home screen now appears faster. */
@@ -47,12 +43,19 @@ const GREETING_HELPERS = [
   "Everything you've saved — summarized and searchable in one place.",
 ];
 
-/** Priority tint for the to-do preview dots. Non-accent tokens, so this map is
- *  safe at module level (accent-bearing values must go through `themed()`). */
-const TODO_PRIORITY_COLOR: Record<string, string> = {
-  high: colors.danger,
-  medium: colors.warning,
-  low: colors.textTertiary,
+/**
+ * Priority marks for the to-do preview.
+ *
+ * ⚠️ This used to be a colour map (red / amber / grey). The system is
+ * achromatic, so priority is carried by MARK SHAPE instead — filled, hollow,
+ * hairline. That is also the accessible version: the old map failed for anyone
+ * who can't separate red from amber, which is the single most common form of
+ * colour blindness.
+ */
+const PRIORITY_MARK: Record<string, 'filled' | 'hollow' | 'faint'> = {
+  high: 'filled',
+  medium: 'hollow',
+  low: 'faint',
 };
 
 /** One half of the home screen's Today | Upcoming pair. Caps at three rows: the
@@ -67,19 +70,24 @@ function TodoColumn({ label, items, emptyText, warn }: {
   return (
     <View style={styles.todoCol}>
       <View style={styles.todoColHead}>
-        <Text style={styles.todoColLabel}>{label}</Text>
-        {items.length > 0 && <Text style={styles.todoColCount}>{items.length}</Text>}
+        <Label wide>{label}</Label>
+        {items.length > 0 && <Label tone="ink">{String(items.length)}</Label>}
       </View>
       {shown.length === 0 ? (
-        <Text style={styles.todoColEmpty}>{emptyText}</Text>
+        <Label>{emptyText}</Label>
       ) : (
         shown.map(t => {
           const late = warn && bucketOf(t.due_date) === 'overdue';
+          const mark = PRIORITY_MARK[t.priority] ?? 'faint';
           return (
             <View key={t.id} style={styles.todoItem}>
-              <View style={[styles.todoDot, { backgroundColor: TODO_PRIORITY_COLOR[t.priority] }]} />
+              <View style={[
+                styles.todoMark,
+                mark === 'filled' && styles.todoMarkFilled,
+                mark === 'faint' && styles.todoMarkFaint,
+              ]} />
               <Text
-                style={[styles.todoItemText, late && styles.todoSubWarn]}
+                style={[styles.todoItemText, late && styles.todoLate]}
                 numberOfLines={1}
               >
                 {t.title}
@@ -89,62 +97,60 @@ function TodoColumn({ label, items, emptyText, warn }: {
         })
       )}
       {items.length > shown.length && (
-        <Text style={styles.todoMore}>+{items.length - shown.length} more</Text>
+        <Label>{`+${items.length - shown.length} more`}</Label>
       )}
     </View>
   );
 }
 
-/** One card in the recent carousel. A horizontal strip beats a vertical list
+/** One frame in the recent strip. A horizontal strip beats a vertical list
  *  here: it shows the thumbnail at a size worth looking at, and it costs a fixed
  *  slice of screen no matter how many saves exist — a list pushed everything
  *  below it off the page. */
-function RecentCard({ reel, onPress }: { reel: Reel; onPress: () => void }) {
+function RecentCard({ reel, n, onPress }: { reel: Reel; n: number; onPress: () => void }) {
   const thumb = thumbUrl(reel.thumbnail_url);
   const pending = reel.summary_status === 'pending';
   return (
-    <Pressable style={styles.recentCard} onPress={onPress} scaleTo={0.97}>
-      {thumb ? (
-        <Image source={{ uri: thumb }} style={styles.recentCover} resizeMode="cover" />
-      ) : (
-        <View style={[styles.recentCover, styles.recentCoverEmpty]}>
-          <Icon name={reel.category || 'other'} size={20} color={colors.textTertiary} />
-        </View>
-      )}
+    <Pressable style={styles.recentCard} onPress={onPress}>
+      <View style={styles.recentCoverWrap}>
+        {thumb ? (
+          <Image source={{ uri: thumb }} style={styles.recentCover} resizeMode="cover" />
+        ) : (
+          <View style={[styles.recentCover, styles.recentCoverEmpty]}>
+            <Icon name={reel.category || 'other'} size={18} color={colors.textTertiary} />
+          </View>
+        )}
+        <Text style={styles.recentIndex}>{String(n).padStart(2, '0')}</Text>
+      </View>
       <Text style={styles.recentTitle} numberOfLines={2}>{reel.title || 'Untitled save'}</Text>
-      {pending ? (
-        <Text style={styles.recentPending} numberOfLines={1}>Summarizing…</Text>
-      ) : reel.category ? (
-        <Text style={styles.recentCat} numberOfLines={1}>{reel.category}</Text>
-      ) : null}
+      <Label numberOfLines={1}>{pending ? 'Reading…' : (reel.category || 'other')}</Label>
     </Pressable>
   );
 }
 
-/** Placeholder carousel shown while the first fetch is in flight, so the screen
- *  isn't just the greeting + a "Save a reel" button over dead space. A gentle
- *  opacity pulse; it unmounts the instant real content (or the empty state) lands. */
+/** Placeholder strip shown while the first fetch is in flight, so the screen
+ *  isn't just the greeting over dead space. A gentle opacity pulse; it unmounts
+ *  the instant real content (or the empty state) lands. */
 function RecentSkeleton() {
-  const pulse = useRef(new Animated.Value(0.5)).current;
+  const pulse = useRef(new Animated.Value(0.35)).current;
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 750, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.5, duration: 750, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.8, duration: 750, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.35, duration: 750, useNativeDriver: true }),
       ])
     );
     loop.start();
     return () => loop.stop();
   }, []);
   return (
-    <View style={styles.recentBlock}>
-      <Animated.View style={[styles.skelLine, { width: 84, opacity: pulse }]} />
+    <View style={styles.block}>
       <ScrollView horizontal scrollEnabled={false} showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recentStrip}>
         {[0, 1, 2, 3].map(i => (
           <Animated.View key={i} style={[styles.recentCard, { opacity: pulse }]}>
-            <View style={styles.recentCover} />
-            <View style={[styles.skelLine, { width: '85%', marginTop: spacing.xs }]} />
-            <View style={[styles.skelLine, { width: '50%', marginTop: 4 }]} />
+            <View style={styles.recentCoverWrap}><View style={[styles.recentCover, styles.recentCoverEmpty]} /></View>
+            <View style={[styles.skelLine, { width: '85%' }]} />
+            <View style={[styles.skelLine, { width: '50%' }]} />
           </Animated.View>
         ))}
       </ScrollView>
@@ -165,12 +171,10 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const { settings: todoSettings, ready: todoSettingsReady } = useTodoSettings();
   const [selected, setSelected] = useState<Feature | null>(null);
   const [catFilter, setCatFilter] = useState<string | null>(null);
-  // Reopens after an accent switch remounts the tree (one-shot session flag).
+  // Reopens after a scheme switch remounts the tree (one-shot session flag).
   const [menuOpen, setMenuOpen] = useState(consumeReopenPanel());
   // A best-case "here's what SaveHere can do for you" line, picked once per open.
   const [greetingTip] = useState(() => GREETING_HELPERS[Math.floor(Math.random() * GREETING_HELPERS.length)]);
-  // Measured so the holographic shimmer can sweep the greeting line's exact box.
-  const [tipSize, setTipSize] = useState({ w: 0, h: 0 });
 
   useFocusEffect(
     useCallback(() => {
@@ -195,8 +199,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const firstRun = !loading && !fetchError && total === 0;
   const learning = hasSaves && total < ASK_MIN_REELS;
 
-  // Category chips filter the already-fetched page locally — no extra request,
-  // and no filter state to hand off to the library screen.
   // Dated items only — "Someday" has no claim on today's attention. The server
   // already returns them date-ascending then priority, so slicing preserves
   // "soonest first, most important within a day".
@@ -209,122 +211,101 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const dueSoon = [...todayItems, ...upcomingItems];
   const overdueCount = overdue.length;
 
+  // Category chips filter the already-fetched page locally — no extra request,
+  // and no filter state to hand off to the library screen.
   const catList = Array.from(new Set(reels.map(r => r.category).filter(Boolean))) as string[];
   const visible = catFilter ? reels.filter(r => r.category === catFilter) : reels;
   const recent = visible.slice(0, RECENT_LIMIT);
 
   return (
     <View style={styles.screen}>
-      <AuroraBackground />
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + 92 }]}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 96 }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Greeting ─────────────────────────────────── */}
-        <MotiView from={{ opacity: 0, translateY: -8 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 400 }} style={styles.headerRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.hi}>Hi, {userName}.</Text>
-            {fetchError ? (
-              <Text style={styles.welcome}>Can't reach the server right now.</Text>
-            ) : hasSaves ? (
-              // Best-case tip with a twinkling sparkle and a holographic shine
-              // sweeping across it — makes the line feel alive, not a dead stat.
-              <View
-                style={styles.tipWrap}
-                onLayout={(e) => {
-                  const { width, height } = e.nativeEvent.layout;
-                  setTipSize((s) => (s.w === width && s.h === height ? s : { w: width, h: height }));
-                }}
-              >
-                <MotiView
-                  from={{ opacity: 0.4, scale: 0.8, rotate: '-10deg' }}
-                  animate={{ opacity: 1, scale: 1.12, rotate: '10deg' }}
-                  transition={{ type: 'timing', duration: 1300, loop: true, repeatReverse: true }}
-                  style={styles.tipSparkle}
-                >
-                  <Icon name="sparkles" size={14} color={colors.accentLight} />
-                </MotiView>
-                <Text style={[styles.welcome, styles.tipText]}>{greetingTip}</Text>
-                {tipSize.w > 0 && (
-                  <HolographicShimmer width={tipSize.w} height={tipSize.h} color="rgba(255,255,255,0.10)" duration={1800} />
-                )}
-              </View>
-            ) : (
-              <Text style={styles.welcome}>Your second brain for short-form content.</Text>
-            )}
-          </View>
-          <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)} scaleTo={0.9}>
-            <Icon name="menu" size={20} color={colors.textPrimary} />
+        {/* ── Masthead ─────────────────────────────────────────────────────── */}
+        <View style={styles.headerRow}>
+          <Wordmark size={22} />
+          <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)} accessibilityLabel="Menu">
+            <Icon name="menu" size={17} color={colors.textPrimary} />
           </Pressable>
-        </MotiView>
+        </View>
+        <Rule />
+
+        {/* ── Greeting. Large, light, tightly tracked — the one place on the
+            screen that behaves like a headline. ── */}
+        <View style={styles.greeting}>
+          <Text style={styles.hi}>Hi, {userName}.</Text>
+          <Body style={styles.welcome}>
+            {fetchError
+              ? "Can't reach the server right now."
+              : hasSaves
+                ? greetingTip
+                : 'Your second brain for short-form content.'}
+          </Body>
+        </View>
 
         {/* Loading — a shaped placeholder so the fetch gap isn't dead space. */}
         {loading && <RecentSkeleton />}
 
-        {/* ── FIRST RUN (0 saves) ──────────────────────────
+        {/* ── FIRST RUN (0 saves) ──────────────────────────────────────────────
             "What you can do" lives HERE and only here. With nothing to show, the
             job of the screen is to explain the payoff — which is what this copy
             was always for. It disappears the moment there's real content. */}
         {firstRun && (
-          <MotiView
-            from={{ opacity: 0, translateY: 10 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 300, delay: 180 }}
-            style={styles.features}
-          >
-            <Text style={styles.sectionLabel}>WHAT A SAVE BECOMES</Text>
-            {FEATURES.map(f => (
-              <Pressable key={f.title} style={styles.feature} onPress={() => setSelected(f)} scaleTo={0.98}>
-                <View style={[styles.featureIcon, { backgroundColor: f.color + '1E' }]}>
-                  <Icon name={f.icon} size={17} color={f.color} />
-                </View>
-                <View style={{ flex: 1 }}>
+          <View style={styles.block}>
+            <Label wide style={styles.sectionLabel}>What a save becomes</Label>
+            <Rule />
+            {FEATURES.map((f, i) => (
+              <Pressable key={f.title} style={styles.feature} onPress={() => setSelected(f)}>
+                <Index n={i + 1} style={styles.featureIndex} />
+                <View style={styles.featureText}>
                   <Text style={styles.featureTitle}>{f.title}</Text>
-                  <Text style={styles.featureDesc}>{f.desc}</Text>
+                  <Label>{f.desc}</Label>
                 </View>
-                <Icon name="chevron-right" size={15} color={colors.textTertiary} />
+                <Icon name="chevron-right" size={14} color={colors.textTertiary} />
               </Pressable>
             ))}
-          </MotiView>
+            <Rule />
+          </View>
         )}
 
-        {/* ── LEARNING (1 .. ASK_MIN_REELS-1) ──────────────
+        {/* ── LEARNING (1 .. ASK_MIN_REELS-1) ──────────────────────────────────
             Exactly one tip, and it's progress toward something real — not a
             brochure. Same threshold as the Ask unlock. */}
         {learning && (
-          <MotiView
-            from={{ opacity: 0, translateY: 10 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 300, delay: 160 }}
-            style={styles.progressCard}
-          >
-            <Text style={styles.progressTitle}>
-              Save {ASK_MIN_REELS - total} more to unlock Ask your library
-            </Text>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${(total / ASK_MIN_REELS) * 100}%` }]} />
+          <View style={styles.block}>
+            <Rule />
+            <View style={styles.progress}>
+              <Label wide>{`Save ${ASK_MIN_REELS - total} more to unlock Ask`}</Label>
+              {/* Segmented, not a filled bar: discrete marks say "two of five"
+                  at a glance where a grey bar just says "some". */}
+              <View style={styles.progressTrack}>
+                {Array.from({ length: ASK_MIN_REELS }).map((_, i) => (
+                  <View key={i} style={[styles.progressTick, i < total && styles.progressTickOn]} />
+                ))}
+              </View>
+              <Body style={styles.progressSub}>
+                Ask answers from your own saves — it works best with a few to draw on.
+              </Body>
             </View>
-            <Text style={styles.progressSub}>
-              Ask answers from your own saves — it works best with a few to draw on.
-            </Text>
-          </MotiView>
+            <Rule />
+          </View>
         )}
 
-        {/* ── Ask — above the categories/recent so it's the first thing after
-            the greeting once unlocked (owner: bring Ask up above categories). ── */}
+        {/* ── Ask — above the recent strip so it's the first thing after the
+            greeting once unlocked (owner: bring Ask up above categories). ── */}
         {askVisible && (
-          <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 140 }}>
-            <Pressable style={styles.quietRow} onPress={() => router.push('/ask')} scaleTo={0.98}>
-              <View style={[styles.quietIcon, { backgroundColor: colors.neonCyan + '1A' }]}>
-                <Icon name="ask" size={18} color={colors.neonCyan} />
+          <>
+            <Pressable style={styles.navRow} onPress={() => router.push('/ask')}>
+              <View style={styles.navText}>
+                <Text style={styles.navTitle}>Ask your library</Text>
+                <Label>Answers pulled straight from your own saves</Label>
               </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.quietTitle}>Ask your library</Text>
-                <Text style={styles.quietSub}>Answers pulled straight from your own saves.</Text>
-              </View>
-              <Icon name="chevron-right" size={16} color={colors.textTertiary} />
+              <Icon name="chevron-right" size={15} color={colors.textTertiary} />
             </Pressable>
-          </MotiView>
+            <Rule />
+          </>
         )}
 
         {/* ── TO-DO — what you actually meant to act on. Sits directly BELOW Ask
@@ -334,22 +315,19 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
             it never manufactures urgency. Hidden entirely if the user turns it
             off in the list's settings. ── */}
         {!loading && todoSettingsReady && todoSettings.showOnHome && (
-          <MotiView from={{ opacity: 0, translateY: 10 }} animate={{ opacity: 1, translateY: 0 }} transition={{ type: 'timing', duration: 300, delay: 150 }}>
+          <>
             {dueSoon.length > 0 ? (
-              <Pressable style={styles.todoCard} onPress={() => router.push('/todos')} scaleTo={0.98}>
-                <View style={styles.todoHead}>
-                  <View style={[styles.quietIcon, { backgroundColor: colors.accent + '1A' }]}>
-                    <Icon name="checkbox" size={18} color={colors.accent} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.quietTitle}>{TODO_LANDING_TITLE}</Text>
-                    <Text style={[styles.quietSub, overdueCount > 0 && styles.todoSubWarn]}>
+              <Pressable style={styles.todoBlock} onPress={() => router.push('/todos')}>
+                <View style={styles.navRowInner}>
+                  <View style={styles.navText}>
+                    <Text style={styles.navTitle}>{TODO_LANDING_TITLE}</Text>
+                    <Label tone={overdueCount > 0 ? 'ink' : 'muted'}>
                       {overdueCount > 0
                         ? `${overdueCount} overdue · ${dueSoon.length} on deck`
                         : `${dueSoon.length} coming up`}
-                    </Text>
+                    </Label>
                   </View>
-                  <Icon name="chevron-right" size={16} color={colors.textTertiary} />
+                  <Icon name="chevron-right" size={15} color={colors.textTertiary} />
                 </View>
 
                 {todoStats?.completed_today != null && (
@@ -362,78 +340,64 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
                 )}
 
                 <View style={styles.todoCols}>
-                  <TodoColumn label="TODAY" items={todayItems} emptyText="Nothing due" warn />
+                  <TodoColumn label="Today" items={todayItems} emptyText="Nothing due" warn />
                   <View style={styles.todoColDivider} />
-                  <TodoColumn label="UPCOMING" items={upcomingItems} emptyText="Clear ahead" />
+                  <TodoColumn label="Upcoming" items={upcomingItems} emptyText="Clear ahead" />
                 </View>
               </Pressable>
             ) : (
-              <Pressable style={styles.quietRow} onPress={() => router.push('/todos')} scaleTo={0.98}>
-                <View style={[styles.quietIcon, { backgroundColor: colors.accent + '1A' }]}>
-                  <Icon name="checkbox" size={18} color={colors.accent} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.quietTitle}>{TODO_LANDING_TITLE}</Text>
-                  <Text style={styles.quietSub}>
+              <Pressable style={styles.navRow} onPress={() => router.push('/todos')}>
+                <View style={styles.navText}>
+                  <Text style={styles.navTitle}>{TODO_LANDING_TITLE}</Text>
+                  <Label>
                     {todos.length > 0
-                      ? `${todos.length} with no date — give one a day to see it here.`
-                      : 'Nothing due. Turn a save into something you actually finish.'}
-                  </Text>
+                      ? `${todos.length} with no date — give one a day to see it here`
+                      : 'Nothing due. Turn a save into something you actually finish'}
+                  </Label>
                 </View>
-                <Icon name="chevron-right" size={16} color={colors.textTertiary} />
+                <Icon name="chevron-right" size={15} color={colors.textTertiary} />
               </Pressable>
             )}
-          </MotiView>
+            <Rule />
+          </>
         )}
 
-        {/* ── YOUR SAVES — the reason this screen exists ─── */}
+        {/* ── YOUR SAVES — the reason this screen exists ─────────────────────── */}
         {hasSaves && (
-          <MotiView
-            from={{ opacity: 0, translateY: 10 }}
-            animate={{ opacity: 1, translateY: 0 }}
-            transition={{ type: 'timing', duration: 300, delay: 200 }}
-            style={styles.recentBlock}
-          >
+          <View style={styles.block}>
             {catList.length > 1 && (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.chipRow}
               >
-                <Pressable
-                  style={[styles.chip, !catFilter && styles.chipOn]}
-                  onPress={() => setCatFilter(null)}
-                  scaleTo={0.96}
-                >
-                  <Text style={[styles.chipText, !catFilter && styles.chipTextOn]}>All</Text>
+                <Pressable style={styles.chip} onPress={() => setCatFilter(null)}>
+                  <Label tone={!catFilter ? 'ink' : 'muted'} wide>All</Label>
+                  <View style={[styles.chipRule, !catFilter && styles.chipRuleOn]} />
                 </Pressable>
                 {catList.map(c => (
-                  <Pressable
-                    key={c}
-                    style={[styles.chip, catFilter === c && styles.chipOn]}
-                    onPress={() => setCatFilter(catFilter === c ? null : c)}
-                    scaleTo={0.96}
-                  >
-                    <Text style={[styles.chipText, catFilter === c && styles.chipTextOn]}>{c}</Text>
+                  <Pressable key={c} style={styles.chip} onPress={() => setCatFilter(catFilter === c ? null : c)}>
+                    <Label tone={catFilter === c ? 'ink' : 'muted'} wide>{c}</Label>
+                    <View style={[styles.chipRule, catFilter === c && styles.chipRuleOn]} />
                   </Pressable>
                 ))}
               </ScrollView>
             )}
 
-            <Text style={styles.sectionLabel}>{catFilter ? catFilter.toUpperCase() : 'RECENT'}</Text>
+            <Label wide style={styles.sectionLabel}>{catFilter || 'Recent'}</Label>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.recentStrip}
-              // Snap to card width so the carousel settles on a card, not mid-cut.
-              snapToInterval={RECENT_CARD_W + spacing.sm}
+              // Snap to frame width so the strip settles on a frame, not mid-cut.
+              snapToInterval={RECENT_CARD_W}
               decelerationRate="fast"
             >
-              {recent.map(r => (
-                <RecentCard key={r.id} reel={r} onPress={() => router.push(`/reel/${r.id}`)} />
+              {recent.map((r, i) => (
+                <RecentCard key={r.id} reel={r} n={i + 1} onPress={() => router.push(`/reel/${r.id}`)} />
               ))}
             </ScrollView>
-          </MotiView>
+          </View>
         )}
 
         {/* Rolling tips — the same benefit lines that roll on the auth screen. */}
@@ -441,49 +405,39 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
 
         <View style={{ flex: 1, minHeight: spacing.lg }} />
 
-        <Text style={styles.disclaimer}>
-          Summaries are generated by AI and may be wrong or have gaps — add details in Notes and re-summarize to correct one.
-          Saved content belongs to its original creators; SaveHere keeps links and summaries for personal reference only.
-        </Text>
+        <Rule />
+        <Body style={styles.disclaimer}>
+          Summaries are generated by AI and may be wrong or have gaps — add details in Notes and
+          re-summarize to correct one. Saved content belongs to its original creators; SaveHere keeps
+          links and summaries for personal reference only.
+        </Body>
       </ScrollView>
 
-      {/* ── Fixed bottom bar: Library + Save ─────────────── */}
+      {/* ── Fixed bottom bar: Library + Save ─────────────────────────────────
+          Two squares sharing a seam. Save is the filled one — it is the single
+          most important action on the screen and the system's one inversion. */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.sm }]}>
-        <Pressable style={styles.bottomLibrary} onPress={onEnter} scaleTo={0.96}>
-          <Icon name="bookmark" size={18} color={colors.textPrimary} />
-          <Text style={styles.bottomLibraryText}>Library</Text>
-        </Pressable>
-        <Pressable style={styles.bottomSaveWrap} onPress={() => router.push('/save')} scaleTo={0.96}>
-          <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.bottomSave}>
-            <Plus size={18} color="#FFF" />
-            <Text style={styles.bottomSaveText}>Save</Text>
-          </LinearGradient>
-        </Pressable>
+        <GhostButton label="Library" onPress={onEnter} style={styles.bottomBtn} />
+        <FilledButton label="Save" trailing="+" onPress={() => router.push('/save')} style={styles.bottomBtn} />
       </View>
 
+      {/* ── Feature detail ──────────────────────────────────────────────────── */}
       <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => setSelected(null)} statusBarTranslucent>
-        <Pressable style={styles.modalOverlay} onPress={() => setSelected(null)} scaleTo={1}>
-          {selected && (
-            <MotiView
-              from={{ opacity: 0, scale: 0.92 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ type: 'timing', duration: 220 }}
-            >
-              <Pressable scaleTo={1} onPress={() => {}} style={styles.modalCard}>
-                <View style={[styles.modalIcon, { backgroundColor: selected.color + '1E' }]}>
-                  <Icon name={selected.icon} size={26} color={selected.color} />
-                </View>
-                <Text style={styles.modalTitle}>{selected.title}</Text>
-                <Text style={styles.modalDetail}>{selected.detail}</Text>
-                <Pressable style={styles.modalBtnWrap} onPress={() => setSelected(null)} scaleTo={0.97}>
-                  <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.modalBtn}>
-                    <Text style={styles.modalBtnText}>Got it</Text>
-                  </LinearGradient>
-                </Pressable>
+        <View style={styles.sheetOverlay}>
+          <Pressable style={styles.sheetTap} onPress={() => setSelected(null)} />
+          <View style={[styles.sheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+            <View style={styles.sheetHead}>
+              <Label wide>Feature</Label>
+              <Pressable onPress={() => setSelected(null)} hitSlop={10} accessibilityLabel="Close">
+                <Icon name="close" size={18} color={colors.textPrimary} />
               </Pressable>
-            </MotiView>
-          )}
-        </Pressable>
+            </View>
+            <Rule style={{ marginTop: spacing.sm }} />
+            <Title style={styles.sheetTitle}>{selected?.title}</Title>
+            <Body style={styles.sheetDetail}>{selected?.detail}</Body>
+            <GhostButton label="Got it" onPress={() => setSelected(null)} style={styles.sheetCta} />
+          </View>
+        </View>
       </Modal>
 
       <ProfilePanel
@@ -499,150 +453,133 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
 
 const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { flexGrow: 1, paddingHorizontal: spacing.lg, gap: spacing.lg },
+  content: { paddingHorizontal: spacing.md, flexGrow: 1 },
 
-  headerRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: spacing.sm,
+  },
   menuBtn: {
-    width: 42, height: 42, borderRadius: radius.full,
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
+    width: 36, height: 36,
+    borderWidth: 1, borderColor: colors.ghostLine,
     alignItems: 'center', justifyContent: 'center',
   },
-  hi: { color: colors.textPrimary, fontFamily: typeface.serifBlack, fontSize: font.display, lineHeight: 42, letterSpacing: -0.5 },
-  welcome: { color: colors.textSecondary, fontSize: font.lg, lineHeight: 24, marginTop: spacing.sm },
-  tipWrap: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs,
-    marginTop: spacing.sm, overflow: 'hidden', borderRadius: radius.sm,
+
+  greeting: { paddingTop: spacing.xl, paddingBottom: spacing.lg },
+  hi: {
+    color: colors.textPrimary,
+    fontFamily: typeface.display,
+    fontSize: font.display,
+    lineHeight: font.display * 1.02,
+    letterSpacing: tracking.display,
   },
-  tipSparkle: { marginTop: 3 },
-  tipText: { flex: 1, marginTop: 0 },
+  welcome: { marginTop: spacing.md, maxWidth: 460 },
 
-  sectionLabel: { color: colors.textTertiary, fontSize: font.xs, fontWeight: '800', letterSpacing: 1.2 },
+  block: { marginBottom: spacing.lg },
+  sectionLabel: { marginBottom: spacing.sm },
 
-  // ── Fixed bottom bar ────────────────────────────────────────────────
+  feature: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
+  featureIndex: { width: 22 },
+  featureText: { flex: 1, minWidth: 0, gap: 2 },
+  featureTitle: {
+    color: colors.textPrimary,
+    fontFamily: typeface.display,
+    fontSize: font.md,
+    letterSpacing: -0.2,
+  },
+
+  progress: { paddingVertical: spacing.md, gap: spacing.sm },
+  progressTrack: { flexDirection: 'row', gap: 3 },
+  progressTick: { flex: 1, height: 4, backgroundColor: colors.ghostLine },
+  progressTickOn: { backgroundColor: colors.textPrimary },
+  progressSub: { fontSize: font.sm, lineHeight: 19 },
+
+  navRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
+  navRowInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  navText: { flex: 1, minWidth: 0, gap: 2 },
+  navTitle: {
+    color: colors.textPrimary,
+    fontFamily: typeface.display,
+    fontSize: font.md,
+    letterSpacing: -0.2,
+  },
+
+  todoBlock: { paddingVertical: spacing.md, gap: spacing.md },
+  todoGoal: { marginTop: 0 },
+  todoCols: { flexDirection: 'row', gap: spacing.md },
+  todoColDivider: { width: 1, backgroundColor: colors.ghostLine },
+  // minWidth:0 is load-bearing — react-native-web won't shrink a flex child
+  // without it, so a long title shoves the other column off the card.
+  todoCol: { flex: 1, minWidth: 0, gap: spacing.xs },
+  todoColHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  todoItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Priority by shape, not hue — see PRIORITY_MARK above.
+  todoMark: { width: 7, height: 7, borderWidth: 1, borderColor: colors.textSecondary },
+  todoMarkFilled: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
+  todoMarkFaint: { borderColor: colors.ghostLine },
+  todoItemText: {
+    flex: 1,
+    color: colors.textSecondary,
+    fontFamily: typeface.body,
+    fontSize: font.sm,
+  },
+  todoLate: { color: colors.textPrimary, textDecorationLine: 'underline' },
+
+  chipRow: { gap: spacing.lg, paddingBottom: spacing.md },
+  chip: { gap: spacing.xs },
+  chipRule: { height: 1, backgroundColor: 'transparent' },
+  chipRuleOn: { backgroundColor: colors.textPrimary },
+
+  recentStrip: { gap: 0 },
+  recentCard: { width: RECENT_CARD_W, borderWidth: 0.5, borderColor: colors.ghostLine, padding: spacing.sm, gap: spacing.xs },
+  recentCoverWrap: { position: 'relative' },
+  recentCover: { width: '100%', aspectRatio: 3 / 4, backgroundColor: colors.card },
+  recentCoverEmpty: { alignItems: 'center', justifyContent: 'center' },
+  recentIndex: {
+    position: 'absolute', top: 4, left: 5,
+    color: 'rgba(248,248,248,0.55)',
+    fontFamily: typeface.label,
+    fontSize: font.xs,
+    letterSpacing: tracking.label,
+    fontVariant: ['tabular-nums'],
+  },
+  recentTitle: {
+    color: colors.textPrimary,
+    fontFamily: typeface.display,
+    fontSize: font.sm,
+    lineHeight: 16,
+    letterSpacing: -0.2,
+  },
+  skelLine: { height: 7, backgroundColor: colors.ghostLine },
+
+  tips: { marginTop: spacing.md },
+  disclaimer: { fontSize: font.sm, lineHeight: 19, paddingTop: spacing.md },
+
   bottomBar: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
-    flexDirection: 'row', gap: spacing.sm,
-    paddingHorizontal: spacing.lg, paddingTop: spacing.sm,
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
     backgroundColor: colors.background,
-    borderTopWidth: 1, borderTopColor: colors.border,
+    borderTopWidth: 1,
+    borderTopColor: colors.ghostLine,
   },
-  bottomLibrary: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
-    backgroundColor: colors.card, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border, height: 50,
-  },
-  bottomLibraryText: { color: colors.textPrimary, fontSize: font.md, fontWeight: '700' },
-  bottomSaveWrap: { flex: 1, borderRadius: radius.md, ...shadow.glow },
-  bottomSave: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
-    borderRadius: radius.md, height: 50,
-  },
-  bottomSaveText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
+  bottomBtn: { flex: 1 },
 
-  quietRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2,
-    backgroundColor: colors.card, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.md,
+  sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.78)', justifyContent: 'flex-end' },
+  sheetTap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  sheet: {
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.textPrimary,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
   },
-  quietIcon: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
-  quietTitle: { color: colors.textPrimary, fontSize: font.md, fontWeight: '700' },
-  quietSub: { color: colors.textSecondary, fontSize: font.xs, marginTop: 1 },
-
-  // ── To-do preview ───────────────────────────────────────────────────
-  todoCard: {
-    backgroundColor: colors.card, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border,
-    padding: spacing.md, gap: spacing.sm,
-  },
-  todoHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm + 2 },
-  todoSubWarn: { color: colors.danger, fontWeight: '700' },
-  todoGoal: { marginTop: 2 },
-
-  // Two columns, hairline-divided. Each is flex:1 with minWidth:0 so a long
-  // task title truncates inside its own column instead of shoving the other one
-  // off the card — the failure mode of every naive side-by-side layout.
-  todoCols: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  todoCol: { flex: 1, minWidth: 0, gap: 5 },
-  todoColDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
-  todoColHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  todoColLabel: { color: colors.textTertiary, fontSize: 10, fontWeight: '800', letterSpacing: 1 },
-  todoColCount: { color: colors.textTertiary, fontSize: 10, fontWeight: '700' },
-  todoColEmpty: { color: colors.textTertiary, fontSize: font.xs, fontStyle: 'italic' },
-
-  todoItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  todoDot: { width: 5, height: 5, borderRadius: 3 },
-  todoItemText: { flex: 1, color: colors.textSecondary, fontSize: font.xs },
-  todoMore: { color: colors.textTertiary, fontSize: 10, marginTop: 1 },
-
-  // ── Library-first home ──────────────────────────────────────────────
-  recentBlock: { gap: spacing.sm },
-  tips: { marginTop: spacing.xs },
-
-  chipRow: { gap: spacing.xs, paddingVertical: 2 },
-  chip: {
-    paddingHorizontal: spacing.sm + 2, paddingVertical: 6, borderRadius: radius.full,
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-  },
-  chipOn: { backgroundColor: colors.accent + '24', borderColor: colors.accent },
-  chipText: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '600', textTransform: 'capitalize' },
-  chipTextOn: { color: colors.accentLight },
-
-  skelLine: { height: 11, borderRadius: 5, backgroundColor: colors.cardElevated },
-  recentStrip: { gap: spacing.sm, paddingRight: spacing.lg },
-  recentCard: { width: RECENT_CARD_W },
-  recentCover: {
-    width: RECENT_CARD_W, height: 94, borderRadius: radius.md,
-    backgroundColor: colors.cardElevated,
-    borderWidth: 1, borderColor: colors.border,
-  },
-  recentCoverEmpty: { alignItems: 'center', justifyContent: 'center' },
-  recentTitle: {
-    color: colors.textPrimary, fontSize: font.xs, fontWeight: '700',
-    lineHeight: 16, marginTop: spacing.xs,
-  },
-  recentCat: { color: colors.textTertiary, fontSize: 10, marginTop: 2, textTransform: 'capitalize' },
-  recentPending: { color: colors.textTertiary, fontSize: 10, marginTop: 2, fontStyle: 'italic' },
-
-  progressCard: {
-    backgroundColor: colors.card, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.xs,
-  },
-  progressTitle: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' },
-  progressTrack: {
-    height: 5, borderRadius: radius.full, backgroundColor: colors.border, overflow: 'hidden',
-  },
-  progressFill: { height: '100%', borderRadius: radius.full, backgroundColor: colors.accent },
-  progressSub: { color: colors.textSecondary, fontSize: font.xs, lineHeight: 16 },
-
-  features: { gap: spacing.sm },
-  feature: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.card, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.sm + 2,
-  },
-  featureIcon: { width: 36, height: 36, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center' },
-  featureTitle: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '700' },
-  featureDesc: { color: colors.textSecondary, fontSize: font.xs, lineHeight: 16 },
-
-  disclaimer: { color: colors.textTertiary, fontSize: 12, lineHeight: 18, textAlign: 'center' },
-
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center', justifyContent: 'center', padding: spacing.lg,
-  },
-  modalCard: {
-    width: '100%', maxWidth: 400,
-    backgroundColor: colors.surface, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.lg,
-    alignItems: 'center', gap: spacing.sm, ...shadow.md,
-  },
-  modalIcon: {
-    width: 56, height: 56, borderRadius: radius.lg,
-    alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs,
-  },
-  modalTitle: { color: colors.textPrimary, fontFamily: typeface.display, fontSize: font.lg, fontWeight: '800', textAlign: 'center' },
-  modalDetail: { color: colors.textSecondary, fontSize: font.sm, lineHeight: 21, textAlign: 'center' },
-  modalBtnWrap: { width: '100%', borderRadius: radius.md, marginTop: spacing.sm },
-  modalBtn: { borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center' },
-  modalBtnText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
+  sheetHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  sheetTitle: { marginTop: spacing.lg },
+  sheetDetail: { marginTop: spacing.md, fontSize: font.sm, lineHeight: 21 },
+  sheetCta: { marginTop: spacing.lg },
 }));

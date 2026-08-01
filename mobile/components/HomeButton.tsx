@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { Icon } from './Icon';
 import { Pressable } from './Pressable';
 import { clearEnteredLibrary } from '../services/sessionFlags';
-import { colors, spacing, radius } from '../constants/theme';
+import { colors, spacing, onImage, themed } from '../constants/theme';
 
 /**
  * Navigate home reliably — even on a hard reload of a deep link where there's
@@ -24,8 +24,8 @@ export function goHome() {
 /** Home icon for the stack header (headerRight). */
 export function HeaderHomeButton() {
   return (
-    <Pressable onPress={goHome} hitSlop={12} style={styles.header} scaleTo={0.85}>
-      <Icon name="home" size={20} color={colors.textPrimary} />
+    <Pressable onPress={goHome} hitSlop={12} style={styles.header} accessibilityLabel="Home">
+      <Icon name="home" size={18} color={colors.textPrimary} />
     </Pressable>
   );
 }
@@ -33,23 +33,28 @@ export function HeaderHomeButton() {
 /** Floating home button for full-screen (headerless) screens. */
 export function FloatingHomeButton({ top }: { top: number }) {
   return (
-    <Pressable onPress={goHome} hitSlop={10} style={[styles.floating, { top }]} scaleTo={0.85}>
-      <Icon name="home" size={18} color="#FFF" />
+    <Pressable onPress={goHome} hitSlop={10} style={[styles.floating, { top }]} accessibilityLabel="Home">
+      {/* Sits on a scrim over a photograph, so it stays light in BOTH schemes —
+          the image underneath doesn't invert. */}
+      <Icon name="home" size={17} color={onImage.primary} />
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+// themed(): this sheet bakes in token values, and every one of them inverts
+// between light and dark.
+const styles = themed(() => StyleSheet.create({
   header: { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs },
   floating: {
     position: 'absolute',
     left: spacing.md,
-    width: 38,
-    height: 38,
-    borderRadius: radius.full,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+    width: 36,
+    height: 36,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1,
+    borderColor: 'rgba(248,248,248,0.28)',
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 20,
   },
-});
+}));

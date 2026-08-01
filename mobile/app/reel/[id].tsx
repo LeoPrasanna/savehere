@@ -18,7 +18,7 @@ import { goHome } from '../../components/HomeButton';
 import { TaskList } from '../../components/TaskList';
 import { TodoEditor } from '../../components/TodoEditor';
 import { Disclaimer } from '../../components/Disclaimer';
-import { colors, spacing, font, radius, gradients, shadow, typeface, platformMeta, categoryFor, categoryMeta, CATEGORY_OPTIONS, themed } from '../../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, typeface, tracking, onImage, platformMeta, categoryFor, categoryMeta, CATEGORY_OPTIONS, themed } from '../../constants/theme';
 
 export default function ReelDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -362,16 +362,19 @@ export default function ReelDetailScreen() {
             <Icon name="play" size={44} color="rgba(255,255,255,0.9)" />
           </LinearGradient>
         )}
-        <LinearGradient colors={['transparent', 'rgba(11,10,15,0.95)']} style={styles.heroScrim} />
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.88)']} style={styles.heroScrim} />
 
-        <View style={[styles.platformChip, { backgroundColor: platform.color }]}>
-          <Ionicons name={platform.icon as any} size={13} color="#FFF" />
-          <Text style={styles.platformChipText}>{platform.label}</Text>
+        {/* Platform is a WORDMARK, not a coloured badge — `platform.color` is
+            now the ink tone for every platform (see constants/theme.ts), so a
+            filled chip would be a white block on the photo. */}
+        <View style={styles.platformChip}>
+          <Ionicons name={platform.icon as any} size={12} color={onImage.primary} />
+          <Text style={styles.platformChipText}>{platform.label.toUpperCase()}</Text>
         </View>
         <View style={styles.heroActions}>
           <View style={styles.watchChip}>
-            <Icon name="play" size={12} color="#FFF" />
-            <Text style={styles.watchChipText}>Watch</Text>
+            <Icon name="play" size={11} color={onImage.primary} />
+            <Text style={styles.watchChipText}>WATCH</Text>
           </View>
           {/* Real button (Watch is just decoration for the whole-hero tap), so it
               must swallow the press or the hero opens the link instead of copying. */}
@@ -381,8 +384,8 @@ export default function ReelDetailScreen() {
             scaleTo={0.94}
             hitSlop={6}
           >
-            <Icon name={copied ? 'checkmark' : 'copy'} size={12} color="#FFF" />
-            <Text style={styles.watchChipText}>{copied ? 'Copied' : 'Copy'}</Text>
+            <Icon name={copied ? 'checkmark' : 'copy'} size={11} color={onImage.primary} />
+            <Text style={styles.watchChipText}>{copied ? 'COPIED' : 'COPY'}</Text>
           </Pressable>
         </View>
       </Pressable>
@@ -603,8 +606,8 @@ export default function ReelDetailScreen() {
               >
                 <LinearGradient colors={gradients.sunset} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
                   {generatingItin
-                    ? <ActivityIndicator size="small" color="#FFF" />
-                    : <Icon name="travel" size={20} color="#FFF" />}
+                    ? <ActivityIndicator size="small" color={colors.onAction} />
+                    : <Icon name="travel" size={20} color={colors.onAction} />}
                   <Text style={styles.actionBtnText}>
                     {generatingItin ? 'Planning…' : itinRegensLeft <= 0 ? 'Limit reached' : 'Create Itinerary'}
                   </Text>
@@ -691,8 +694,8 @@ export default function ReelDetailScreen() {
                 >
                   <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
                     {generatingWorkout
-                      ? <ActivityIndicator size="small" color="#FFF" />
-                      : <Icon name="barbell" size={20} color="#FFF" />}
+                      ? <ActivityIndicator size="small" color={colors.onAction} />
+                      : <Icon name="barbell" size={20} color={colors.onAction} />}
                     <Text style={styles.actionBtnText}>
                       {generatingWorkout ? 'Building…' : hasWorkout ? 'View Workout' : workoutLimitReached ? 'Limit reached' : 'Build Workout'}
                     </Text>
@@ -713,8 +716,8 @@ export default function ReelDetailScreen() {
               <Pressable style={styles.actionBtnWrap} onPress={handleGenerateTasks} disabled={generatingTasks}>
                 <LinearGradient colors={gradients.cool} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
                   {generatingTasks
-                    ? <ActivityIndicator size="small" color="#FFF" />
-                    : <Icon name={isCooking ? 'restaurant' : 'list'} size={20} color="#FFF" />}
+                    ? <ActivityIndicator size="small" color={colors.onAction} />
+                    : <Icon name={isCooking ? 'restaurant' : 'list'} size={20} color={colors.onAction} />}
                   <Text style={styles.actionBtnText}>
                     {generatingTasks ? 'Working…' : (isCooking ? 'Get Recipe' : 'Get Action Steps')}
                   </Text>
@@ -834,7 +837,7 @@ export default function ReelDetailScreen() {
                     style={[styles.catOption, active && { backgroundColor: m.color, borderColor: m.color }]}
                     onPress={() => handleSelectCategory(c)}
                   >
-                    <Icon name={m.icon} size={15} color={active ? '#FFF' : m.color} emphasis={active} />
+                    <Icon name={m.icon} size={15} color={active ? colors.onAction : m.color} emphasis={active} />
                     <Text style={[styles.catOptionText, active && styles.catOptionTextActive]}>{c}</Text>
                   </Pressable>
                 );
@@ -854,23 +857,33 @@ const styles = themed(() => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   notFound: { color: colors.textSecondary, fontSize: font.md },
 
-  hero: { borderRadius: radius.lg, overflow: 'hidden', ...shadow.md },
-  heroImg: { width: '100%', height: 248, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
-  heroScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 90 },
+  // The hero is a full-bleed frame with a hairline seam — no radius, no shadow.
+  hero: { overflow: 'hidden', borderWidth: 1, borderColor: colors.ghostLine },
+  heroImg: { width: '100%', height: 300, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
+  heroScrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 110 },
+  // ⚠️ Chips on the hero keep a DARK scrim and LIGHT text in both schemes. The
+  // photograph underneath does not invert, so these must not either.
   platformChip: {
-    position: 'absolute', left: spacing.md, bottom: spacing.md,
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: spacing.sm + 2, paddingVertical: 5,
-    borderRadius: radius.full, ...shadow.sm,
+    position: 'absolute', left: spacing.sm, bottom: spacing.sm,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: spacing.sm, paddingVertical: 5,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1, borderColor: 'rgba(248,248,248,0.28)',
   },
-  platformChipText: { color: '#FFF', fontSize: font.xs, fontWeight: '800' },
+  platformChipText: {
+    color: onImage.primary, fontFamily: typeface.label,
+    fontSize: font.xs, letterSpacing: tracking.labelWide,
+  },
   watchChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: spacing.sm + 2, paddingVertical: 5,
-    borderRadius: radius.full, backgroundColor: 'rgba(0,0,0,0.55)',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingHorizontal: spacing.sm, paddingVertical: 5,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderWidth: 1, borderColor: 'rgba(248,248,248,0.28)',
   },
-  watchChipText: { color: '#FFF', fontSize: font.xs, fontWeight: '800' },
+  watchChipText: {
+    color: onImage.primary, fontFamily: typeface.label,
+    fontSize: font.xs, letterSpacing: tracking.labelWide,
+  },
   heroActions: {
     position: 'absolute', right: spacing.md, bottom: spacing.md,
     flexDirection: 'row', alignItems: 'center', gap: spacing.xs,
@@ -912,7 +925,7 @@ const styles = themed(() => StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     paddingVertical: spacing.sm + 4, borderRadius: radius.md,
   },
-  modalBtnText: { color: '#FFF', fontSize: font.sm, fontWeight: '800' },
+  modalBtnText: { color: colors.onAction, fontSize: font.sm, fontWeight: '800' },
   catGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   catOption: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
@@ -922,8 +935,10 @@ const styles = themed(() => StyleSheet.create({
   },
   catOptionEmoji: { fontSize: 15 },
   catOptionText: { color: colors.textSecondary, fontSize: font.sm, fontWeight: '600', textTransform: 'capitalize' },
-  catOptionTextActive: { color: '#FFF', fontWeight: '800' },
-  title: { color: colors.textPrimary, fontFamily: typeface.serif, fontSize: font.xl + 2, fontWeight: '700', lineHeight: 32, letterSpacing: -0.3 },
+  catOptionTextActive: { color: colors.onAction, fontWeight: '800' },
+  // Light weight at large size with negative tracking — the system's signature
+  // display setting. Never bold this; 300 is the whole point.
+  title: { color: colors.textPrimary, fontFamily: typeface.display, fontSize: font.xxl, lineHeight: font.xxl * 1.1, letterSpacing: tracking.title },
 
   card: {
     backgroundColor: colors.card,
@@ -991,7 +1006,7 @@ const styles = themed(() => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
     borderRadius: radius.md, paddingVertical: spacing.md,
   },
-  actionBtnText: { color: '#FFF', fontSize: font.sm, fontWeight: '800' },
+  actionBtnText: { color: colors.onAction, fontSize: font.sm, fontWeight: '800' },
   actionHint: { color: colors.textTertiary, fontSize: font.xs, lineHeight: 16 },
   inlineError: {
     flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs,

@@ -1,185 +1,297 @@
-import { Platform } from 'react-native';
+import { Platform, Appearance } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * SaveHere design system — "Ember on Ink".
+ * SaveHere design system — "Contact Sheet".
  *
- * A warm editorial dark identity: ink-black surfaces with a hint of warmth,
- * one ember-orange accent, cream text, and a serif display face (Fraunces) for
- * brand moments. Color is reserved for meaning (platform, category, status) —
- * the chrome stays quiet so the user's saved content is the loudest thing on
- * screen, and the warmth makes it feel human instead of "AI product".
+ * ── Reference lock (Refero, 2026-08-01) ──────────────────────────────────────
+ * Primary:  Julia Krantz (juliakrantz.com) — "darkroom contact sheet": a grid of
+ *           photographic tiles on absolute #000, identity spelled in barely-there
+ *           light letterforms. Its governing rule is the one that reshapes this
+ *           whole file: "Color is entirely absent from the UI layer; all
+ *           chromatic interest is delegated to the photography."
+ * Borrow:   mono (mono.frm.fm) — the GHOST OUTLINE control: transparent fill,
+ *           1px border, 0 radius, wide horizontal padding, no filled CTA colour.
+ *           entire studios — small tracked uppercase utility labels as the
+ *           navigation/metadata voice instead of icons.
+ * Reject:   any hue in the chrome · rounded corners · shadows/elevation ·
+ *           gradients on controls · filled colour CTAs · a hue per category ·
+ *           weight above 500 · decorative entry animation.
  *
- * NOTE: token names are a stable API — screens import these by name. Add new
- * tokens freely; rename/remove only with a sweep of all usages.
+ * ── Why this replaced a colour-first system ──────────────────────────────────
+ * The outgoing direction rotated four saturated brand colours across card
+ * surfaces. SaveHere's cards are THUMBNAILS — every one arrives with its own
+ * palette, and brand colour on the surface around them fought all of it. Here
+ * the chrome is achromatic on purpose so the user's saved content is the only
+ * colour on screen. That is the whole thesis; do not add an accent "just for
+ * the primary button".
+ *
+ * ── Roles (do not repurpose) ─────────────────────────────────────────────────
+ *   ink        The single foreground. All text, all icons, all borders.
+ *   ash        Secondary hierarchy. Labels, counts, metadata. Never body copy.
+ *   ghostLine  Structural seams ONLY — tile borders, dividers, rules.
+ *   veil       Decorative overlay text on photography (the archival index).
+ *              Meaningful overlay text uses `ink` over `scrim`, never veil.
+ *   canvas     Absolute. #000 in dark, #FFF in light. Never a "near" value.
+ *
+ * NOTE: token names are a stable API — screens import these by name. Every name
+ * the old system exported still resolves, so the look changes app-wide without
+ * ~30 call sites being edited. Add tokens freely; rename only with a sweep.
  */
 
+/* ── Schemes ───────────────────────────────────────────────────────────────── */
+
+export type ColorScheme = 'light' | 'dark';
+/** What the user picked. 'system' follows the OS and keeps following it. */
+export type SchemePreference = ColorScheme | 'system';
+
+interface Palette {
+  background: string; surface: string; card: string; cardElevated: string;
+  border: string; borderLight: string;
+  accent: string; accentDark: string; accentLight: string;
+  textPrimary: string; textSecondary: string; textTertiary: string;
+  onAccent: string;
+  tagBg: string; tagText: string;
+  danger: string; success: string; warning: string;
+  scrimMid: string; scrimBottom: string;
+  ghostLine: string; veil: string;
+}
+
+/**
+ * Two inversions of one system, not two systems.
+ *
+ * Dark is Julia Krantz verbatim: absolute #000, a single #F8F8F8 foreground.
+ * Light is the same grammar inverted, grounded in `entire studios` and `mono`
+ * (both monochrome gallery systems in the same research batch) rather than
+ * invented — #FFF canvas, black ink, the same hairline seams at 14%.
+ *
+ * ⚠️ The ash values are NOT the reference's #707070. That measures 4.24:1 on
+ * black and fails AA at the 10px label sizes this system leans on. Both were
+ * walked until they pass: #787878 = 4.76:1 on void, #6E6E6E = 5.10:1 on canvas.
+ * Preserving an accessibility bug is not preserving a signature trait.
+ */
+const PALETTES: Record<ColorScheme, Palette> = {
+  dark: {
+    background: '#000000',     // Void. Absolute — never a near-black.
+    surface: '#000000',
+    card: '#0B0B0B',           // the tile floor behind a loading photograph
+    cardElevated: '#111111',
+    border: 'rgba(248,248,248,0.12)',
+    borderLight: 'rgba(248,248,248,0.22)',
+    accent: '#F8F8F8',         // there is no accent hue — "accent" IS the ink
+    accentDark: '#D4D4D4',
+    accentLight: '#FFFFFF',
+    textPrimary: '#F8F8F8',    // 19.8:1
+    textSecondary: '#A8A8A8',  //  8.6:1
+    textTertiary: '#787878',   //  4.8:1 — #707070 measured 4.24 and was cut
+    onAccent: '#000000',       // inverted button: salt fill, void text
+    tagBg: 'transparent',      // tags are tracked type, not chips
+    tagText: '#787878',
+    danger: '#F8F8F8',         // destructive reads by INVERSION + wording
+    success: '#F8F8F8',
+    warning: '#F8F8F8',
+    scrimMid: 'rgba(0,0,0,0)',
+    scrimBottom: 'rgba(0,0,0,0.82)',
+    ghostLine: 'rgba(248,248,248,0.12)',
+    veil: 'rgba(248,248,248,0.45)',
+  },
+  light: {
+    background: '#FFFFFF',     // Arctic White (entire studios)
+    surface: '#FFFFFF',
+    card: '#F2F2F2',
+    cardElevated: '#E9E9E9',
+    border: 'rgba(0,0,0,0.14)',
+    borderLight: 'rgba(0,0,0,0.26)',
+    accent: '#000000',
+    accentDark: '#000000',
+    accentLight: '#2B2B2B',
+    textPrimary: '#000000',    // 21:1
+    textSecondary: '#4A4A4A',  //  9.0:1
+    textTertiary: '#6E6E6E',   //  5.1:1
+    onAccent: '#FFFFFF',
+    tagBg: 'transparent',
+    tagText: '#6E6E6E',
+    danger: '#000000',
+    success: '#000000',
+    warning: '#000000',
+    scrimMid: 'rgba(0,0,0,0)',
+    // ⚠️ The scrim does NOT invert. It sits over a photograph, and photographs
+    // are the same in both schemes — a white scrim would make overlay text
+    // unreadable on a light image. Overlay text is white-on-dark in both.
+    scrimBottom: 'rgba(0,0,0,0.82)',
+    ghostLine: 'rgba(0,0,0,0.14)',
+    veil: 'rgba(248,248,248,0.45)',
+  },
+};
+
+/**
+ * Text that sits ON a photograph. Fixed across schemes for the reason above.
+ * Use with `gradients.scrim` behind it whenever the text carries meaning.
+ */
+export const onImage = {
+  primary: '#F8F8F8',
+  muted: 'rgba(248,248,248,0.45)',
+} as const;
+
+/**
+ * Live token object. Mutated in place by `setScheme` — never reassigned, so
+ * `import { colors }` stays valid and every themed() sheet re-reads it.
+ */
 export const colors = {
-  // Surfaces — warm ink. Each step is one perceptible notch brighter.
-  background: '#0F0D0A',
-  surface: '#161310',
-  card: '#1C1814',
-  cardElevated: '#252019',
-  border: '#2B251D',        // hairline on card edges
-  borderLight: '#383126',   // slightly stronger, for inputs/dividers
+  ...PALETTES.dark,
 
-  // Primary accent — ember. Use for primary actions, active states and links;
-  // never as large background washes.
-  accent: '#FF6B3D',
-  accentDark: '#E4501F',
-  accentLight: '#FF9770',
+  /** The inverted primary: fill with `action`, label with `onAction`. This is
+   *  the ONLY inversion in the system, which is what makes it read as emphasis
+   *  without a hue. Ghost outline (see `control.ghost`) is the default; this is
+   *  reserved for the single most important action on a screen. */
+  action: PALETTES.dark.textPrimary,
+  onAction: PALETTES.dark.background,
 
-  // Text — warm cream reads softer than pure #FFF on ink.
-  textPrimary: '#F7F2E9',
-  textSecondary: '#B3A99A',
-  textTertiary: '#786F61',
-
-  // Tags
-  tagBg: '#292219',
-  tagText: '#E8B98F',
-
-  // Status
-  danger: '#FF4D5E',
-  success: '#4FCE8F',
-  warning: '#FFC24D',
-
-  // Legacy accent aliases (kept for API compatibility) — mapped into the warm
-  // palette so old call sites inherit the new look.
-  hologram: '#FFB35C',
-  neonPink: '#FF6B8A',
-  neonCyan: '#5FC9BD',
-  neonViolet: '#FF6B3D',
-
-  // Former "glass" tokens — now flat surfaces (glassmorphism retired).
-  glassBg: '#1C1814',
-  glassBorder: '#2B251D',
-  glassBorderLight: '#383126',
+  // ── Compatibility aliases ────────────────────────────────────────────────
+  // The retired ember/neon/glass identity. Kept as keys so call sites that
+  // still read them inherit achromatic values instead of a dead colour.
+  hologram: PALETTES.dark.textPrimary as string,
+  neonPink: PALETTES.dark.textPrimary as string,
+  neonCyan: PALETTES.dark.textPrimary as string,
+  neonViolet: PALETTES.dark.textPrimary as string,
+  glassBg: PALETTES.dark.card as string,
+  glassBorder: PALETTES.dark.ghostLine as string,
+  glassBorderLight: PALETTES.dark.borderLight as string,
 };
 
-/** Gradient stop pairs — feed straight into <LinearGradient colors={...} />.
- *  Tight, single-hue ramps: enough depth to feel alive, never a rainbow.
- *  `hologram`/`neon` alias the brand ramp for compatibility. */
+/**
+ * ⚠️ Gradients are FLAT on purpose — except `scrim`.
+ *
+ * Julia Krantz: "Never introduce gradients, overlays, or tinted backgrounds."
+ * A gradient on every primary action is also the single most recognisable
+ * "an agent made this" signature. Both stops of every ramp below are the same
+ * colour, so the ~20 <LinearGradient> call sites keep their component and
+ * render a solid fill.
+ *
+ * `scrim` keeps real stops: it is an image treatment that makes overlay text
+ * legible over an unknown photograph, not decoration on a control.
+ */
 export const gradients = {
-  primary: ['#FF7A45', '#E4501F'] as const,      // ember ramp — primary actions
-  vibrant: ['#FF5C7A', '#E43D5F'] as const,      // warm pink ramp — workout action
-  sunset: ['#FFB35C', '#FF7A45'] as const,
-  cool: ['#5FC9BD', '#3FA79B'] as const,         // teal ramp — tasks action
-  success: ['#4FCE8F', '#33B274'] as const,
-  surface: ['#1C1814', '#161310'] as const,
-  scrim: ['transparent', 'rgba(15,13,10,0.0)', 'rgba(15,13,10,0.92)'] as const,
-  hologram: ['#FF7A45', '#E4501F'] as const,     // legacy alias → brand ramp
-  neon: ['#FF7A45', '#E4501F'] as const,         // legacy alias → brand ramp
-  darkSurface: ['#161310', '#0F0D0A'] as const,
+  primary: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
+  vibrant: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
+  sunset: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
+  cool: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
+  success: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
+  surface: [PALETTES.dark.card, PALETTES.dark.card] as const,
+  scrim: ['transparent', PALETTES.dark.scrimMid, PALETTES.dark.scrimBottom] as const,
+  hologram: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
+  neon: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
+  darkSurface: [PALETTES.dark.background, PALETTES.dark.background] as const,
 };
 
-/** Per-platform brand colors for badges / accents */
+/**
+ * Platform identity is a WORDMARK, not a colour.
+ *
+ * `label` is the load-bearing field now — rendered as tracked uppercase type
+ * (see `kit.Label`). The `color` key is retained because ~6 call sites read it,
+ * but every value is the ink tone: six brand hues in the chrome would be the
+ * loudest thing on a screen full of thumbnails and would fight every one of
+ * them. Julia Krantz's rule holds — no colour in the UI layer.
+ */
 export const platformMeta: Record<string, { color: string; gradient: readonly [string, string]; icon: string; label: string }> = {
-  youtube: { color: '#FF0033', gradient: ['#3A1520', '#2A0E16'], icon: 'logo-youtube', label: 'YouTube' },
-  instagram: { color: '#E1306C', gradient: ['#38182B', '#26101E'], icon: 'logo-instagram', label: 'Instagram' },
-  tiktok: { color: '#25F4EE', gradient: ['#12333A', '#0D2228'], icon: 'logo-tiktok', label: 'TikTok' },
-  linkedin: { color: '#4A9DE0', gradient: ['#132A3F', '#0D1C2A'], icon: 'logo-linkedin', label: 'LinkedIn' },
-  facebook: { color: '#4A90F2', gradient: ['#14263F', '#0D1A2A'], icon: 'logo-facebook', label: 'Facebook' },
-  twitter: { color: '#8AA0B4', gradient: ['#1C242B', '#12181D'], icon: 'logo-twitter', label: 'X' },
-  unknown: { color: '#FF9770', gradient: ['#33251C', '#241A14'], icon: 'globe-outline', label: 'Web' },
+  youtube:   { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'logo-youtube',   label: 'YouTube' },
+  instagram: { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'logo-instagram', label: 'Instagram' },
+  tiktok:    { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'logo-tiktok',    label: 'TikTok' },
+  linkedin:  { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'logo-linkedin',  label: 'LinkedIn' },
+  facebook:  { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'logo-facebook',  label: 'Facebook' },
+  twitter:   { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'logo-twitter',   label: 'X' },
+  unknown:   { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'globe-outline',  label: 'Web' },
 };
 
-/** Category visual identity — icon + tint for chips and cards.
- *  Vivid but warm-harmonized so they sit comfortably on ink. */
-export const categoryMeta: Record<string, { icon: string; color: string }> = {
-  all: { icon: 'all', color: '#FF6B3D' },
-  fitness: { icon: 'fitness', color: '#FF6B8A' },
-  cooking: { icon: 'cooking', color: '#FFAE52' },
-  tech: { icon: 'tech', color: '#5FC9BD' },
-  motivation: { icon: 'motivation', color: '#FF8A5B' },
-  education: { icon: 'education', color: '#71C787' },
-  entertainment: { icon: 'entertainment', color: '#C98BFF' },
-  fashion: { icon: 'fashion', color: '#FF9BB1' },
-  beauty: { icon: 'beauty', color: '#E48BD2' },
-  travel: { icon: 'travel', color: '#5FB9E8' },
-  business: { icon: 'business', color: '#D9B36B' },
-  news: { icon: 'news', color: '#A29C90' },
-  health: { icon: 'health', color: '#63D69B' },
-  finance: { icon: 'finance', color: '#F4C430' },
-  general: { icon: 'general', color: '#B3A99A' },
-  other: { icon: 'other', color: '#B3A99A' },
-};
+/**
+ * Categories carry ICON + LABEL only.
+ *
+ * The old map handed all 16 categories a bespoke hue (fitness pink, cooking
+ * orange, tech teal, beauty magenta…). That is a taxonomy wearing a palette.
+ * A category is now a small tracked uppercase word — Julia Krantz's Category
+ * Label component doing exactly the job it was built for. `color` survives as
+ * a key for the ~6 sites that read it, resolving to the muted ink tone.
+ */
+export const categoryMeta: Record<string, { icon: string; color: string }> = Object.fromEntries(
+  ['all', 'fitness', 'cooking', 'tech', 'motivation', 'education', 'entertainment',
+   'fashion', 'beauty', 'travel', 'business', 'news', 'health', 'finance',
+   'general', 'other'].map(k => [k, { icon: k, color: PALETTES.dark.textTertiary }]),
+);
 
 export const categoryFor = (c?: string | null) =>
   categoryMeta[(c || 'other').toLowerCase()] ?? categoryMeta.other;
 
-/* ── Accent themes (Appearance) ──────────────────────────────────────────────
- * Five accent palettes; "ember" is the default brand look. Switching is LIVE:
- * `setAccentTheme()` mutates the token objects, regenerates every style sheet
- * created through `themed()` (module-level StyleSheet.create freezes values,
- * so those sheets are wrapped in factories that re-run on change), then
- * notifies subscribers — the root layout bumps a remount key and the whole
- * tree re-renders with the new palette in one frame. No page reload.
+/* ── Scheme switching ────────────────────────────────────────────────────────
+ * This machinery is inherited from the accent-switching system it replaces —
+ * same problem, wider blast radius. `setScheme()` mutates the token objects,
+ * regenerates every style sheet made through `themed()` (module-level
+ * StyleSheet.create freezes values, so those sheets are wrapped in factories
+ * that re-run), then notifies subscribers — the root layout bumps a remount key
+ * and the tree repaints in one frame.
  *
- * Boot: web reads the stored key synchronously (localStorage) so the first
- * paint is already themed; native applies right after the root layout's
- * AsyncStorage read (see app/_layout.tsx) — a brief default-color first frame.
- */
-export const ACCENT_STORAGE_KEY = '@savehere:accent:v1';
+ * Boot: web reads localStorage synchronously so the first paint is already
+ * correct; native applies right after the root layout's AsyncStorage read.    */
 
-export interface AccentTheme {
-  key: string;
-  label: string;
-  accent: string;
-  accentDark: string;
-  accentLight: string;
-  ramp: readonly [string, string];   // primary-action gradient
-}
+export const SCHEME_STORAGE_KEY = '@savehere:scheme:v1';
 
-export const accentThemes: readonly AccentTheme[] = [
-  { key: 'ember',  label: 'Ember',  accent: '#FF6B3D', accentDark: '#E4501F', accentLight: '#FF9770', ramp: ['#FF7A45', '#E4501F'] },
-  { key: 'iris',   label: 'Iris',   accent: '#8B7CFF', accentDark: '#6A55E8', accentLight: '#B0A6FF', ramp: ['#9C8CFF', '#6A55E8'] },
-  { key: 'ocean',  label: 'Ocean',  accent: '#3DA9FF', accentDark: '#1E7FE0', accentLight: '#7CC4FF', ramp: ['#55B4FF', '#1E7FE0'] },
-  { key: 'forest', label: 'Forest', accent: '#3DD68C', accentDark: '#21B473', accentLight: '#7BE5B3', ramp: ['#52DC99', '#21B473'] },
-  { key: 'rose',   label: 'Rose',   accent: '#FF5C8A', accentDark: '#E43D6F', accentLight: '#FF92B2', ramp: ['#FF6F97', '#E43D6F'] },
-];
-
-function applyAccentTheme(t: AccentTheme) {
-  colors.accent = t.accent;
-  colors.accentDark = t.accentDark;
-  colors.accentLight = t.accentLight;
-  colors.neonViolet = t.accent;               // legacy alias follows the accent
+function applyScheme(s: ColorScheme) {
+  const p = PALETTES[s];
+  Object.assign(colors, p);
+  colors.action = p.textPrimary;
+  colors.onAction = p.background;
+  for (const k of Object.keys(categoryMeta)) categoryMeta[k].color = p.textTertiary;
+  for (const k of Object.keys(platformMeta)) {
+    platformMeta[k].color = p.textPrimary;
+    (platformMeta[k] as { gradient: readonly [string, string] }).gradient = [p.card, p.card];
+  }
+  // Aliases that shadow palette values have to be re-pointed by hand.
+  colors.hologram = p.textPrimary;
+  colors.neonPink = p.textPrimary;
+  colors.neonCyan = p.textPrimary;
+  colors.neonViolet = p.textPrimary;
+  colors.glassBg = p.card;
+  colors.glassBorder = p.ghostLine;
+  colors.glassBorderLight = p.borderLight;
   const g = gradients as Record<string, readonly string[]>;
-  g.primary = t.ramp;
-  g.hologram = t.ramp;                        // legacy aliases → brand ramp
-  g.neon = t.ramp;
-  categoryMeta.all.color = t.accent;
+  for (const k of ['primary', 'vibrant', 'sunset', 'cool', 'success', 'hologram', 'neon']) {
+    g[k] = [p.textPrimary, p.textPrimary];
+  }
+  g.surface = [p.card, p.card];
+  g.darkSurface = [p.background, p.background];
+  g.scrim = ['transparent', p.scrimMid, p.scrimBottom];
+  glass.card.backgroundColor = p.card;
+  glass.card.borderColor = p.ghostLine;
+  glass.cardElevated.backgroundColor = p.cardElevated;
+  glass.cardElevated.borderColor = p.ghostLine;
+  glass.neonBorder.borderColor = p.borderLight;
+  control.ghost.borderColor = p.textPrimary;
+  control.filled.backgroundColor = p.textPrimary;
+  control.rule.backgroundColor = p.ghostLine;
 }
 
-// Derived token objects (shadow.glow / glass / glow) captured colors.accent at
-// their own module init. Only called from setAccentTheme at runtime — at boot
-// they don't exist yet (declared below) and self-initialize from the already-
-// mutated colors.
-function refreshDerivedTokens(t: AccentTheme) {
-  const sg = shadow.glow as Record<string, unknown>;
-  if ('shadowColor' in sg) sg.shadowColor = t.accent;         // iOS branch only
-  (glass.neonBorder as { borderColor: string }).borderColor = t.accent + '33';
-  (glow.violet as { shadowColor: string }).shadowColor = t.accent;
-}
-
-// Two-phase notify: style sheets must be regenerated BEFORE React subscribers
+// Two-phase notify: sheets must be regenerated BEFORE React subscribers
 // re-render, or the remounted tree would still read the old sheets.
 const _sheetRegens = new Set<() => void>();
-const _accentSubs = new Set<() => void>();
+const _schemeSubs = new Set<() => void>();
 
-/** Subscribe to accent changes (used by the root layout to remount the tree).
+/** Subscribe to scheme changes (the root layout remounts the tree).
  *  Returns an unsubscribe function. */
-export function onAccentChange(fn: () => void): () => void {
-  _accentSubs.add(fn);
-  return () => { _accentSubs.delete(fn); };
+export function onSchemeChange(fn: () => void): () => void {
+  _schemeSubs.add(fn);
+  return () => { _schemeSubs.delete(fn); };
 }
 
 /**
- * Wrap any module-level object whose values bake in accent tokens — a
- * StyleSheet.create(...) call, a color map, a steps array. The factory re-runs
- * on every accent change and the returned proxy always forwards to the latest
+ * Wrap any module-level object whose values bake in theme tokens — a
+ * StyleSheet.create(...) call, a colour map, a steps array. The factory re-runs
+ * on every scheme change and the returned proxy always forwards to the latest
  * result, so `styles.foo` at render time is never stale.
  *
  *   const styles = themed(() => StyleSheet.create({ ... }));
+ *
+ * ⚠️ Load-bearing. Any sheet that bakes in a colour and skips this goes stale
+ * the moment the user switches Light/Dark. With an achromatic system the
+ * failure is total rather than cosmetic — a stale sheet renders white on white.
  */
 export function themed<T extends object>(factory: () => T): T {
   let current = factory();
@@ -192,40 +304,65 @@ export function themed<T extends object>(factory: () => T): T {
   });
 }
 
-/** Switch the accent LIVE: mutate tokens → regenerate themed() sheets → notify
- *  subscribers (root remounts) → persist. Works on web and native. */
-export function setAccentTheme(key: string, opts?: { persist?: boolean }) {
-  const t = accentThemes.find(x => x.key === key);
-  if (!t || key === _activeKey) return;
-  _activeKey = key;
-  applyAccentTheme(t);
-  refreshDerivedTokens(t);
+let _preference: SchemePreference = 'system';
+let _active: ColorScheme = 'dark';
+
+function resolve(p: SchemePreference): ColorScheme {
+  if (p !== 'system') return p;
+  return Appearance.getColorScheme() === 'light' ? 'light' : 'dark';
+}
+
+function repaint(next: ColorScheme) {
+  if (next === _active) return;
+  _active = next;
+  applyScheme(next);
   _sheetRegens.forEach(fn => fn());
-  _accentSubs.forEach(fn => fn());
+  _schemeSubs.forEach(fn => fn());
+}
+
+/** Set the user's preference. 'system' keeps tracking the OS from here on.
+ *  Always notifies subscribers, even when the resolved scheme is unchanged, so
+ *  a Dark → System tap that resolves back to dark still repaints the settings
+ *  UI's selected state. */
+export function setScheme(p: SchemePreference, opts?: { persist?: boolean }) {
+  const changed = p !== _preference;
+  _preference = p;
+  const next = resolve(p);
+  if (next === _active) {
+    if (changed) _schemeSubs.forEach(fn => fn());
+  } else {
+    repaint(next);
+  }
   if (opts?.persist !== false) {
     if (Platform.OS === 'web') {
-      try { window.localStorage.setItem(ACCENT_STORAGE_KEY, key); } catch {}
+      try { window.localStorage.setItem(SCHEME_STORAGE_KEY, p); } catch {}
     }
-    AsyncStorage.setItem(ACCENT_STORAGE_KEY, key).catch(() => {});
+    AsyncStorage.setItem(SCHEME_STORAGE_KEY, p).catch(() => {});
   }
 }
 
-// Boot read — web only (sync localStorage), so the first paint is themed. On
-// native app/_layout.tsx reads AsyncStorage after mount and calls setAccentTheme.
-let _storedAccent: string | null = null;
-if (Platform.OS === 'web') {
-  try { _storedAccent = window.localStorage.getItem(ACCENT_STORAGE_KEY); } catch {}
-}
-let _activeKey: string =
-  accentThemes.some(t => t.key === _storedAccent) ? (_storedAccent as string) : 'ember';
-if (_activeKey !== 'ember') {
-  applyAccentTheme(accentThemes.find(t => t.key === _activeKey)!);
-}
+/** What the user chose (may be 'system'). For the settings UI. */
+export const getSchemePreference = (): SchemePreference => _preference;
+/** What is actually painted right now. For StatusBar style, SVG fills, etc. */
+export const getColorScheme = (): ColorScheme => _active;
+export const isDark = () => _active === 'dark';
 
-/** The currently applied accent key (live — reflects setAccentTheme). */
-export function getAccentKey(): string {
-  return _activeKey;
+// Follow the OS whenever the preference is 'system'. Registered once for the
+// life of the process — there is no unsubscribe path because this listener is
+// as long-lived as the token module itself.
+Appearance.addChangeListener(() => {
+  if (_preference === 'system') repaint(resolve('system'));
+});
+
+// Boot read — web only (sync localStorage), so the first paint is correct. On
+// native app/_layout.tsx reads AsyncStorage after mount and calls setScheme.
+if (Platform.OS === 'web') {
+  try {
+    const stored = window.localStorage.getItem(SCHEME_STORAGE_KEY);
+    if (stored === 'light' || stored === 'dark' || stored === 'system') _preference = stored;
+  } catch {}
 }
+_active = resolve(_preference);
 
 /** The categories a reel can be assigned to (auto or user-picked). Excludes the
  *  'all' filter pseudo-category. Keep in sync with backend ALLOWED_CATEGORIES. */
@@ -243,95 +380,180 @@ export const spacing = {
   xxl: 48,
 };
 
-/** Tighter, iOS-leaning corner hierarchy: controls < cards < sheets. */
+/**
+ * ⚠️ EVERY RADIUS IS ZERO. This is the reference's one absolute rule: "Never
+ * round corners — 0px is non-negotiable."
+ *
+ * The keys survive (and `full` still says 999 in spirit but resolves to 0) so
+ * the ~30 call sites asking for `radius.full` on a pill or avatar render a
+ * square without being edited. Square avatars are also the deliberate departure
+ * from the app this direction was briefed against, whose circular avatars are
+ * one of its most recognisable marks.
+ */
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 22,
-  full: 999,
+  sm: 0,
+  md: 0,
+  lg: 0,
+  xl: 0,
+  full: 0,
 };
 
-/** Typefaces. Manrope (loaded in app/_layout.tsx) is the display face for
- *  titles, headers and brand moments; body text stays on the system font
- *  (SF Pro on iOS) for native reading comfort. Until the font loads, RN falls
- *  back to the system face — same metrics class, no layout jump. */
+/**
+ * Motion, from Julia Krantz: two tiers only. 0.2s ease for colour/opacity state
+ * changes, 0.4s ease for image brightness. The custom deceleration curve is
+ * reserved for transforms.
+ *
+ * Its explicit rule: "No entry animations, no scroll-triggered effects. The
+ * motion philosophy is minimal: only hover feedback, nothing decorative."
+ *
+ * This is a hard reversal of the outgoing system, which sprang, bobbed and
+ * overshot. Press feedback here is OPACITY, never scale — a contact sheet whose
+ * tiles bounce is a contradiction.
+ */
+export const motion = {
+  instant: 120,
+  micro: 200,     // colour/opacity state change — the base
+  base: 200,
+  state: 400,     // image brightness
+  /** Controlled arrival. Transforms only. */
+  spring: [0.22, 0.61, 0.36, 1] as const,
+  easing: [0.22, 0.61, 0.36, 1] as const,
+  /** Press feedback: dim, don't scale. */
+  pressOpacity: 0.55,
+  /** A tile under the finger darkens, exactly as the reference's hover does. */
+  pressBrightness: 0.82,
+};
+
+/**
+ * Two faces with a hard role split, mirroring the reference's ClashDisplay +
+ * DM Sans pairing (Refero names Space Grotesk as the ClashDisplay substitute).
+ *
+ * Space Grotesk owns DISPLAY — the wordmark, screen titles, tile codes, big
+ * numbers. Always at weight 300 with negative tracking: a nearly-invisible
+ * letterform at large size is the signature move of this direction. 500 is the
+ * ceiling and belongs to the wordmark alone.
+ *
+ * DM Sans owns EVERYTHING ELSE at weight 300 — body, labels, metadata, nav.
+ * The reference refuses to bold anything in this family and so does this.
+ *
+ * `serif` / `serifBlack` are kept as KEYS resolving to Space Grotesk so the ~8
+ * call sites asking for a serif stop rendering Fraunces without being edited.
+ */
 export const typeface = {
-  display: 'Manrope_800ExtraBold',
-  displaySemi: 'Manrope_700Bold',
-  displayMedium: 'Manrope_600SemiBold',
-  // Editorial serif for brand moments only: landing greeting, hero numbers,
-  // login wordmark, reel titles. Never on UI controls or body text.
-  serif: 'Fraunces_700Bold',
-  serifBlack: 'Fraunces_900Black',
+  display: 'SpaceGrotesk_300Light',
+  displaySemi: 'SpaceGrotesk_500Medium',
+  displayMedium: 'SpaceGrotesk_300Light',
+  /** The wordmark only. 500 is the system's ceiling — nothing goes heavier. */
+  wordmark: 'SpaceGrotesk_500Medium',
+  body: 'DMSans_300Light',
+  bodyBold: 'DMSans_400Regular',
+  /** Small tracked uppercase labels — the metadata voice. */
+  label: 'DMSans_400Regular',
+  serif: 'SpaceGrotesk_300Light',
+  serifBlack: 'SpaceGrotesk_500Medium',
 };
 
-/** Type scale — restrained, close to iOS defaults. Pair with the weights below. */
+/** Type scale. The reference's: caption 10 / heading 29 / display 44, with body
+ *  sizes 12–14. Body is lifted to 15 — 13px light-weight body is a reading
+ *  problem on a phone that a portfolio site never has to solve. */
 export const font = {
-  xs: 11,      // caption
-  sm: 13,      // footnote
+  xs: 10,      // tracked uppercase labels ONLY — never sentence copy
+  sm: 12,
   md: 15,      // body
-  lg: 17,      // headline
-  xl: 22,      // title
-  xxl: 28,     // large title (screens)
-  display: 34, // hero (landing only)
+  lg: 18,
+  xl: 24,
+  xxl: 29,
+  display: 44,
 };
 
-/** Reusable elevation presets (iOS shadow + Android elevation) — soft, not smoky. */
+/**
+ * Letter-spacing is structural here, not a flourish. The reference carries its
+ * entire hierarchy on tracking + weight because it has no colour to spend:
+ * tight negative at display, wide positive at label sizes.
+ *
+ * React Native's `letterSpacing` is in POINTS, not em — these are pre-multiplied
+ * against the size they belong to.
+ */
+export const tracking = {
+  display: -1.76,   // -0.04em at 44
+  title: -1.16,     // -0.04em at 29
+  heading: -0.5,
+  body: 0,
+  /** +0.06em at 10px. Uppercase labels. */
+  label: 0.6,
+  /** +0.14em at 10px. The widest — category tags on tiles. */
+  labelWide: 1.4,
+};
+
+/**
+ * ⚠️ NO SHADOWS. Julia Krantz: "Never add box-shadows or elevation — depth
+ * comes from contrast with the black canvas only."
+ *
+ * These are empty objects rather than deleted keys so the ~12 call sites that
+ * spread `...shadow.glow` stop casting light without one of them being edited.
+ */
 export const shadow = {
-  sm: Platform.select({
-    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 4 },
-    default: { elevation: 2 },
-  }),
-  md: Platform.select({
-    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.24, shadowRadius: 10 },
-    default: { elevation: 5 },
-  }),
-  glow: Platform.select({
-    ios: { shadowColor: colors.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.32, shadowRadius: 12 },
-    default: { elevation: 8 },
-  }),
+  sm: {},
+  md: {},
+  glow: {},
 } as const;
 
-/** Legacy "glass" presets — now flat card styles (kept for API compatibility). */
+/**
+ * The control vocabulary. Ghost is the DEFAULT — mono's rule, "all buttons
+ * should be ghosted or outlined, never solid background fills". `filled` is the
+ * single inversion, reserved for one primary action per screen.
+ *
+ * Deliberately NOT `as const`: applyScheme re-points these in place.
+ */
+export const control = {
+  /** Transparent, 1px ink border, 0 radius, wide horizontal padding. */
+  ghost: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: colors.textPrimary,
+    borderRadius: 0,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  /** The one inversion. Ink fill, canvas text. One per screen, at most. */
+  filled: {
+    backgroundColor: colors.textPrimary,
+    borderWidth: 1,
+    borderColor: colors.textPrimary,
+    borderRadius: 0,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+  },
+  /** The ghost line, as a 1px divider. The only structural separator. */
+  rule: {
+    height: 1,
+    backgroundColor: colors.ghostLine,
+  },
+};
+
+/** Legacy "glass" presets — now flat, square, hairline-bordered surfaces.
+ *  Deliberately NOT `as const`: applyScheme re-points these in place. */
 export const glass = {
   card: {
     backgroundColor: colors.card,
-    borderRadius: radius.lg,
+    borderRadius: 0,
     borderWidth: 1,
-    borderColor: colors.border,
-  } as const,
+    borderColor: colors.ghostLine,
+  },
   cardElevated: {
     backgroundColor: colors.cardElevated,
-    borderRadius: radius.lg,
+    borderRadius: 0,
     borderWidth: 1,
-    borderColor: colors.borderLight,
-    ...shadow.sm,
-  } as const,
+    borderColor: colors.ghostLine,
+  },
   neonBorder: {
     borderWidth: 1,
-    borderColor: colors.accent + '33',
-  } as const,
+    borderColor: colors.borderLight,
+  },
 };
 
-/** Legacy glow presets — toned down; prefer `shadow.glow`. */
-export const glow = {
-  violet: {
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-  },
-  cyan: {
-    shadowColor: colors.neonCyan,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-  },
-  pink: {
-    shadowColor: colors.neonPink,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.25,
-    shadowRadius: 10,
-  },
-};
+/** Legacy glow presets — neutralised to empty style objects. */
+export const glow = { violet: {}, cyan: {}, pink: {} };
+
+// Paint the resolved scheme now that every token object above exists.
+applyScheme(_active);

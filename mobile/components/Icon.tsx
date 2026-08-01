@@ -85,10 +85,16 @@ interface Props {
 
 // Optical stroke correction: tiny icons need a slightly heavier stroke to stay
 // legible, large ones a lighter stroke to stay elegant. Explicit prop wins.
+//
+// ⚠️ Thinned across the board (was 2.4/2/1.75) to match the type. This system
+// runs its display face at weight 300 and refuses to bold anything; a 2px icon
+// stroke beside 300-weight text is the heaviest mark on the screen and reads as
+// a different design. mono's rule: "icons are minimalist, outlined,
+// monochromatic, with a fine stroke weight."
 function strokeFor(size: number): number {
-  if (size <= 13) return 2.4;
-  if (size >= 28) return 1.75;
-  return 2;
+  if (size <= 13) return 1.6;
+  if (size >= 28) return 1.1;
+  return 1.35;
 }
 
 export function Icon({ name, size = 18, color = '#FFF', strokeWidth, fill = 'none', emphasis = false, style }: Props) {

@@ -1,20 +1,23 @@
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { colors, radius, spacing } from '../constants/theme';
+import { colors, spacing, themed } from '../constants/theme';
 
 /**
- * SkeletonCard — content-shaped loading placeholder for the library grid.
- * A gentle opacity pulse (no shimmer sweep); the pulse stops existing the
- * moment real cards replace it, so the loop never competes with content.
+ * Content-shaped loading placeholder for the library grid.
+ *
+ * Matches the real frame exactly — 3:4 portrait, hairline seam, no radius, no
+ * gutter — so nothing shifts when the real tiles land. A gentle opacity pulse
+ * (no shimmer sweep); the pulse stops existing the moment real cards replace it,
+ * so the loop never competes with content.
  */
 export function SkeletonCard({ index = 0 }: { index?: number }) {
-  const pulse = useRef(new Animated.Value(0.55)).current;
+  const pulse = useRef(new Animated.Value(0.35)).current;
 
   useEffect(() => {
     const loop = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulse, { toValue: 1, duration: 700, delay: index * 90, useNativeDriver: true }),
-        Animated.timing(pulse, { toValue: 0.55, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.75, duration: 700, delay: index * 90, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 0.35, duration: 700, useNativeDriver: true }),
       ])
     );
     loop.start();
@@ -22,7 +25,7 @@ export function SkeletonCard({ index = 0 }: { index?: number }) {
   }, []);
 
   return (
-    <Animated.View style={[styles.card, { opacity: pulse }]}>
+    <Animated.View style={[styles.frame, { opacity: pulse }]}>
       <View style={styles.cover} />
       <View style={styles.body}>
         <View style={[styles.line, { width: '85%' }]} />
@@ -38,7 +41,7 @@ export function SkeletonGrid({ columns = 2, rows = 3 }: { columns?: number; rows
   return (
     <View style={styles.grid}>
       {Array.from({ length: columns * rows }).map((_, i) => (
-        <View key={i} style={{ width: `${100 / columns}%`, padding: spacing.xs }}>
+        <View key={i} style={{ width: `${100 / columns}%` }}>
           <SkeletonCard index={i} />
         </View>
       ))}
@@ -46,22 +49,16 @@ export function SkeletonGrid({ columns = 2, rows = 3 }: { columns?: number; rows
   );
 }
 
-const styles = StyleSheet.create({
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    paddingHorizontal: spacing.md - spacing.xs,
-    paddingTop: spacing.xs,
+const styles = themed(() => StyleSheet.create({
+  // No page margin and no gutter — the real grid is full-bleed and flush, and a
+  // skeleton that isn't would make the whole page jump on load.
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  frame: {
+    borderWidth: 0.5,
+    borderColor: colors.ghostLine,
   },
-  card: {
-    backgroundColor: colors.card,
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    overflow: 'hidden',
-  },
-  cover: { width: '100%', aspectRatio: 16 / 10, backgroundColor: colors.cardElevated },
-  body: { padding: spacing.sm + 2, gap: 7 },
-  line: { height: 10, borderRadius: 5, backgroundColor: colors.cardElevated },
-  thin: { height: 8 },
-});
+  cover: { width: '100%', aspectRatio: 3 / 4, backgroundColor: colors.card },
+  body: { padding: spacing.sm, gap: 6 },
+  line: { height: 9, backgroundColor: colors.card },
+  thin: { height: 7 },
+}));

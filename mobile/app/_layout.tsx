@@ -4,14 +4,20 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFonts, Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold } from '@expo-google-fonts/manrope';
-import { Fraunces_700Bold, Fraunces_900Black } from '@expo-google-fonts/fraunces';
+import { useFonts, DMSans_300Light, DMSans_400Regular } from '@expo-google-fonts/dm-sans';
+import { SpaceGrotesk_300Light, SpaceGrotesk_500Medium } from '@expo-google-fonts/space-grotesk';
 import { HeaderHomeButton } from '../components/HomeButton';
 import { LoginScreen } from '../components/LoginScreen';
 import { Confetti } from '../components/Confetti';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { OnboardingModal } from '../components/OnboardingModal';
-import { colors, font, typeface, onAccentChange, setAccentTheme, ACCENT_STORAGE_KEY } from '../constants/theme';
+import {
+  colors, font, typeface, themed, onSchemeChange, setScheme, isDark, SCHEME_STORAGE_KEY,
+} from '../constants/theme';
+
+/** Screen titles are tracked uppercase labels, not headline type — the nav is
+ *  metadata, and metadata speaks in the small voice. */
+const headerTitle = (t: string) => t.toUpperCase();
 
 function AppStack() {
   return (
@@ -19,7 +25,15 @@ function AppStack() {
       screenOptions={{
         headerStyle: { backgroundColor: colors.background },
         headerTintColor: colors.textPrimary,
-        headerTitleStyle: { fontFamily: typeface.display, fontWeight: '800', fontSize: font.lg },
+        // No letterSpacing here — react-navigation's headerTitleStyle only
+        // accepts fontFamily/fontSize/fontWeight/color. The tracking that the
+        // rest of the system carries has to come from the title text itself,
+        // which is why these are pre-uppercased instead.
+        headerTitleStyle: {
+          fontFamily: typeface.label,
+          fontSize: font.xs,
+          color: colors.textSecondary,
+        },
         headerShadowVisible: false,
         headerRight: () => <HeaderHomeButton />,
         contentStyle: { backgroundColor: colors.background },
@@ -27,16 +41,20 @@ function AppStack() {
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="landing" options={{ headerShown: false }} />
-      <Stack.Screen name="save" options={{ title: 'Save a Reel', presentation: 'modal' }} />
-      <Stack.Screen name="ask" options={{ title: 'Ask your library' }} />
-      <Stack.Screen name="rediscover" options={{ title: 'Rediscover' }} />
-      {/* Title stays blank — the screen's own rolling hero is the title. */}
+      <Stack.Screen name="save" options={{ title: headerTitle('Save'), presentation: 'modal' }} />
+      <Stack.Screen name="ask" options={{ title: headerTitle('Ask your library') }} />
+      <Stack.Screen name="rediscover" options={{ title: headerTitle('Rediscover') }} />
+      {/* Title stays blank — the screen's own hero is the title. */}
       <Stack.Screen name="todos" options={{ title: '' }} />
-      <Stack.Screen name="help" options={{ title: 'What you can do' }} />
-      <Stack.Screen name="profile" options={{ title: 'Edit profile' }} />
+      <Stack.Screen name="help" options={{ title: headerTitle('What you can do') }} />
+      <Stack.Screen name="profile" options={{ title: headerTitle('Profile') }} />
+      {/* Appearance is not a route — it's three inline words in ProfilePanel.
+          A whole screen for one three-way choice was never worth the tap. */}
+      {/* The paywall owns its whole surface — no nav chrome competing with it. */}
+      <Stack.Screen name="pro" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="reel/[id]" options={{ title: '' }} />
-      <Stack.Screen name="workout/[reelId]" options={{ title: 'Workout Plan' }} />
-      <Stack.Screen name="workout/session/[reelId]" options={{ title: 'Workout', headerShown: false }} />
+      <Stack.Screen name="workout/[reelId]" options={{ title: headerTitle('Workout') }} />
+      <Stack.Screen name="workout/session/[reelId]" options={{ title: '', headerShown: false }} />
     </Stack>
   );
 }
@@ -46,36 +64,42 @@ function AppStack() {
 // navigate — AuthProvider's listener flips this gate on sign-in/out.
 function Gate() {
   const { session, loading, celebrate } = useAuth();
-  // Display faces (Manrope for UI titles, Fraunces serif for brand moments);
-  // body text stays on the system face. We don't block the gate on them — RN
-  // falls back to system until they're ready.
-  useFonts({ Manrope_600SemiBold, Manrope_700Bold, Manrope_800ExtraBold, Fraunces_700Bold, Fraunces_900Black });
+  // Space Grotesk carries DISPLAY (wordmark, titles, tile codes) at weight 300;
+  // DM Sans carries everything else at 300/400. We don't block the gate on them —
+  // RN falls back to the system face until they're ready.
+  useFonts({ SpaceGrotesk_300Light, SpaceGrotesk_500Medium, DMSans_300Light, DMSans_400Regular });
 
-  // Accent switching: bumping the epoch remounts the navigator so every screen
+  // Scheme switching: bumping the epoch remounts the navigator so every screen
   // re-renders against the freshly regenerated themed() sheets — instant, no
   // page reload. On web the current route survives (it's URL-driven).
-  const [accentEpoch, setAccentEpoch] = useState(0);
-  useEffect(() => onAccentChange(() => setAccentEpoch(e => e + 1)), []);
+  const [schemeEpoch, setSchemeEpoch] = useState(0);
+  useEffect(() => onSchemeChange(() => setSchemeEpoch(e => e + 1)), []);
 
   // Native boot: localStorage isn't readable at module init there, so apply the
-  // stored accent right after mount (one default-colored first frame, then themed).
+  // stored preference right after mount (one default-scheme first frame).
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    AsyncStorage.getItem(ACCENT_STORAGE_KEY)
-      .then(k => { if (k) setAccentTheme(k, { persist: false }); })
+    AsyncStorage.getItem(SCHEME_STORAGE_KEY)
+      .then(k => { if (k === 'light' || k === 'dark' || k === 'system') setScheme(k, { persist: false }); })
       .catch(() => {});
   }, []);
 
   return (
     <>
+      {/* Keyed on the scheme epoch too: the bar's own colour has to flip with
+          the canvas, and `style` is read at mount.
+          ⚠️ The key is PREFIXED. Sibling keys share one namespace, so a bare
+          `key={schemeEpoch}` here collided with the gate's below — both were
+          "0" and React warned about duplicate children on every render. */}
+      <StatusBar key={`bar-${schemeEpoch}`} style={isDark() ? 'light' : 'dark'} />
       {loading ? (
         <View style={styles.center}>
-          <ActivityIndicator color={colors.accent} size="large" />
+          <ActivityIndicator color={colors.textPrimary} size="large" />
         </View>
       ) : session ? (
-        <AppStack key={accentEpoch} />
+        <AppStack key={`app-${schemeEpoch}`} />
       ) : (
-        <LoginScreen />
+        <LoginScreen key={`login-${schemeEpoch}`} />
       )}
       {/* Welcome confetti — overlaid above the gate so it keeps playing as the app
           mounts after sign-in. */}
@@ -88,7 +112,6 @@ function Gate() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
       <AuthProvider>
         <Gate />
       </AuthProvider>
@@ -96,6 +119,8 @@ export default function RootLayout() {
   );
 }
 
-const styles = StyleSheet.create({
+// themed(): this sheet bakes in the canvas colour, and the canvas inverts
+// between schemes. A plain StyleSheet.create here paints white-on-white.
+const styles = themed(() => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
-});
+}));

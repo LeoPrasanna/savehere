@@ -189,6 +189,118 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
 
 ---
 
+## Mobile — Design
+
+- [~] **UI/UX overhaul — "Contact Sheet" (branch `design/contact-sheet`, 2026-08-01).**
+  Briefed against the **Savee** iOS app (owner-supplied reference), then built from
+  a different source so it shares Savee's *thesis* without copying its *execution*.
+  Full reference lock sits at the top of `mobile/constants/theme.ts`.
+  ⚠️ **This is the FOURTH direction in a week** (Cron Calendar restraint → Sticker
+  Bomb → Golden Hour → this). The previous branch `design/loud-rebrand` was deleted
+  as instructed; its 5 commits are preserved under the tag **`archive/loud-rebrand`**
+  (`git show archive/loud-rebrand`). Delete the tag if you want them truly gone.
+  **Why this one is different, and worth stopping on:** SaveHere's cards are
+  THUMBNAILS. Every previous direction put brand colour on the surface *around*
+  them, and colour-vs-thumbnail is a fight the chrome always loses. This system's
+  governing rule — from Julia Krantz, "colour is entirely absent from the UI layer;
+  all chromatic interest is delegated to the photography" — is the first one that
+  matches what the product actually shows.
+  **Research (Refero):** primary **Julia Krantz** (darkroom contact sheet: absolute
+  #000, 1px ghost-line seams, 0 radius, weight-300 display type). Borrowed: **mono**
+  (ghost outline control — no filled colour CTAs) and **entire studios** (small
+  tracked uppercase labels as the metadata voice). Savee's own screens + its 13-step
+  onboarding flow supplied the JOURNEY, not the styling.
+  **Deliberate departures from Savee** (so this isn't a clone): ghost outline CTA
+  instead of its filled white pill · square auth buttons and avatars instead of its
+  circles · a numbered `01 / 06` rail instead of its dot pagination (whose active
+  dot is also its only spot of colour) · weight 300 instead of its medium/semibold ·
+  fully achromatic chrome, where Savee keeps a blue accent.
+  **Done:**
+  - **Token layer rewritten.** Absolute #000 / #FFF canvases — never a "near"
+    value. One foreground tone, one muted, one ghost line. **Every radius is 0**
+    (`radius.full` included, so ~30 pill/avatar call sites went square unedited).
+    **No shadows** (`shadow.*` are empty objects). Gradients flattened to solid
+    fills — `scrim` is the one exception and keeps real stops, because it makes
+    overlay text legible over an unknown photograph.
+  - **⚠️ `app.json`'s `userInterfaceStyle` was `"dark"`** — that forces
+    `Appearance.getColorScheme()`, so light mode could never have worked on a
+    device. Now `"automatic"`. Both schemes verified live in the browser.
+  - **Accent themes deleted** (5 ember/iris/ocean/forest/rose swatches). An
+    achromatic system has no accent to switch. Replaced by **Light / Dark /
+    System**, inline in ProfilePanel — a whole route for one three-way choice was
+    never worth the tap.
+  - **Colour-carried meaning re-encoded, not dropped.** Priority marks (to-dos,
+    home widget) are now SHAPE — solid / hollow / hairline. Disclaimer severity is
+    a stated heading ("NOT MEDICAL ADVICE") plus border weight. Platform is a
+    tracked wordmark, not a coloured badge. Progress meters are discrete marks
+    rather than filled bars. Each of these is *more* accessible than what it
+    replaced: red-vs-amber was never distinguishable to a red-green colourblind
+    reader, and those are the notices that matter most.
+  - **Grid is full-bleed and flush** — no page margin, no gutters; tiles share a
+    1px seam, contact-sheet style. Frames are 3:4 portrait (was 16:10 landscape,
+    which cropped the top and bottom off nearly every reel thumbnail stored).
+  - **Two-step auth**, following Savee's flow: welcome (wordmark + auth choice over
+    an empty contact sheet) → form. Apple/Google are deliberately ABSENT rather
+    than present-and-dead; the row is built so they drop in when wired.
+  - **Onboarding** recomposed full-bleed: title, copy, a monochrome geometric
+    figure, numbered rail, pinned CTA. No skip (2026-07-20 decision preserved).
+  - Retired glassmorphism layer **deleted** (Aurora/BorderBeam/Shimmer/
+    ParticleField/LibraryBackdrop/GlassCard) — still mounted and still painting the
+    old ember palette. New `components/kit.tsx` primitive set. Fredoka+Fraunces →
+    **Space Grotesk + DM Sans**. Icon strokes thinned 2.4/2/1.75 → 1.6/1.35/1.1.
+  - **Press feedback is opacity, not scale.** `Pressable`'s `scaleTo` is now a
+    no-op prop kept for ~30 call sites; a contact sheet whose tiles bounce is a
+    contradiction, and at 0 radius a scaling rectangle reads as a glitch.
+  - **Bug found and fixed while verifying:** `_layout.tsx` gave `<StatusBar>` and
+    the gate's child the same `key={schemeEpoch}`. Sibling keys share a namespace,
+    so both were `"0"` — React warned about duplicate children on every render and
+    can legally *drop* one. Keys are prefixed now.
+  ⚠️ **Contrast note:** the reference's own `#707070` muted tone measures **4.24:1**
+  on black and fails AA at the 10px label sizes this system leans on. Both ash
+  values were walked until they pass (`#787878` = 4.8:1 dark, `#6E6E6E` = 5.1:1
+  light). Preserving an accessibility bug is not preserving a signature trait.
+  **Remaining — screens that inherit the tokens but were NOT recomposed:**
+  `reel/[id]` and `todos` got targeted passes (whites that would have gone
+  invisible on the now-white filled controls, priority marks, hero chips, display
+  type) but keep their card-based layout rather than the ruled-row grammar.
+  `workout/[reelId]` and `workout/session/[reelId]` are token-inherited only.
+  ⚠️ **Owner visual pass required** — the agent's preview browser has no session,
+  so only the login/welcome flow and the token layer were verified live. Verified:
+  typecheck clean, `expo export --platform web` clean, both schemes paint
+  correctly, no console errors.
+
+---
+
+## Mobile — Monetization
+
+- [~] **Pro paywall — two pages, UI only (2026-08-01).** `app/pro.tsx`: page 01
+  lists what Pro unlocks (grounded in gates that exist in the code today) plus the
+  plan picker; page 02 is the order summary and card form.
+  ⚠️ **PAGE 02 IS A MOCK.** No payment provider is wired up — "Pay" waits a beat
+  and reports that nothing was charged. A loud TEST-MODE banner sits above the
+  form and **must not be removed before real billing lands**: a payment form that
+  looks real and does nothing is how someone types a real card number into a dead
+  field. Real billing is StoreKit/Play Billing via RevenueCat (Apple takes its cut
+  on digital goods; a raw card form would fail review anyway), whose webhook writes
+  `app_metadata.tier = "pro"` — the value `app/quota.py::daily_limit_for` already
+  reads, so no quota code changes.
+  ⚠️ **THE INR PRICING IS UPSIDE DOWN.** Owner-specified: ₹20/week, ₹120→₹99/month;
+  $2/week, $7/month. ₹20/week is **₹86.96/month** at 4.348 weeks — so the ₹99
+  monthly plan is the WORSE deal, while the same pair in USD saves 19%.
+  `savingPct()` in `constants/pricing.ts` computes the real number and returns
+  null when there is no saving, so the UI **physically cannot** render a false
+  "SAVE X%" badge. Fix the prices, not the badge: ₹99/mo needs weekly at ~₹30 to
+  read as a discount.
+  ⚠️ **Still contradicts the cost study** (2026-07-24, see "Pricing & Monetization"):
+  it put break-even at ~4.2% conversion and recommended **₹149/mo**, calling ₹99
+  "underwater — it barely covers a pro user's own AI cost". If ₹99 ships,
+  `AI_PRO_DAILY_LIMIT` (currently 100) has to come down with it or every Pro user
+  is a loss. **Owner decision, unresolved.**
+  **Remaining:** RevenueCat + StoreKit/Play Billing integration; real restore-
+  purchases; server-side receipt validation; the tier webhook.
+
+---
+
 ## Mobile — Features
 
 - [ ] **Share Extension (iOS)** — same as blocker above; listed here for implementation tracking.

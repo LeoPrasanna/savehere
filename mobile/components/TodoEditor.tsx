@@ -226,7 +226,7 @@ export function TodoEditor({
               style={[styles.saveBtn, !canSave && styles.saveBtnOff]}
             >
               {saving
-                ? <ActivityIndicator color="#FFF" size="small" />
+                ? <ActivityIndicator color={colors.onAction} size="small" />
                 : <Text style={styles.saveText}>{editing ? 'Save changes' : `Add${due ? ` · ${formatDue(due)}` : ''}`}</Text>}
             </LinearGradient>
           </Pressable>
@@ -295,5 +295,5 @@ const styles = themed(() => StyleSheet.create({
   saveWrap: { borderRadius: radius.md, marginTop: spacing.md },
   saveBtn: { borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center', minHeight: 50 },
   saveBtnOff: { opacity: 0.45 },
-  saveText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
+  saveText: { color: colors.onAction, fontSize: font.md, fontWeight: '800' },
 }));

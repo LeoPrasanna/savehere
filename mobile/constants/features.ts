@@ -3,7 +3,13 @@ import { categoryMeta, colors, themed } from './theme';
 export type Feature = { icon: string; color: string; title: string; desc: string; detail: string };
 
 // Everything SaveHere can do — shown on the landing FAQ and the "What you can do"
-// tab. themed(): two entries bake in the accent, which is switchable at runtime.
+// tab. themed(): every `color` resolves through the token layer, which inverts
+// between schemes.
+//
+// ⚠️ `color` is now vestigial — the design system is achromatic and these are
+// all the same ink tone. It stays as a key because a few call sites read it;
+// the two entries that used to hardcode a hex (#5FC9BD, #FF8A5B) now go through
+// the tokens, or they would have stayed teal and orange forever.
 export const FEATURES: Feature[] = themed(() => [
   {
     icon: 'fitness',
@@ -28,7 +34,7 @@ export const FEATURES: Feature[] = themed(() => [
   },
   {
     icon: 'search',
-    color: '#5FC9BD',
+    color: colors.textTertiary,
     title: 'Find anything fast',
     desc: 'Search titles, summaries, tags & notes.',
     detail: 'The search bar matches your titles, AI summaries, tags AND your own notes — so you can find that one thing you saved even if you only remember a small detail from it.',
@@ -42,7 +48,7 @@ export const FEATURES: Feature[] = themed(() => [
   },
   {
     icon: 'rediscover',
-    color: '#FF8A5B',
+    color: colors.textTertiary,
     title: 'Rediscover old saves',
     desc: 'Resurface things worth a second look.',
     detail: 'Saved-and-forgotten is the enemy. Rediscover surfaces a few past saves so they don’t rot in a pile — revisit them, act on them, or clear them out.',
