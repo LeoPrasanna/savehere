@@ -4,8 +4,9 @@ import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useFonts, DMSans_300Light, DMSans_400Regular } from '@expo-google-fonts/dm-sans';
-import { SpaceGrotesk_300Light, SpaceGrotesk_500Medium } from '@expo-google-fonts/space-grotesk';
+import {
+  useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold,
+} from '@expo-google-fonts/inter';
 import { HeaderHomeButton } from '../components/HomeButton';
 import { LoginScreen } from '../components/LoginScreen';
 import { Confetti } from '../components/Confetti';
@@ -64,10 +65,11 @@ function AppStack() {
 // navigate — AuthProvider's listener flips this gate on sign-in/out.
 function Gate() {
   const { session, loading, celebrate } = useAuth();
-  // Space Grotesk carries DISPLAY (wordmark, titles, tile codes) at weight 300;
-  // DM Sans carries everything else at 300/400. We don't block the gate on them —
-  // RN falls back to the system face until they're ready.
-  useFonts({ SpaceGrotesk_300Light, SpaceGrotesk_500Medium, DMSans_300Light, DMSans_400Regular });
+  // One family, three weights — Inter carries the wordmark, headings, body and
+  // labels alike (see constants/theme.ts). We don't block the gate on them; RN
+  // falls back to the system face, which is metrically close enough that there
+  // is no layout jump when they land.
+  useFonts({ Inter_400Regular, Inter_500Medium, Inter_600SemiBold });
 
   // Scheme switching: bumping the epoch remounts the navigator so every screen
   // re-renders against the freshly regenerated themed() sheets — instant, no

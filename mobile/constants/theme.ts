@@ -396,6 +396,16 @@ export const radius = {
   lg: 0,
   xl: 0,
   full: 0,
+  /**
+   * ⚠️ THE ONE EXCEPTION, and it is deliberate.
+   *
+   * Owner direction (2026-08-01): category filters are round icon bubbles, the
+   * way the brief's reference app renders its avatar row. Nothing else in the
+   * system may use this — a circle is legible as "a person or a topic", which is
+   * exactly why it must not leak onto buttons, cards or inputs, where 0 is still
+   * absolute. Grep before you reach for it.
+   */
+  circle: 999,
 };
 
 /**
@@ -425,32 +435,38 @@ export const motion = {
 };
 
 /**
- * Two faces with a hard role split, mirroring the reference's ClashDisplay +
- * DM Sans pairing (Refero names Space Grotesk as the ClashDisplay substitute).
+ * ONE FAMILY: Inter.
  *
- * Space Grotesk owns DISPLAY — the wordmark, screen titles, tile codes, big
- * numbers. Always at weight 300 with negative tracking: a nearly-invisible
- * letterform at large size is the signature move of this direction. 500 is the
- * ceiling and belongs to the wordmark alone.
+ * ⚠️ Owner direction (2026-08-01): match the brief's reference app, which sets
+ * everything — wordmark, headings, body, buttons — in a single neutral
+ * Helvetica-class grotesque at regular-to-semibold weights.
  *
- * DM Sans owns EVERYTHING ELSE at weight 300 — body, labels, metadata, nav.
- * The reference refuses to bold anything in this family and so does this.
+ * Inter is that face. It is the standard open substitute for Helvetica
+ * Now/Neue Haas Grotesk: same neutral skeleton, no signature quirks, and it
+ * ships every weight this needs through `@expo-google-fonts/inter`.
  *
- * `serif` / `serifBlack` are kept as KEYS resolving to Space Grotesk so the ~8
- * call sites asking for a serif stop rendering Fraunces without being edited.
+ * This REPLACED Space Grotesk + DM Sans at weight 300. That pairing came from
+ * the primary style reference (Julia Krantz), whose signature is a
+ * nearly-invisible light letterform — a portfolio move that reads as elegant on
+ * a desktop contact sheet and as under-inked on a phone. Inter at 400/500/600
+ * is the deliberate trade: less rarefied, considerably more legible at the
+ * 10–13px label sizes this system leans on, and it is what the owner asked for.
+ *
+ * `serif` / `serifBlack` are kept as KEYS resolving to Inter so the ~8 call
+ * sites asking for a serif stop rendering Fraunces without being edited.
  */
 export const typeface = {
-  display: 'SpaceGrotesk_300Light',
-  displaySemi: 'SpaceGrotesk_500Medium',
-  displayMedium: 'SpaceGrotesk_300Light',
-  /** The wordmark only. 500 is the system's ceiling — nothing goes heavier. */
-  wordmark: 'SpaceGrotesk_500Medium',
-  body: 'DMSans_300Light',
-  bodyBold: 'DMSans_400Regular',
+  display: 'Inter_600SemiBold',
+  displaySemi: 'Inter_600SemiBold',
+  displayMedium: 'Inter_500Medium',
+  /** The wordmark. Same face as everything else — that is the point. */
+  wordmark: 'Inter_600SemiBold',
+  body: 'Inter_400Regular',
+  bodyBold: 'Inter_500Medium',
   /** Small tracked uppercase labels — the metadata voice. */
-  label: 'DMSans_400Regular',
-  serif: 'SpaceGrotesk_300Light',
-  serifBlack: 'SpaceGrotesk_500Medium',
+  label: 'Inter_500Medium',
+  serif: 'Inter_600SemiBold',
+  serifBlack: 'Inter_600SemiBold',
 };
 
 /** Type scale. The reference's: caption 10 / heading 29 / display 44, with body
@@ -474,10 +490,16 @@ export const font = {
  * React Native's `letterSpacing` is in POINTS, not em — these are pre-multiplied
  * against the size they belong to.
  */
+/**
+ * ⚠️ Loosened from -0.04em to -0.025em at display sizes when the face changed
+ * from a 300-weight to a 600-weight. Tight negative tracking exists to stop
+ * light letterforms drifting apart; applied to semibold Inter it jams the
+ * counters shut. The heavier the weight, the less tightening it wants.
+ */
 export const tracking = {
-  display: -1.76,   // -0.04em at 44
-  title: -1.16,     // -0.04em at 29
-  heading: -0.5,
+  display: -1.1,    // -0.025em at 44
+  title: -0.72,     // -0.025em at 29
+  heading: -0.36,
   body: 0,
   /** +0.06em at 10px. Uppercase labels. */
   label: 0.6,

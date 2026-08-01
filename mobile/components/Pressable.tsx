@@ -12,6 +12,20 @@ interface Props {
   disabled?: boolean;
   hitSlop?: number | { top?: number; bottom?: number; left?: number; right?: number };
   accessibilityLabel?: string;
+  /**
+   * ⚠️ DO NOT DEFAULT THIS TO 'button'.
+   *
+   * react-native-web renders `accessibilityRole="button"` as a real `<button>`
+   * element. This component is nested inside itself all over the app (a tappable
+   * row that also holds edit/delete buttons — TaskList, TodoEditor, the reel
+   * detail steps), and a `<button>` inside a `<button>` is invalid HTML: React
+   * throws "<button> cannot contain a nested <button>" and the inner control
+   * stops receiving clicks.
+   *
+   * Left undefined, RN-web emits a `<div>` with the right ARIA attributes, which
+   * nests legally. Pass it explicitly only on a leaf control that is genuinely
+   * never inside another pressable.
+   */
   accessibilityRole?: 'button' | 'link' | 'none';
 }
 
@@ -32,7 +46,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(RNPressable);
  */
 export function Pressable({
   children, onPress, onLayout, style, disabled, hitSlop,
-  accessibilityLabel, accessibilityRole = 'button',
+  accessibilityLabel, accessibilityRole,
 }: Props) {
   const opacity = useRef(new Animated.Value(1)).current;
 

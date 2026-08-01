@@ -56,8 +56,14 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
   colour used to encode is re-encoded so it survives an achromatic palette *and*
   colourblindness: priority is mark shape, severity is a stated heading plus border
   weight, platform is a tracked wordmark, progress is discrete marks
-- 🅰️ **Space Grotesk + DM Sans**, both at light weights — hierarchy is carried by
-  size, weight and letter-spacing rather than colour
+- 🅰️ **Inter**, one family across the whole app — hierarchy is carried by size,
+  weight and letter-spacing rather than colour
+- 🧱 **Staggered masonry library** — tiles go to whichever column is shortest, with
+  the aspect seeded by platform (landscape thumbnails from YouTube/LinkedIn,
+  vertical from Instagram/TikTok) so it never reflows when an image loads
+- 🎞️ **A live welcome collage** — the signed-out screen drifts three tilted columns
+  of *your own* recent thumbnails in alternating directions. Cached locally, so it
+  costs nothing and ships no stock imagery; honours "reduce motion"
 
 ### Accounts, tiers & safety
 
@@ -80,7 +86,7 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 
 | Layer | Technology |
 | --- | --- |
-| Mobile | React Native + **Expo SDK 56** (expo-router), Reanimated, Moti, Lucide icons |
+| Mobile | React Native + **Expo SDK 56** (expo-router), Reanimated, Moti, Lucide icons, Inter |
 | Backend | **FastAPI** (Python 3.12) + SQLAlchemy |
 | Database | SQLite (dev) → **Supabase Postgres** (prod — migration pending, see [TODO.md](TODO.md)) |
 | Auth | **Supabase Auth** (email today; Apple + Google before launch) — ES256 JWTs verified via JWKS |
@@ -175,7 +181,7 @@ savehere/
 │   ├── app/                       # library, save, reel detail, ask, rediscover, todos, help, pro, workout
 │   ├── components/                # kit.tsx (design primitives), ReelCard, TaskList, TodoEditor, Landing, Icon, …
 │   ├── constants/                 # theme (design system + reference lock), pricing, features, todoBrand
-│   └── services/                  # api.ts (typed client), todoDates.ts + todoSettings.ts, …
+│   └── services/                  # api.ts (typed client), thumbCache.ts, todoDates.ts + todoSettings.ts, …
 ├── docs/
 │   ├── CONTEXT.md                 # architecture + decisions handoff
 │   └── REMOTE_DEV.md              # Codespaces + Claude Code setup guide

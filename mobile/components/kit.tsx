@@ -57,10 +57,18 @@ export function Title({ children, style, numberOfLines }: {
   return <Text numberOfLines={numberOfLines} style={[styles.title, style]}>{children}</Text>;
 }
 
-/** The wordmark. The single place weight 500 is allowed. */
+/**
+ * The wordmark.
+ *
+ * Tracking is computed from the size rather than taken from `tracking.display`,
+ * because this renders at anything from 22px (headers) to 52px (welcome) and a
+ * fixed point value would be far too tight at the small end. The -0.025em ratio
+ * matches the scale — see the note on `tracking` in constants/theme.ts for why
+ * it loosened when the face went from weight 300 to 600.
+ */
 export function Wordmark({ size = font.display, style }: { size?: number; style?: StyleProp<TextStyle> }) {
   return (
-    <Text style={[styles.wordmark, { fontSize: size, letterSpacing: size * -0.04 }, style]}>
+    <Text style={[styles.wordmark, { fontSize: size, letterSpacing: size * -0.025 }, style]}>
       SaveHere
     </Text>
   );
@@ -173,7 +181,16 @@ interface BtnProps {
  */
 export function GhostButton({ label, onPress, disabled, style, trailing }: BtnProps) {
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={[styles.ghost, disabled && styles.btnOff, style]}>
+    // accessibilityRole is safe HERE and only here: these two are leaf controls
+    // that never wrap another pressable, so they can be real <button>s on web
+    // without the nesting problem documented in Pressable.tsx.
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={[styles.ghost, disabled && styles.btnOff, style]}
+    >
       <Text style={styles.ghostLabel}>
         {label.toUpperCase()}{trailing ? `  ${trailing}` : ''}
       </Text>
@@ -191,7 +208,13 @@ export function GhostButton({ label, onPress, disabled, style, trailing }: BtnPr
  */
 export function FilledButton({ label, onPress, disabled, style, trailing }: BtnProps) {
   return (
-    <Pressable onPress={onPress} disabled={disabled} style={[styles.filled, disabled && styles.btnOff, style]}>
+    <Pressable
+      onPress={onPress}
+      disabled={disabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      style={[styles.filled, disabled && styles.btnOff, style]}
+    >
       <Text style={styles.filledLabel}>
         {label.toUpperCase()}{trailing ? `  ${trailing}` : ''}
       </Text>

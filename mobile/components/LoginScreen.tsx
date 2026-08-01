@@ -1,13 +1,16 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform,
-  ScrollView, ActivityIndicator, TextInputProps, Animated,
+  ScrollView, ActivityIndicator, TextInputProps, Animated, Image,
+  Easing, AccessibilityInfo,
 } from 'react-native';
 import type { ReactNode } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from './Icon';
 import { Pressable } from './Pressable';
 import { supabase } from '../services/supabase';
+import { thumbUrl } from '../services/api';
+import { getThumbs, hydrateThumbs } from '../services/thumbCache';
 import { useAuth } from '../contexts/AuthContext';
 import * as haptics from '../services/haptics';
 import { Label, Body, Wordmark, GhostButton, FilledButton, Rule, Index } from './kit';
@@ -46,27 +49,135 @@ function friendly(message: string): string {
   return message || 'Something went wrong. Try again.';
 }
 
+/* ── Welcome backdrop ─────────────────────────────────────────────────────── */
+
+const COLS = 3;
+/** Tiles per column before the strip repeats. */
+const PER_COL = 5;
+/** Portrait, because reels are. Fixed so the loop distance is known without
+ *  measuring anything on screen. */
+const TILE_H = 196;
+/** Seconds for one column to travel its own length. Slow on purpose — this is
+ *  atmosphere behind a sign-in form, not a carousel asking to be watched. */
+const DRIFT_S = 34;
+
 /**
- * The backdrop: an EMPTY CONTACT SHEET.
+ * One drifting column. Renders its tiles TWICE and translates by exactly one
+ * copy's height, so the wrap is seamless — at the moment it resets, the pixels
+ * on screen are identical.
  *
- * The reference welcome screen is image-led — a darkened collage of real saved
- * content. A signed-out user has no saves and the app ships no stock library,
- * so rather than fake photography with gradients (which reads as exactly the
- * cheap trick it is), the image slot is preserved as what it actually is: a
- * numbered grid of empty frames, seamed with the ghost line, waiting to be
- * filled. It is the product's own metaphor rather than a decoration.
- *
- * ART DIRECTION for when real assets exist: swap each cell for a full-bleed
- * 3:4 crop at 40% brightness, keep the 1px seams and the index numerals.
+ * `dir` alternates per column (owner direction, 2026-08-01): odd columns fall,
+ * even columns rise. Opposing motion is what stops a tilted grid reading as one
+ * sliding sheet, and it's the move that makes the whole thing feel alive.
  */
-function ContactSheetBackdrop() {
+function DriftColumn({ uris, dir, seconds }: { uris: (string | null)[]; dir: 1 | -1; seconds: number }) {
+  const y = useRef(new Animated.Value(0)).current;
+  const [reduceMotion, setReduceMotion] = useState(false);
+
+  useEffect(() => {
+    // Respect the OS "reduce motion" switch. Continuous background movement
+    // with no way to stop it is exactly what that setting exists for, and a
+    // sign-in screen is not somewhere to overrule it.
+    let cancelled = false;
+    AccessibilityInfo.isReduceMotionEnabled()
+      .then(on => { if (!cancelled) setReduceMotion(on); })
+      .catch(() => {});
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => { cancelled = true; sub?.remove?.(); };
+  }, []);
+
+  const span = uris.length * TILE_H;
+
+  useEffect(() => {
+    if (reduceMotion || span === 0) { y.setValue(0); return; }
+    // Two copies are stacked, so travelling exactly one copy's height lands on
+    // pixels identical to the start — the wrap is invisible.
+    //   dir  1: 0 → -span   content rises
+    //   dir -1: -span → 0   content falls
+    // Animated.loop resets to the starting value each iteration by default,
+    // which is what makes the reset seamless rather than a jump.
+    const from = dir === 1 ? 0 : -span;
+    const to = dir === 1 ? -span : 0;
+    y.setValue(from);
+    const loop = Animated.loop(
+      Animated.timing(y, {
+        toValue: to,
+        duration: seconds * 1000,
+        easing: Easing.linear,   // the one place linear is correct: a seam is
+        useNativeDriver: true,   // only invisible at constant velocity
+      }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [reduceMotion, span, dir, seconds]);
+
   return (
-    <View style={[styles.backdrop, { pointerEvents: 'none' }]}>
-      {Array.from({ length: 12 }).map((_, i) => (
-        <View key={i} style={styles.frame}>
-          <Index n={i + 1} tone="veil" style={styles.frameIndex} />
-        </View>
-      ))}
+    <View style={styles.driftCol}>
+      <Animated.View style={{ transform: [{ translateY: y }] }}>
+        {[...uris, ...uris].map((uri, i) => (
+          <View key={i} style={styles.frame}>
+            {uri ? (
+              <Image source={{ uri: thumbUrl(uri) }} style={styles.frameImg} resizeMode="cover" />
+            ) : (
+              <Index n={(i % uris.length) + 1} tone="veil" style={styles.frameIndex} />
+            )}
+          </View>
+        ))}
+      </Animated.View>
+    </View>
+  );
+}
+
+/**
+ * The backdrop: a DRIFTING COLLAGE OF THE USER'S OWN SAVES.
+ *
+ * The reference welcome screen is image-led — a tilted, darkened mosaic of real
+ * content. These are the user's most recent thumbnails, cached from their last
+ * session (see services/thumbCache.ts for why their own saves rather than stock
+ * photography). The whole grid is oversized and rotated so the crop reads as a
+ * fragment of something larger, exactly as the reference does; the columns then
+ * drift in alternating directions.
+ *
+ * On a first-ever launch there is nothing cached, and the fallback is what the
+ * library actually is at that moment: a sheet of numbered empty frames, drifting
+ * the same way.
+ *
+ * ponytail: animated in code rather than as a GIF/video asset. A GIF would be a
+ * fixed-size, block-compressed file showing somebody else's content, and it
+ * would ship in every bundle forever. This weighs nothing, stays sharp at any
+ * density, and shows the user their own library.
+ *
+ * ponytail: no blur. The reference blurs its collage, which on native needs
+ * `expo-blur` — a native module, on a project that has no dev build yet
+ * (TODO.md). The tilt plus a heavy scrim carries the same "atmosphere, not
+ * content" read. Add expo-blur when a native build exists and it's worth it.
+ */
+function ContactSheetBackdrop({ thumbs }: { thumbs: string[] }) {
+  // Deal the thumbnails out column by column, cycling if there aren't enough,
+  // so a user with three saves still gets a full mosaic rather than a gap.
+  const columns = Array.from({ length: COLS }, (_, c) =>
+    Array.from({ length: PER_COL }, (_, r) => {
+      if (thumbs.length === 0) return null;
+      return thumbs[(c * PER_COL + r) % thumbs.length];
+    }),
+  );
+
+  return (
+    <View style={[styles.backdropClip, { pointerEvents: 'none' }]}>
+      <View style={styles.backdrop}>
+        {columns.map((uris, c) => (
+          <DriftColumn
+            key={c}
+            uris={uris}
+            // Alternating: odd columns rise, even columns fall. Opposing motion
+            // is what stops a tilted grid reading as one sliding sheet.
+            dir={c % 2 === 0 ? 1 : -1}
+            // Slightly different speeds so the columns never re-align into a
+            // visible rhythm. Prime-ish offsets rather than round numbers.
+            seconds={DRIFT_S + c * 7}
+          />
+        ))}
+      </View>
     </View>
   );
 }
@@ -109,6 +220,10 @@ export function LoginScreen() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showPw, setShowPw] = useState(false);
+  // Web reads the cache synchronously at module init, so the first paint is
+  // already correct; native has to hydrate from AsyncStorage after mount.
+  const [thumbs, setThumbs] = useState<string[]>(getThumbs);
+  useEffect(() => { hydrateThumbs().then(setThumbs); }, []);
 
   const isSignup = mode === 'signup';
   const shakeX = useRef(new Animated.Value(0)).current;
@@ -189,7 +304,7 @@ export function LoginScreen() {
   if (step === 'welcome') {
     return (
       <View style={styles.container}>
-        <ContactSheetBackdrop />
+        <ContactSheetBackdrop thumbs={thumbs} />
         <View style={[styles.scrim, { pointerEvents: 'none' }]} />
         <View style={[styles.welcome, { paddingTop: insets.top, paddingBottom: insets.bottom + spacing.lg }]}>
           <View style={styles.welcomeMid}>
@@ -208,6 +323,7 @@ export function LoginScreen() {
             <Pressable
               style={styles.authBtn}
               onPress={() => { haptics.tap(); setStep('form'); }}
+              accessibilityRole="button"
               accessibilityLabel="Continue with email"
             >
               <Icon name="mail" size={22} color={colors.textPrimary} />
@@ -350,24 +466,44 @@ export function LoginScreen() {
 const styles = themed(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
 
-  // ── Backdrop: the empty contact sheet ──
-  backdrop: {
+  // ── Backdrop: a tilted collage of the user's own saves ──
+  // The clip keeps the rotated, oversized grid inside the screen.
+  backdropClip: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    overflow: 'hidden',
   },
+  // Deliberately larger than the viewport and rotated: at 9° a screen-sized
+  // grid would show bare canvas at the corners, and the overhang is what makes
+  // the mosaic read as a fragment of something bigger rather than a neat table.
+  // The extra vertical room also hides the loop seam off-screen.
+  backdrop: {
+    position: 'absolute',
+    top: '-30%', left: '-16%', right: '-16%', bottom: '-30%',
+    flexDirection: 'row',
+    transform: [{ rotate: '-9deg' }, { scale: 1.12 }],
+  },
+  driftCol: { flex: 1, overflow: 'hidden' },
   frame: {
-    width: '33.333%',
-    height: '25%',
+    width: '100%',
+    height: TILE_H,
     borderWidth: 0.5,
     borderColor: colors.ghostLine,
     padding: spacing.sm,
+    backgroundColor: colors.card,
+  },
+  frameImg: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    width: '100%', height: '100%',
   },
   frameIndex: { opacity: 0.5 },
+  // ⚠️ The scrim is the CANVAS colour, not black — so it darkens the photos in
+  // dark mode and lightens them in light mode. The wordmark on top is
+  // `textPrimary`, which inverts to match, and legibility holds in both. A
+  // fixed black scrim would leave black-on-black text in light mode.
   scrim: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: colors.background,
-    opacity: 0.72,
+    opacity: 0.78,
   },
 
   // ── Step 1 ──

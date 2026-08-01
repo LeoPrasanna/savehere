@@ -14,6 +14,7 @@ import { Label, Body, Title, Rule, Index, GhostButton, FilledButton, Wordmark } 
 import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { consumeReopenPanel } from '../services/sessionFlags';
+import { rememberThumbs } from '../services/thumbCache';
 import { FEATURES, Feature } from '../constants/features';
 import { RollingTagline } from './RollingTagline';
 import { ASK_MIN_REELS } from '../constants/limits';
@@ -180,7 +181,12 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
     useCallback(() => {
       setFetchError(false);
       api.listReels({ limit: LANDING_FETCH })
-        .then(d => { setReels(d.items); setTotal(d.total); })
+        .then(d => {
+          setReels(d.items);
+          setTotal(d.total);
+          // Feeds the signed-out welcome collage on the next launch.
+          rememberThumbs(d.items.map(r => r.thumbnail_url));
+        })
         .catch(() => setFetchError(true))
         .finally(() => setLoading(false));
       // Separate catch: a to-do hiccup must not blank out the library view.

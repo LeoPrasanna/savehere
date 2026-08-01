@@ -269,6 +269,70 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
   typecheck clean, `expo export --platform web` clean, both schemes paint
   correctly, no console errors.
 
+- [x] **Round two — owner review (2026-08-01).** Six items, all shipped.
+  1. **Typeface → Inter, one family.** Space Grotesk + DM Sans at weight 300 were
+     dropped for a single neutral Helvetica-class grotesque at 400/500/600, to
+     match the brief's reference app. Tracking loosened -0.04em → **-0.025em** at
+     display sizes: tight negative tracking exists to stop LIGHT letterforms
+     drifting apart, and applied to semibold it jams the counters shut. Four font
+     packages uninstalled (space-grotesk, dm-sans, fraunces, manrope) — Inter is
+     the only one left.
+  2. **⚠️ `<button> cannot contain a nested <button>` — MY BUG, fixed.** Round one
+     added `accessibilityRole = 'button'` as a *default* on `components/Pressable`.
+     react-native-web renders that as a literal `<button>`, and this component is
+     nested inside itself all over the app (a tappable row that also holds
+     edit/delete controls — TaskList, TodoEditor, the reel detail hero). Invalid
+     HTML, and the inner control stops receiving clicks. The role is now
+     undefined by default (RN-web emits a `<div>` with correct ARIA, which nests
+     legally) and passed **explicitly** on leaf controls only — `GhostButton`,
+     `FilledButton`, the welcome auth button — so screen-reader semantics survive.
+     Verified in the DOM: 1 button, 0 nested pairs.
+  3. **Category filter → round icon bubbles** with the name beneath, mirroring the
+     reference's avatar row. `radius.circle` is added to the token layer as **the
+     one sanctioned circle in the system** — grep before reusing it; everything
+     else is still 0. Selection inverts (filled bubble, canvas-coloured icon)
+     rather than tinting, since there is no accent hue to tint with.
+  4. **Library is a staggered masonry**, not aligned rows. Each tile goes to
+     whichever column is currently shortest; running height is tracked in
+     width-units so columns finish level without measuring anything on screen.
+     Tile aspect comes from `aspectFor()` — seeded by **platform** (YouTube and
+     LinkedIn serve landscape thumbnails, Instagram and TikTok vertical) plus a
+     hash of the reel id, so it is real signal, deterministic, and never reflows
+     on image load. ⚠️ **This traded FlatList virtualization for a ScrollView** —
+     masonry and row-virtualization are incompatible without measuring every
+     tile. Fine for tens-to-hundreds of saves; at a few thousand the fix is a
+     windowed masonry, not a smaller diff. `onEndReached` is reimplemented by hand
+     on `onScroll`.
+  5. **Login backdrop is a live collage of the user's own saves.** New
+     `services/thumbCache.ts` persists up to 12 recent thumbnail URLs; the
+     signed-out welcome screen renders them as three tilted columns that **drift
+     continuously in alternating directions** (odd rise, even fall) at three
+     different speeds. First-ever launch has nothing cached and correctly falls
+     back to the numbered empty sheet.
+     **Why the user's own thumbnails and not stock imagery:** bundled stock is
+     someone else's work plus a licence to track; hotlinking is someone else's
+     bandwidth and copyright. Their own saves cost nothing, need no licence, and
+     are better product — the reference app shows you strangers' content, this
+     shows you what you came back for. `clearThumbs()` runs on account deletion.
+     ⚠️ **Asked for as a GIF; built in code instead.** No image/video generation
+     tool is available in this environment, and a GIF would have been a
+     fixed-size, block-compressed asset of someone else's content shipping in
+     every bundle forever. The coded version weighs nothing, stays sharp at any
+     density, and adapts to the user's library.
+     ⚠️ **Respects `AccessibilityInfo.isReduceMotionEnabled()`** — continuous
+     unstoppable background motion is exactly what that setting exists for, and a
+     sign-in screen is not the place to overrule it.
+     ⚠️ Second bug caught here: the first attempt made all three columns drift the
+     SAME way. `Animated.add(...).interpolate(...)` was over-clever; replaced with
+     a plain from/to swap per direction. Verified in the browser: UP / DOWN / UP.
+  6. **No blur on the collage** (the reference blurs its own). `expo-blur` is a
+     native module and this project has no dev build yet — the tilt plus a heavy
+     scrim carries the same "atmosphere, not content" read. Revisit once a native
+     build exists.
+  ⚠️ The scrim is the **canvas colour**, not black — it darkens photos in dark
+  mode and lightens them in light mode, so the wordmark on top stays legible in
+  both. A fixed black scrim would leave black-on-black text in light mode.
+
 ---
 
 ## Mobile — Monetization

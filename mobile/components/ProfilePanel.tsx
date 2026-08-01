@@ -8,6 +8,7 @@ import { Icon } from './Icon';
 import { Label, Body, Title, Rule, GhostButton, FilledButton, Index } from './kit';
 import { useAuth } from '../contexts/AuthContext';
 import { markReopenPanel } from '../services/sessionFlags';
+import { clearThumbs } from '../services/thumbCache';
 import {
   colors, spacing, font, tracking, typeface, themed,
   SchemePreference, getSchemePreference, setScheme,
@@ -89,6 +90,9 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
     setDeleting(false);
     setShowDeleteConfirm(false);
     onClose();
+    // The welcome collage is built from cached thumbnail URLs. A deleted
+    // account must not leave a mosaic of its saves on the sign-in screen.
+    clearThumbs();
     if (result.error) {
       // Alert.alert is a silent no-op on react-native-web — errors must be
       // visible on every platform or deletion failures look like nothing.

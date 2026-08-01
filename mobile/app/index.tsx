@@ -1,6 +1,6 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
-  View, Text, FlatList, StyleSheet, ActivityIndicator,
+  View, Text, FlatList, ScrollView, StyleSheet, ActivityIndicator,
   RefreshControl, TextInput, useWindowDimensions, Platform,
   KeyboardAvoidingView,
 } from 'react-native';
@@ -8,7 +8,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Search, XCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, Reel } from '../services/api';
-import { ReelCard } from '../components/ReelCard';
+import { ReelCard, aspectFor } from '../components/ReelCard';
 import { SkeletonGrid } from '../components/SkeletonCard';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
@@ -16,8 +16,9 @@ import { ProfilePanel } from '../components/ProfilePanel';
 import { Landing } from '../components/Landing';
 import { Label, Body, Title, Rule, GhostButton, Wordmark } from '../components/kit';
 import { hasEnteredLibrary, markEnteredLibrary, clearEnteredLibrary, consumeReopenPanel } from '../services/sessionFlags';
+import { rememberThumbs } from '../services/thumbCache';
 import { ASK_MIN_REELS } from '../constants/limits';
-import { colors, spacing, font, tracking, typeface, CATEGORY_OPTIONS, themed } from '../constants/theme';
+import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, themed } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
 const PAGE = 24;
@@ -57,6 +58,8 @@ export default function HomeScreen() {
       });
       setReels(data.items);
       setTotal(data.total);
+      // Feeds the signed-out welcome collage on the next launch.
+      rememberThumbs(data.items.map(r => r.thumbnail_url));
     } catch (e: any) {
       setError('Could not connect to backend. Make sure the server is running on port 8000.');
     } finally {
@@ -186,10 +189,29 @@ export default function HomeScreen() {
   const inSearchMode = search.trim().length > 0;
   const displayList = inSearchMode ? (searchResults ?? []) : reels;
 
-  const fillers = displayList.length % numColumns === 0 ? 0 : numColumns - (displayList.length % numColumns);
-  const gridData: any[] = fillers
-    ? [...displayList, ...Array.from({ length: fillers }, (_, i) => ({ id: `__ghost_${i}`, __ghost: true }))]
-    : displayList;
+  /**
+   * Distribute tiles into columns, shortest-column-first.
+   *
+   * Running height is tracked in WIDTH-UNITS (a tile of aspect 0.75 is 0.75
+   * columns tall) plus a constant for the caption block, so the columns finish
+   * at roughly the same depth without measuring anything on screen. Ordering
+   * within a column stays newest-first, which is what the user expects; only
+   * the left/right assignment is height-driven.
+   */
+  const CAPTION_UNITS = 0.42;
+  const mosaic = useMemo(() => {
+    const cols: { reel: Reel; aspect: number; idx: number }[][] =
+      Array.from({ length: numColumns }, () => []);
+    const heights = new Array(numColumns).fill(0);
+    displayList.forEach((reel, idx) => {
+      const aspect = aspectFor(reel);
+      let shortest = 0;
+      for (let i = 1; i < numColumns; i++) if (heights[i] < heights[shortest]) shortest = i;
+      cols[shortest].push({ reel, aspect, idx });
+      heights[shortest] += aspect + CAPTION_UNITS;
+    });
+    return cols;
+  }, [displayList, numColumns]);
 
   if (!entered) {
     return <Landing onEnter={() => { markEnteredLibrary(); setEntered(true); }} />;
@@ -223,8 +245,11 @@ export default function HomeScreen() {
       <Rule />
 
       {/* ── Category filter ──────────────────────────────────────────────────
-          Tracked uppercase words. The active one is ink with a rule beneath it;
-          the rest are ash. No pill, no fill, no per-category hue. */}
+          Round icon bubbles with the name beneath, mirroring the reference
+          app's avatar row (owner direction, 2026-08-01). `radius.circle` is the
+          ONLY sanctioned circle in the system — see constants/theme.ts.
+          Selection is an inversion (filled bubble, canvas-coloured icon), the
+          same emphasis grammar the primary button uses. */}
       <FlatList
         horizontal
         data={CATEGORIES}
@@ -234,10 +259,23 @@ export default function HomeScreen() {
         contentContainerStyle={styles.catContent}
         renderItem={({ item }) => {
           const active = activeCategory === item;
+          const meta = categoryMeta[item] ?? categoryMeta.other;
           return (
-            <Pressable style={styles.cat} onPress={() => onCategoryChange(item)}>
-              <Label tone={active ? 'ink' : 'muted'} wide>{item}</Label>
-              <View style={[styles.catRule, active && styles.catRuleOn]} />
+            <Pressable
+              style={styles.cat}
+              onPress={() => onCategoryChange(item)}
+              accessibilityLabel={`${item}${active ? ', selected' : ''}`}
+            >
+              <View style={[styles.catBubble, active && styles.catBubbleOn]}>
+                <Icon
+                  name={meta.icon}
+                  size={20}
+                  color={active ? colors.background : colors.textSecondary}
+                />
+              </View>
+              <Label tone={active ? 'ink' : 'muted'} numberOfLines={1} style={styles.catName}>
+                {item}
+              </Label>
             </Pressable>
           );
         }}
@@ -286,41 +324,31 @@ export default function HomeScreen() {
             </Text>
           </Pressable>
         )}
-        <FlatList
-          data={gridData}
-          keyExtractor={(r: any) => r.id}
-          numColumns={numColumns}
-          key={numColumns}
-          columnWrapperStyle={styles.row}
-          renderItem={({ item, index }) => (
-            item.__ghost
-              ? <View style={styles.ghost} />
-              : <ReelCard
-                  reel={item}
-                  index={index}
-                  onDelete={id => { setReels(prev => prev.filter(r => r.id !== id)); setTotal(t => Math.max(0, t - 1)); }}
-                />
-          )}
+        {/* ── The mosaic ───────────────────────────────────────────────────
+            Tiles are staggered, not aligned into rows: each one goes to
+            whichever column is currently shortest, so neighbours sit at
+            different heights the way a real contact sheet does.
+
+            ponytail: a ScrollView, not a FlatList — masonry and row
+            virtualization are incompatible without measuring every tile, and a
+            personal library is tens-to-hundreds of items. If someone turns up
+            with 2,000 saves this is the thing that gets slow; the fix then is a
+            windowed masonry (react-native-super-grid or a measured
+            FlashList), not a smaller diff here. */}
+        <ScrollView
           style={styles.grid}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
-          onEndReached={inSearchMode ? undefined : loadMore}
-          onEndReachedThreshold={0.6}
-          onScroll={e => setScrolled(e.nativeEvent.contentOffset.y > 4)}
           scrollEventThrottle={32}
-          initialNumToRender={8}
-          maxToRenderPerBatch={8}
-          windowSize={7}
-          removeClippedSubviews={Platform.OS !== 'web'}
-          ListFooterComponent={
-            <>
-              {loadingMore && <ActivityIndicator color={colors.textPrimary} style={{ marginVertical: spacing.md }} />}
-              <Body style={styles.disclaimer}>
-                Summaries are generated by AI and may be wrong or have gaps — edit them and add your
-                own notes freely. Saved content belongs to its original creators.
-              </Body>
-            </>
-          }
+          onScroll={e => {
+            const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
+            setScrolled(contentOffset.y > 4);
+            // FlatList's onEndReached, by hand: fire once we're within a
+            // screen-and-a-half of the bottom.
+            const nearBottom =
+              contentOffset.y + layoutMeasurement.height >= contentSize.height - layoutMeasurement.height * 1.5;
+            if (nearBottom && !inSearchMode) loadMore();
+          }}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -330,7 +358,28 @@ export default function HomeScreen() {
               progressBackgroundColor={colors.card}
             />
           }
-        />
+        >
+          <View style={styles.masonry}>
+            {mosaic.map((col, ci) => (
+              <View key={ci} style={styles.column}>
+                {col.map(({ reel, aspect, idx }) => (
+                  <ReelCard
+                    key={reel.id}
+                    reel={reel}
+                    index={idx}
+                    aspect={aspect}
+                    onDelete={id => { setReels(prev => prev.filter(r => r.id !== id)); setTotal(t => Math.max(0, t - 1)); }}
+                  />
+                ))}
+              </View>
+            ))}
+          </View>
+          {loadingMore && <ActivityIndicator color={colors.textPrimary} style={{ marginVertical: spacing.md }} />}
+          <Body style={styles.disclaimer}>
+            Summaries are generated by AI and may be wrong or have gaps — edit them and add your
+            own notes freely. Saved content belongs to its original creators.
+          </Body>
+        </ScrollView>
         </>
       )}
 
@@ -390,10 +439,20 @@ const styles = themed(() => StyleSheet.create({
   },
 
   catList: { flexGrow: 0 },
-  catContent: { paddingHorizontal: spacing.md, gap: spacing.lg, alignItems: 'flex-end' },
-  cat: { paddingVertical: spacing.md, gap: spacing.sm },
-  catRule: { height: 1, backgroundColor: 'transparent' },
-  catRuleOn: { backgroundColor: colors.textPrimary },
+  catContent: { paddingHorizontal: spacing.md, gap: spacing.md, alignItems: 'flex-start' },
+  cat: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md, width: 62 },
+  // The system's one circle (radius.circle). Selection inverts rather than
+  // tinting — there is no accent hue to tint with.
+  catBubble: {
+    width: 52, height: 52,
+    borderRadius: radius.circle,
+    borderWidth: 1,
+    borderColor: colors.ghostLine,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  catBubbleOn: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
+  catName: { textAlign: 'center', width: '100%' },
   ruleHidden: { backgroundColor: 'transparent' },
 
   banner: {
@@ -408,12 +467,13 @@ const styles = themed(() => StyleSheet.create({
   },
 
   grid: { flex: 1 },
-  ghost: { flex: 1 },
-  // ⚠️ NO GUTTERS AND NO PAGE MARGIN. The reference is explicit: "the grid is
-  // full-bleed with 0px page margins — tiles extend to the edge; the only
-  // visual separator is the 1px ghost line". Each tile draws its own hairline,
-  // so neighbours share a seam instead of floating apart.
-  row: { gap: 0 },
+  // ⚠️ NO GUTTERS AND NO PAGE MARGIN. Full-bleed to the screen edge; the only
+  // visual separator is the 1px ghost line each tile draws for itself, so
+  // neighbours share a seam instead of floating apart.
+  masonry: { flexDirection: 'row', alignItems: 'flex-start' },
+  // minWidth:0 is load-bearing on react-native-web — without it a long title
+  // inside a tile can push its column wider than its share.
+  column: { flex: 1, minWidth: 0 },
   list: { paddingBottom: 132 },
   disclaimer: {
     fontSize: font.sm,

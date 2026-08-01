@@ -15,6 +15,33 @@ interface ReelCardProps {
   reel: Reel;
   index?: number;
   onDelete?: (id: string) => void;
+  /** Height/width of the image well. Supplied by the masonry grid so tiles
+   *  stagger; defaults to 3:4 portrait for the fixed-row grids. */
+  aspect?: number;
+}
+
+/**
+ * The intrinsic ratio of a thumbnail is unknown until the image loads, and
+ * resizing the tile at that point reflows every tile below it. So the mosaic
+ * picks a stable ratio up front, seeded by two real signals:
+ *
+ *   - PLATFORM. YouTube and LinkedIn serve landscape thumbnails; Instagram and
+ *     TikTok serve vertical ones. Cropping a 16:9 still into a 9:16 well throws
+ *     most of the frame away, so the landscape platforms trend shorter.
+ *   - The reel id, hashed, to vary heights within a platform.
+ *
+ * Deterministic, so a tile never changes height between renders or sessions.
+ */
+const TALL = [3 / 4, 4 / 5, 9 / 16, 1];
+const WIDE = [4 / 5, 1, 5 / 4, 3 / 4];
+
+export function aspectFor(reel: { id: string; platform?: string | null }): number {
+  const wide = reel.platform === 'youtube' || reel.platform === 'linkedin' || reel.platform === 'twitter';
+  const set = wide ? WIDE : TALL;
+  let h = 0;
+  const s = reel.id || '';
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return set[h % set.length];
 }
 
 /**
@@ -31,7 +58,7 @@ interface ReelCardProps {
  * over an unknown thumbnail — so only the short, scrim-backed metadata sits on
  * the image.
  */
-function ReelCardInner({ reel, index = 0, onDelete }: ReelCardProps) {
+function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardProps) {
   const router = useRouter();
   // The real thumbnail is the frame's content; fall back to an empty frame only
   // when extraction couldn't get one (or the image itself fails to load).
@@ -75,7 +102,7 @@ function ReelCardInner({ reel, index = 0, onDelete }: ReelCardProps) {
           {thumb ? (
             <Animated.Image
               source={{ uri: thumb }}
-              style={[styles.image, { opacity: imgOpacity }]}
+              style={[styles.image, { aspectRatio: aspect, opacity: imgOpacity }]}
               resizeMode="cover"
               onLoad={() => Animated.timing(imgOpacity, {
                 toValue: 1, duration: motion.micro, useNativeDriver: true,
@@ -85,7 +112,7 @@ function ReelCardInner({ reel, index = 0, onDelete }: ReelCardProps) {
           ) : (
             /* No thumbnail: an empty frame with its platform named, rather than
                a coloured tint standing in for a picture. */
-            <View style={[styles.image, styles.imageEmpty]}>
+            <View style={[styles.image, styles.imageEmpty, { aspectRatio: aspect }]}>
               <Icon name={platform.icon === 'globe-outline' ? 'link' : 'play'} size={20} color={colors.textTertiary} />
             </View>
           )}
@@ -139,6 +166,7 @@ function ReelCardInner({ reel, index = 0, onDelete }: ReelCardProps) {
 export const ReelCard = memo(ReelCardInner, (prev, next) =>
   prev.reel.id === next.reel.id &&
   prev.index === next.index &&
+  prev.aspect === next.aspect &&
   prev.reel.title === next.reel.title &&
   prev.reel.summary_status === next.reel.summary_status &&
   prev.reel.category === next.reel.category &&
@@ -157,9 +185,10 @@ const styles = themed(() => StyleSheet.create({
   tap: { flex: 1 },
 
   imageWrap: { position: 'relative', backgroundColor: colors.card },
-  // Portrait. Reels are vertical; the outgoing 16:10 landscape crop cut the top
-  // and bottom off almost every thumbnail the app actually stores.
-  image: { width: '100%', aspectRatio: 3 / 4 },
+  // aspectRatio is supplied per-tile by the masonry grid (see aspectFor above);
+  // 3:4 portrait is the fallback for the fixed-row grids. The outgoing 16:10
+  // landscape crop cut the top and bottom off almost every reel thumbnail.
+  image: { width: '100%' },
   imageEmpty: { alignItems: 'center', justifyContent: 'center' },
   scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 72 },
 
