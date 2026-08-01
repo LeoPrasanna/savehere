@@ -28,6 +28,7 @@ function notYet(provider: string) {
   else Alert.alert('Not available yet', msg);
 }
 import { Label, Body, Wordmark, GhostButton, FilledButton, Rule } from './kit';
+import { MockReel, MOCK_REEL_H } from './MockReel';
 import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 
 type Mode = 'signin' | 'signup';
@@ -68,64 +69,12 @@ function friendly(message: string): string {
 const COLS = 3;
 /** Tiles per column before the strip repeats. */
 const PER_COL = 5;
-/** Portrait, because reels are. Fixed so the loop distance is known without
- *  measuring anything on screen. */
-const TILE_H = 196;
+/** One card's height — owned by MockReel, re-exported so the drift loop knows
+ *  its travel distance without measuring anything on screen. */
+const TILE_H = MOCK_REEL_H;
 /** Seconds for one column to travel its own length. Slow on purpose — this is
  *  atmosphere behind a sign-in form, not a carousel asking to be watched. */
 const DRIFT_S = 34;
-
-/**
- * A MOCK REEL CARD — drawn entirely from Views. No bitmap, anywhere.
- *
- * ⚠️ THIS DELIBERATELY CONTAINS NO PHOTOGRAPHY. An earlier pass filled these
- * wells with the user's own cached thumbnails; the owner flagged the copyright
- * question and the honest resolution is to remove the image path altogether
- * rather than reason about which images are safe. Nothing here is anyone's
- * content — it is player chrome around an empty tonal well, so there is no
- * licence to track, no asset to ship, and no signed-out screen displaying
- * material the app does not own.
- *
- * The chrome is what makes it read as a reel: a label, a scrubber part-played,
- * and the action row. The action glyph is a BOOKMARK rather than the usual
- * heart — this is a saving app, and "save" is the verb it cares about.
- */
-function MockReel({ seed }: { seed: number }) {
-  // Five tonal steps, derived from the ink colour so they invert with the
-  // scheme instead of being hardcoded greys.
-  const wellTone = 0.04 + (seed % 5) * 0.025;
-  // Varying playhead positions stop the wall reading as one repeated cell.
-  const progress = 18 + ((seed * 37) % 64);
-
-  return (
-    <View style={styles.reel}>
-      <View style={styles.reelHead}>
-        <Text style={styles.reelLabel}>REEL</Text>
-        <View style={styles.reelDots}>
-          <View style={styles.reelDot} />
-          <View style={styles.reelDot} />
-          <View style={styles.reelDot} />
-        </View>
-      </View>
-
-      <View style={styles.reelWell}>
-        <View style={[styles.reelFill, { opacity: wellTone }]} />
-        <View style={styles.reelPlay} />
-      </View>
-
-      <View style={styles.reelFoot}>
-        <View style={styles.scrubTrack}>
-          <View style={[styles.scrubFill, { width: `${progress}%` }]} />
-        </View>
-        <View style={styles.reelIcons}>
-          <Icon name="bookmark" size={9} color={colors.textTertiary} />
-          <Icon name="ask" size={9} color={colors.textTertiary} />
-          <Icon name="send" size={9} color={colors.textTertiary} />
-        </View>
-      </View>
-    </View>
-  );
-}
 
 /**
  * One drifting column. Renders its tiles TWICE and translates by exactly one
@@ -556,43 +505,6 @@ const styles = themed(() => StyleSheet.create({
     transform: [{ rotate: '-9deg' }, { scale: 1.12 }],
   },
   driftCol: { flex: 1, overflow: 'hidden' },
-
-  // ── Mock reel card ──
-  reel: {
-    width: '100%',
-    height: TILE_H,
-    borderWidth: 0.5,
-    borderColor: colors.ghostLine,
-    backgroundColor: colors.card,
-    padding: spacing.sm,
-    justifyContent: 'space-between',
-  },
-  reelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  reelLabel: {
-    color: colors.textTertiary,
-    fontFamily: typeface.label,
-    fontSize: 8,
-    letterSpacing: tracking.labelWide,
-  },
-  reelDots: { flexDirection: 'row', gap: 2 },
-  reelDot: { width: 2, height: 2, backgroundColor: colors.textTertiary },
-  // The "content". A tonal block and an outlined play mark — that is the whole
-  // of it. Nothing depicts anything.
-  reelWell: { flex: 1, marginVertical: spacing.sm, alignItems: 'center', justifyContent: 'center' },
-  reelFill: {
-    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: colors.textPrimary,
-  },
-  reelPlay: {
-    width: 0, height: 0,
-    borderTopWidth: 6, borderBottomWidth: 6, borderLeftWidth: 10,
-    borderTopColor: 'transparent', borderBottomColor: 'transparent',
-    borderLeftColor: colors.textTertiary,
-  },
-  reelFoot: { gap: spacing.sm },
-  scrubTrack: { height: 1.5, backgroundColor: colors.ghostLine },
-  scrubFill: { height: '100%', backgroundColor: colors.textSecondary },
-  reelIcons: { flexDirection: 'row', gap: spacing.sm },
 
   // ⚠️ The scrim is the CANVAS colour, not black — it dims the wall in dark mode
   // and lightens it in light mode. The wordmark on top is `textPrimary`, which

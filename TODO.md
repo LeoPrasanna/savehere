@@ -360,6 +360,29 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
      ⚠️ Still blocked on the same two things: the $99 Apple developer account, and
      Apple guideline 4.8 — offering Google *requires* Sign in with Apple, so they
      ship together or not at all.
+  5. **Scene compositions in the mock reels** (`components/MockReel.tsx`).
+     Asked for as "AI-created reel content"; **no image-generation tool exists in
+     this environment**, so photographic frames could not be authored. The honest
+     alternative is procedural: six composition kinds — portrait, horizon,
+     top-down, product, skyline, title — built from Views and gradients in the
+     palette's own tones. At tile size, behind a scrim and drifting, they read as
+     a wall of monochrome stills rather than a grid of grey rectangles, and the
+     zero-bitmap property from item 1 is preserved exactly.
+     **If real photography is ever wanted, the ONLY safe route is licensed assets
+     the owner supplies** — a paid stock licence that permits app embedding, or
+     shot in-house. Wiring them in is small: give `Scene` an image branch and drop
+     files in `assets/`. Do not swap in scraped or hotlinked images.
+
+  **Logged-in screens finally verified (2026-08-02).** A real staging session was
+  present in the preview browser, so the screens that had been unverifiable since
+  round one were checked live against a 63-save library:
+  - Category bubbles render circular (`border-radius: 999px`, 15 of them).
+  - **Masonry confirmed staggered**, not aligned rows — measured tile offsets of
+    391/451/764 in one column against 551/923/1379 in the next.
+  - Paywall page 01 renders, and the **`SAVE 20%` badge appears in USD** (where
+    $2/wk = $8.70/mo against $7 is a genuine 20%). The same function returns null
+    for the INR pair, so the badge cannot render there — the guard works.
+  ⚠️ Still unverified: paywall page 02, reel detail, todos, workout screens.
 
 ---
 
