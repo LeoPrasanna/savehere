@@ -16,7 +16,6 @@ import { ProfilePanel } from '../components/ProfilePanel';
 import { Landing } from '../components/Landing';
 import { Label, Body, Title, Rule, GhostButton, Wordmark } from '../components/kit';
 import { hasEnteredLibrary, markEnteredLibrary, clearEnteredLibrary, consumeReopenPanel } from '../services/sessionFlags';
-import { rememberThumbs } from '../services/thumbCache';
 import { ASK_MIN_REELS } from '../constants/limits';
 import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, themed } from '../constants/theme';
 
@@ -58,8 +57,6 @@ export default function HomeScreen() {
       });
       setReels(data.items);
       setTotal(data.total);
-      // Feeds the signed-out welcome collage on the next launch.
-      rememberThumbs(data.items.map(r => r.thumbnail_url));
     } catch (e: any) {
       setError('Could not connect to backend. Make sure the server is running on port 8000.');
     } finally {

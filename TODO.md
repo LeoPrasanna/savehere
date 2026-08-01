@@ -329,9 +329,37 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
      native module and this project has no dev build yet — the tilt plus a heavy
      scrim carries the same "atmosphere, not content" read. Revisit once a native
      build exists.
-  ⚠️ The scrim is the **canvas colour**, not black — it darkens photos in dark
-  mode and lightens them in light mode, so the wordmark on top stays legible in
+  ⚠️ The scrim is the **canvas colour**, not black — it dims the wall in dark
+  mode and lightens it in light mode, so the wordmark on top stays legible in
   both. A fixed black scrim would leave black-on-black text in light mode.
+
+- [x] **Round three — welcome screen, no photography (2026-08-01).**
+  1. **⚠️ ALL BITMAPS REMOVED FROM THE LOGIN SCREEN.** Owner raised the copyright
+     question on the thumbnail collage. The honest resolution is not to reason
+     about which images are safe — it is to have none. The tiles are now **mock
+     reel cards drawn entirely from Views**: a "REEL" label, a `•••` glyph, a
+     tonal well with an outlined play mark, a part-played scrubber, and an action
+     row. Nothing depicts anything, so there is no licence to track and no asset
+     to ship. Verified in the DOM: **0 `<img>` elements on the screen.**
+     *(For the record: the cached thumbnails were never the real exposure —
+     showing a user their own saves is what every other screen does. Bundled or
+     hotlinked stock would have been, and that was already avoided. Synthetic is
+     simply strictly safer AND a smaller diff.)*
+     `services/thumbCache.ts` and all its wiring are **deleted** — it existed only
+     for this screen.
+  2. **The action glyph is a BOOKMARK, not a heart.** This is a saving app; save
+     is the verb it cares about. Small detail, but it is the one thing on the mock
+     card that says whose product it is.
+  3. **Bottom ramp added.** A `LinearGradient` to solid canvas over the lower 58%,
+     on top of the flat wash — the controls and legal text live down there and
+     were competing with moving tiles. Measured: solid canvas behind the auth row.
+  4. **Apple + Google buttons added as MOCKS.** Round one left them out on the
+     grounds that a dead button is worse than no button; the owner asked for them,
+     so they exist and **say so when tapped** rather than failing silently. Email
+     is the one that works and carries the system's inversion (filled) to show it.
+     ⚠️ Still blocked on the same two things: the $99 Apple developer account, and
+     Apple guideline 4.8 — offering Google *requires* Sign in with Apple, so they
+     ship together or not at all.
 
 ---
 

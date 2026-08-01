@@ -61,9 +61,9 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 - 🧱 **Staggered masonry library** — tiles go to whichever column is shortest, with
   the aspect seeded by platform (landscape thumbnails from YouTube/LinkedIn,
   vertical from Instagram/TikTok) so it never reflows when an image loads
-- 🎞️ **A live welcome collage** — the signed-out screen drifts three tilted columns
-  of *your own* recent thumbnails in alternating directions. Cached locally, so it
-  costs nothing and ships no stock imagery; honours "reduce motion"
+- 🎞️ **A live welcome wall** — the signed-out screen drifts three tilted columns
+  of mock reel cards in alternating directions. Drawn entirely in code — no
+  photography, no bundled assets, nothing anyone else owns; honours "reduce motion"
 
 ### Accounts, tiers & safety
 
@@ -181,7 +181,7 @@ savehere/
 │   ├── app/                       # library, save, reel detail, ask, rediscover, todos, help, pro, workout
 │   ├── components/                # kit.tsx (design primitives), ReelCard, TaskList, TodoEditor, Landing, Icon, …
 │   ├── constants/                 # theme (design system + reference lock), pricing, features, todoBrand
-│   └── services/                  # api.ts (typed client), thumbCache.ts, todoDates.ts + todoSettings.ts, …
+│   └── services/                  # api.ts (typed client), todoDates.ts + todoSettings.ts, …
 ├── docs/
 │   ├── CONTEXT.md                 # architecture + decisions handoff
 │   └── REMOTE_DEV.md              # Codespaces + Claude Code setup guide

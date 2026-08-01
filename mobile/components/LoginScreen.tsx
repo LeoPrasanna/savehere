@@ -1,19 +1,33 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform,
-  ScrollView, ActivityIndicator, TextInputProps, Animated, Image,
-  Easing, AccessibilityInfo,
+  ScrollView, ActivityIndicator, TextInputProps, Animated,
+  Easing, AccessibilityInfo, Alert,
 } from 'react-native';
 import type { ReactNode } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { Icon } from './Icon';
 import { Pressable } from './Pressable';
 import { supabase } from '../services/supabase';
-import { thumbUrl } from '../services/api';
-import { getThumbs, hydrateThumbs } from '../services/thumbCache';
 import { useAuth } from '../contexts/AuthContext';
 import * as haptics from '../services/haptics';
-import { Label, Body, Wordmark, GhostButton, FilledButton, Rule, Index } from './kit';
+
+/**
+ * Apple and Google are mocked. Say so out loud rather than no-op.
+ *
+ * Both are real blockers in TODO.md: Apple sign-in needs the $99 developer
+ * account, and Apple guideline 4.8 makes Sign in with Apple mandatory the
+ * moment Google is offered — so they ship together or not at all.
+ */
+function notYet(provider: string) {
+  haptics.warning();
+  const msg = `${provider} sign-in isn't wired up yet — use email for now.`;
+  if (Platform.OS === 'web') window.alert(msg);
+  else Alert.alert('Not available yet', msg);
+}
+import { Label, Body, Wordmark, GhostButton, FilledButton, Rule } from './kit';
 import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 
 type Mode = 'signin' | 'signup';
@@ -62,6 +76,58 @@ const TILE_H = 196;
 const DRIFT_S = 34;
 
 /**
+ * A MOCK REEL CARD — drawn entirely from Views. No bitmap, anywhere.
+ *
+ * ⚠️ THIS DELIBERATELY CONTAINS NO PHOTOGRAPHY. An earlier pass filled these
+ * wells with the user's own cached thumbnails; the owner flagged the copyright
+ * question and the honest resolution is to remove the image path altogether
+ * rather than reason about which images are safe. Nothing here is anyone's
+ * content — it is player chrome around an empty tonal well, so there is no
+ * licence to track, no asset to ship, and no signed-out screen displaying
+ * material the app does not own.
+ *
+ * The chrome is what makes it read as a reel: a label, a scrubber part-played,
+ * and the action row. The action glyph is a BOOKMARK rather than the usual
+ * heart — this is a saving app, and "save" is the verb it cares about.
+ */
+function MockReel({ seed }: { seed: number }) {
+  // Five tonal steps, derived from the ink colour so they invert with the
+  // scheme instead of being hardcoded greys.
+  const wellTone = 0.04 + (seed % 5) * 0.025;
+  // Varying playhead positions stop the wall reading as one repeated cell.
+  const progress = 18 + ((seed * 37) % 64);
+
+  return (
+    <View style={styles.reel}>
+      <View style={styles.reelHead}>
+        <Text style={styles.reelLabel}>REEL</Text>
+        <View style={styles.reelDots}>
+          <View style={styles.reelDot} />
+          <View style={styles.reelDot} />
+          <View style={styles.reelDot} />
+        </View>
+      </View>
+
+      <View style={styles.reelWell}>
+        <View style={[styles.reelFill, { opacity: wellTone }]} />
+        <View style={styles.reelPlay} />
+      </View>
+
+      <View style={styles.reelFoot}>
+        <View style={styles.scrubTrack}>
+          <View style={[styles.scrubFill, { width: `${progress}%` }]} />
+        </View>
+        <View style={styles.reelIcons}>
+          <Icon name="bookmark" size={9} color={colors.textTertiary} />
+          <Icon name="ask" size={9} color={colors.textTertiary} />
+          <Icon name="send" size={9} color={colors.textTertiary} />
+        </View>
+      </View>
+    </View>
+  );
+}
+
+/**
  * One drifting column. Renders its tiles TWICE and translates by exactly one
  * copy's height, so the wrap is seamless — at the moment it resets, the pixels
  * on screen are identical.
@@ -70,7 +136,7 @@ const DRIFT_S = 34;
  * even columns rise. Opposing motion is what stops a tilted grid reading as one
  * sliding sheet, and it's the move that makes the whole thing feel alive.
  */
-function DriftColumn({ uris, dir, seconds }: { uris: (string | null)[]; dir: 1 | -1; seconds: number }) {
+function DriftColumn({ seeds, dir, seconds }: { seeds: number[]; dir: 1 | -1; seconds: number }) {
   const y = useRef(new Animated.Value(0)).current;
   const [reduceMotion, setReduceMotion] = useState(false);
 
@@ -86,7 +152,7 @@ function DriftColumn({ uris, dir, seconds }: { uris: (string | null)[]; dir: 1 |
     return () => { cancelled = true; sub?.remove?.(); };
   }, []);
 
-  const span = uris.length * TILE_H;
+  const span = seeds.length * TILE_H;
 
   useEffect(() => {
     if (reduceMotion || span === 0) { y.setValue(0); return; }
@@ -114,14 +180,8 @@ function DriftColumn({ uris, dir, seconds }: { uris: (string | null)[]; dir: 1 |
   return (
     <View style={styles.driftCol}>
       <Animated.View style={{ transform: [{ translateY: y }] }}>
-        {[...uris, ...uris].map((uri, i) => (
-          <View key={i} style={styles.frame}>
-            {uri ? (
-              <Image source={{ uri: thumbUrl(uri) }} style={styles.frameImg} resizeMode="cover" />
-            ) : (
-              <Index n={(i % uris.length) + 1} tone="veil" style={styles.frameIndex} />
-            )}
-          </View>
+        {[...seeds, ...seeds].map((seed, i) => (
+          <MockReel key={i} seed={seed} />
         ))}
       </Animated.View>
     </View>
@@ -129,51 +189,42 @@ function DriftColumn({ uris, dir, seconds }: { uris: (string | null)[]; dir: 1 |
 }
 
 /**
- * The backdrop: a DRIFTING COLLAGE OF THE USER'S OWN SAVES.
+ * The backdrop: a DRIFTING WALL OF MOCK REELS.
  *
- * The reference welcome screen is image-led — a tilted, darkened mosaic of real
- * content. These are the user's most recent thumbnails, cached from their last
- * session (see services/thumbCache.ts for why their own saves rather than stock
- * photography). The whole grid is oversized and rotated so the crop reads as a
- * fragment of something larger, exactly as the reference does; the columns then
- * drift in alternating directions.
+ * The reference welcome screen is image-led — a tilted, darkened mosaic of
+ * content. This is the same composition rendered as pure UI: the grid is
+ * oversized and rotated so the crop reads as a fragment of something larger,
+ * and the columns drift in alternating directions.
  *
- * On a first-ever launch there is nothing cached, and the fallback is what the
- * library actually is at that moment: a sheet of numbered empty frames, drifting
- * the same way.
+ * ⚠️ NO PHOTOGRAPHY, BY DESIGN. See MockReel above — there is no bitmap on this
+ * screen at all, so nothing here belongs to anyone else.
  *
  * ponytail: animated in code rather than as a GIF/video asset. A GIF would be a
- * fixed-size, block-compressed file showing somebody else's content, and it
- * would ship in every bundle forever. This weighs nothing, stays sharp at any
- * density, and shows the user their own library.
+ * fixed-size, block-compressed file of somebody else's content shipping in every
+ * bundle forever. This weighs nothing and stays sharp at any density.
  *
  * ponytail: no blur. The reference blurs its collage, which on native needs
  * `expo-blur` — a native module, on a project that has no dev build yet
- * (TODO.md). The tilt plus a heavy scrim carries the same "atmosphere, not
- * content" read. Add expo-blur when a native build exists and it's worth it.
+ * (TODO.md). The tilt plus the scrims carries the same "atmosphere, not content"
+ * read. Add expo-blur when a native build exists and it's worth it.
  */
-function ContactSheetBackdrop({ thumbs }: { thumbs: string[] }) {
-  // Deal the thumbnails out column by column, cycling if there aren't enough,
-  // so a user with three saves still gets a full mosaic rather than a gap.
+function ReelWallBackdrop() {
   const columns = Array.from({ length: COLS }, (_, c) =>
-    Array.from({ length: PER_COL }, (_, r) => {
-      if (thumbs.length === 0) return null;
-      return thumbs[(c * PER_COL + r) % thumbs.length];
-    }),
+    Array.from({ length: PER_COL }, (_, r) => c * PER_COL + r),
   );
 
   return (
     <View style={[styles.backdropClip, { pointerEvents: 'none' }]}>
       <View style={styles.backdrop}>
-        {columns.map((uris, c) => (
+        {columns.map((seeds, c) => (
           <DriftColumn
             key={c}
-            uris={uris}
+            seeds={seeds}
             // Alternating: odd columns rise, even columns fall. Opposing motion
             // is what stops a tilted grid reading as one sliding sheet.
             dir={c % 2 === 0 ? 1 : -1}
             // Slightly different speeds so the columns never re-align into a
-            // visible rhythm. Prime-ish offsets rather than round numbers.
+            // visible rhythm.
             seconds={DRIFT_S + c * 7}
           />
         ))}
@@ -220,10 +271,6 @@ export function LoginScreen() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showPw, setShowPw] = useState(false);
-  // Web reads the cache synchronously at module init, so the first paint is
-  // already correct; native has to hydrate from AsyncStorage after mount.
-  const [thumbs, setThumbs] = useState<string[]>(getThumbs);
-  useEffect(() => { hydrateThumbs().then(setThumbs); }, []);
 
   const isSignup = mode === 'signup';
   const shakeX = useRef(new Animated.Value(0)).current;
@@ -304,8 +351,18 @@ export function LoginScreen() {
   if (step === 'welcome') {
     return (
       <View style={styles.container}>
-        <ContactSheetBackdrop thumbs={thumbs} />
+        <ReelWallBackdrop />
+        {/* Flat wash over the whole wall — keeps it as atmosphere. */}
         <View style={[styles.scrim, { pointerEvents: 'none' }]} />
+        {/* Bottom ramp, on top of the flat wash. The controls and the legal
+            text sit in the lower third, and a uniform scrim was leaving them
+            competing with the moving tiles behind. This drives the bottom of
+            the screen to solid canvas so the actions read cleanly. */}
+        <LinearGradient
+          colors={['transparent', colors.background]}
+          locations={[0, 0.72]}
+          style={[styles.bottomFade, { pointerEvents: 'none' }]}
+        />
         <View style={[styles.welcome, { paddingTop: insets.top, paddingBottom: insets.bottom + spacing.lg }]}>
           <View style={styles.welcomeMid}>
             <Wordmark size={52} />
@@ -313,23 +370,39 @@ export function LoginScreen() {
           </View>
 
           {/*
-            One entry point, laid out as a ROW so Apple and Google drop in
-            beside it without a redesign. They are deliberately absent rather
-            than present-and-dead: neither provider is wired up yet (both are
-            open blockers in TODO.md), and a button that does nothing is worse
-            than a button that isn't there.
+            Three entry points. Email is real; Apple and Google are MOCKS —
+            neither provider is wired up yet (both are open blockers in
+            TODO.md), so they say so plainly when tapped rather than failing
+            silently. A button that quietly does nothing is the worst of the
+            three options; one that explains itself is fine.
           */}
           <View style={styles.authRow}>
             <Pressable
               style={styles.authBtn}
+              onPress={() => notYet('Apple')}
+              accessibilityRole="button"
+              accessibilityLabel="Continue with Apple — not available yet"
+            >
+              <Ionicons name="logo-apple" size={24} color={colors.textPrimary} />
+            </Pressable>
+            <Pressable
+              style={styles.authBtn}
+              onPress={() => notYet('Google')}
+              accessibilityRole="button"
+              accessibilityLabel="Continue with Google — not available yet"
+            >
+              <Ionicons name="logo-google" size={22} color={colors.textPrimary} />
+            </Pressable>
+            <Pressable
+              style={[styles.authBtn, styles.authBtnPrimary]}
               onPress={() => { haptics.tap(); setStep('form'); }}
               accessibilityRole="button"
               accessibilityLabel="Continue with email"
             >
-              <Icon name="mail" size={22} color={colors.textPrimary} />
+              <Icon name="mail" size={22} color={colors.background} />
             </Pressable>
           </View>
-          <Label style={styles.authHint}>Continue with email</Label>
+          <Label tone="ink" wide style={styles.authHint}>Continue with email</Label>
 
           <Text style={styles.legal}>
             By continuing you agree to our <Text style={styles.legalStrong}>Terms</Text> and{' '}
@@ -483,43 +556,77 @@ const styles = themed(() => StyleSheet.create({
     transform: [{ rotate: '-9deg' }, { scale: 1.12 }],
   },
   driftCol: { flex: 1, overflow: 'hidden' },
-  frame: {
+
+  // ── Mock reel card ──
+  reel: {
     width: '100%',
     height: TILE_H,
     borderWidth: 0.5,
     borderColor: colors.ghostLine,
-    padding: spacing.sm,
     backgroundColor: colors.card,
+    padding: spacing.sm,
+    justifyContent: 'space-between',
   },
-  frameImg: {
+  reelHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  reelLabel: {
+    color: colors.textTertiary,
+    fontFamily: typeface.label,
+    fontSize: 8,
+    letterSpacing: tracking.labelWide,
+  },
+  reelDots: { flexDirection: 'row', gap: 2 },
+  reelDot: { width: 2, height: 2, backgroundColor: colors.textTertiary },
+  // The "content". A tonal block and an outlined play mark — that is the whole
+  // of it. Nothing depicts anything.
+  reelWell: { flex: 1, marginVertical: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  reelFill: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-    width: '100%', height: '100%',
+    backgroundColor: colors.textPrimary,
   },
-  frameIndex: { opacity: 0.5 },
-  // ⚠️ The scrim is the CANVAS colour, not black — so it darkens the photos in
-  // dark mode and lightens them in light mode. The wordmark on top is
-  // `textPrimary`, which inverts to match, and legibility holds in both. A
-  // fixed black scrim would leave black-on-black text in light mode.
+  reelPlay: {
+    width: 0, height: 0,
+    borderTopWidth: 6, borderBottomWidth: 6, borderLeftWidth: 10,
+    borderTopColor: 'transparent', borderBottomColor: 'transparent',
+    borderLeftColor: colors.textTertiary,
+  },
+  reelFoot: { gap: spacing.sm },
+  scrubTrack: { height: 1.5, backgroundColor: colors.ghostLine },
+  scrubFill: { height: '100%', backgroundColor: colors.textSecondary },
+  reelIcons: { flexDirection: 'row', gap: spacing.sm },
+
+  // ⚠️ The scrim is the CANVAS colour, not black — it dims the wall in dark mode
+  // and lightens it in light mode. The wordmark on top is `textPrimary`, which
+  // inverts to match, so legibility holds in both. A fixed black scrim would
+  // leave black-on-black text in light mode.
   scrim: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: colors.background,
-    opacity: 0.78,
+    opacity: 0.74,
+  },
+  // Ramps to solid canvas across the bottom half, so the auth row and the legal
+  // text sit on a clean surface instead of over moving tiles.
+  bottomFade: {
+    position: 'absolute', left: 0, right: 0, bottom: 0,
+    height: '58%',
   },
 
   // ── Step 1 ──
   welcome: { flex: 1, paddingHorizontal: spacing.lg, justifyContent: 'flex-end' },
   welcomeMid: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   welcomeSub: { marginTop: spacing.md, textAlign: 'center' },
-  authRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.md },
+  authRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.sm },
   // Square, not circular. The reference app's circular auth buttons are one of
   // its most recognisable marks; this system is 0-radius everywhere anyway.
   authBtn: {
-    width: 76, height: 76,
+    width: 72, height: 72,
     borderWidth: 1,
     borderColor: colors.borderLight,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Email is the one that actually works, so it gets the system's inversion —
+  // the same emphasis the primary button uses everywhere else.
+  authBtnPrimary: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
   authHint: { textAlign: 'center', marginTop: spacing.md },
   legal: {
     color: colors.textTertiary,
