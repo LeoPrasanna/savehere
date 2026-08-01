@@ -8,10 +8,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MotiView } from 'moti';
 import { Icon } from './Icon';
 import { Pressable } from './Pressable';
-import { AuroraBackground } from './AuroraBackground';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { FloatingParticleField } from './FloatingParticleField';
 import { RollingTagline } from './RollingTagline';
 import * as haptics from '../services/haptics';
 import { colors, spacing, font, radius, gradients, shadow, typeface, themed } from '../constants/theme';
@@ -168,8 +166,6 @@ export function LoginScreen() {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <FloatingParticleField />
-      <AuroraBackground />
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
         {/* ── Hero: big, glowing, floating icon ── */}

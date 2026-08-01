@@ -8,10 +8,8 @@ import { api, Reel, Usage, UsageLog } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { GlassCard } from './GlassCard';
-import { BorderBeam } from './BorderBeam';
 import { useAuth } from '../contexts/AuthContext';
-import { markReopenPanel } from '../services/sessionFlags';
-import { colors, spacing, font, radius, gradients, shadow, themed, accentThemes, getAccentKey, setAccentTheme } from '../constants/theme';
+import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
 
 const APP_VERSION = '1.0.0';
 
@@ -51,8 +49,6 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const [logOpen, setLogOpen] = useState(false);
   const [log, setLog] = useState<UsageLog | null>(null);
   const [logLoading, setLogLoading] = useState(false);
-  // Measured size of the AI-budget card, so the BorderBeam can trace its outline.
-  const [usageCardSize, setUsageCardSize] = useState({ w: 0, h: 0 });
 
   // Refresh the AI budget each time the panel opens; quietly keep the last known
   // value if the request fails (the meter is informative, never blocking).
@@ -118,51 +114,6 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
         <Icon name={icon} size={18} color={colors.textSecondary} />
         <Text style={styles.rowLabel}>{label}</Text>
         <View style={styles.soon}><Text style={styles.soonText}>Soon</Text></View>
-      </View>
-    </MotiView>
-  );
-
-  // Live switch: setAccentTheme mutates the tokens, regenerates themed()
-  // sheets and remounts the tree (see constants/theme.ts) — instant, no page
-  // reload. The session flag reopens this panel after the remount so the user
-  // can keep trying colors.
-  const chooseAccent = (key: string) => {
-    if (key === getAccentKey()) return;
-    markReopenPanel();
-    setAccentTheme(key);
-  };
-
-  const AppearanceRow = ({ delay = 0 }: { delay?: number }) => (
-    <MotiView
-      from={{ opacity: 0, translateX: 20 }}
-      animate={{ opacity: 1, translateX: 0 }}
-      transition={{ type: 'timing', delay, duration: 300 }}
-    >
-      <View style={[styles.row, styles.appearanceRow]}>
-        <View style={styles.appearanceHeader}>
-          <Icon name="settings" size={18} color={colors.textSecondary} />
-          <Text style={styles.rowLabel}>Appearance</Text>
-        </View>
-        <View style={styles.swatchRow}>
-          {accentThemes.map(t => {
-            const active = t.key === getAccentKey();
-            return (
-              <Pressable
-                key={t.key}
-                onPress={() => chooseAccent(t.key)}
-                hitSlop={6}
-                scaleTo={0.85}
-                style={[styles.swatch, { backgroundColor: t.accent }, active && styles.swatchActive]}
-              >
-                {active && <Icon name="checkmark" size={12} color="#FFF" />}
-              </Pressable>
-            );
-          })}
-        </View>
-        <Text style={styles.swatchHint}>
-          {accentThemes.find(t => t.key === getAccentKey())?.label ?? 'Ember'}
-          {getAccentKey() === 'ember' ? ' (default)' : ''}
-        </Text>
       </View>
     </MotiView>
   );
@@ -261,13 +212,6 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
               animate={{ opacity: 1, translateY: 0 }}
               transition={{ type: 'timing', duration: 300, delay: 450 }}
             >
-              {/* Measured so the BorderBeam can trace this card's exact outline.
-                  The travelling light is the affordance that says "tappable" —
-                  same cue as the paste-URL field on the save screen. */}
-              <View onLayout={(e) => {
-                const { width, height } = e.nativeEvent.layout;
-                setUsageCardSize((s) => (s.w === width && s.h === height ? s : { w: width, h: height }));
-              }}>
               <GlassCard tint="violet" intensity="low" style={styles.usageCard}>
                 {/* The whole header toggles the "what did I spend it on" list.
                     Only offer it when there's something to show. */}
@@ -355,18 +299,6 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                   </View>
                 )}
               </GlassCard>
-              {/* Only while there's something to open — a beam on a dead card
-                  would advertise an interaction that isn't there. */}
-              {usage.used > 0 && usageCardSize.w > 0 && (
-                <BorderBeam
-                  width={usageCardSize.w}
-                  height={usageCardSize.h}
-                  radius={radius.lg}
-                  color={colors.accentLight}
-                  strokeWidth={1.5}
-                />
-              )}
-              </View>
             </MotiView>
           </>
         )}
@@ -383,7 +315,6 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
         <Text style={styles.sectionLabel}>SETTINGS</Text>
         <View style={styles.menu}>
           <NavRow icon="create" label="Edit profile" path="/profile" delay={800} />
-          <AppearanceRow delay={900} />
           <Row icon="bell" label="Notifications" delay={1000} />
         </View>
 
@@ -536,16 +467,6 @@ const styles = themed(() => StyleSheet.create({
   soon: { backgroundColor: colors.accent + '22', borderRadius: radius.full, paddingHorizontal: 8, paddingVertical: 2 },
   soonText: { color: colors.accentLight, fontSize: 10, fontWeight: '800' },
 
-  appearanceRow: { flexDirection: 'column', alignItems: 'stretch', gap: spacing.sm },
-  appearanceHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  swatchRow: { flexDirection: 'row', gap: spacing.sm + 2, paddingLeft: 26 },
-  swatch: {
-    width: 26, height: 26, borderRadius: radius.full,
-    alignItems: 'center', justifyContent: 'center',
-    borderWidth: 2, borderColor: 'transparent',
-  },
-  swatchActive: { borderColor: '#FFF' },
-  swatchHint: { color: colors.textTertiary, fontSize: font.xs, paddingLeft: 26 },
 
   dangerRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
