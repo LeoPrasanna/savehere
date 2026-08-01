@@ -15,13 +15,20 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  */
 
 export const colors = {
-  // Surfaces — warm ink. Each step is one perceptible notch brighter.
-  background: '#0F0D0A',
-  surface: '#161310',
-  card: '#1C1814',
-  cardElevated: '#252019',
-  border: '#2B251D',        // hairline on card edges
-  borderLight: '#383126',   // slightly stronger, for inputs/dividers
+  // ── Surface ladder ──────────────────────────────────────────────────
+  // Elevation is expressed by STEPPING THIS LADDER, never by a shadow and
+  // never by a border. (Warp: "Never use borders or shadows to separate
+  // co-planar sections.") Each step is one perceptible notch brighter, so a
+  // card on a card still reads as raised without any drop shadow.
+  //
+  // The canvas is #0F0D0A — the same value Cron Calendar uses, arrived at
+  // independently. It was never the problem; the discipline around it was.
+  background: '#0F0D0A',    // 0 — canvas
+  surface: '#161310',       // 1 — sheets, headers
+  card: '#1C1814',          // 2 — cards, inputs
+  cardElevated: '#252019',  // 3 — raised card, active chip, menu
+  border: '#2B251D',        // hairline — DIVIDES, never elevates
+  borderLight: '#383126',   // stronger hairline, for inputs/dividers
 
   // Primary accent — ember. Use for primary actions, active states and links;
   // never as large background washes.
@@ -59,16 +66,29 @@ export const colors = {
 /** Gradient stop pairs — feed straight into <LinearGradient colors={...} />.
  *  Tight, single-hue ramps: enough depth to feel alive, never a rainbow.
  *  `hologram`/`neon` alias the brand ramp for compatibility. */
+/**
+ * ⚠️ These are deliberately FLAT — both stops of every action ramp are the same
+ * colour, so a <LinearGradient> renders as a solid fill.
+ *
+ * A gradient on every primary action is the single most recognisable
+ * "an agent made this" signature in modern UI, and both locked references ban
+ * it outright (Cron: "every button is either Action Orange or Deep Graphite").
+ * Flattening here kills it across ~20 call sites without touching one of them —
+ * the components keep their LinearGradient and simply stop looking generated.
+ *
+ * `scrim` and `darkSurface` keep real stops: those are legitimate image
+ * treatments (a scrim over a thumbnail), not decoration on a control.
+ */
 export const gradients = {
-  primary: ['#FF7A45', '#E4501F'] as const,      // ember ramp — primary actions
-  vibrant: ['#FF5C7A', '#E43D5F'] as const,      // warm pink ramp — workout action
-  sunset: ['#FFB35C', '#FF7A45'] as const,
-  cool: ['#5FC9BD', '#3FA79B'] as const,         // teal ramp — tasks action
-  success: ['#4FCE8F', '#33B274'] as const,
-  surface: ['#1C1814', '#161310'] as const,
+  primary: ['#FF6B3D', '#FF6B3D'] as const,      // ember — primary actions, FLAT
+  vibrant: ['#FF6B3D', '#FF6B3D'] as const,      // was pink; one accent only now
+  sunset: ['#FF6B3D', '#FF6B3D'] as const,
+  cool: ['#FF6B3D', '#FF6B3D'] as const,         // was teal; one accent only now
+  success: ['#4FCE8F', '#4FCE8F'] as const,      // status colour, keeps its role
+  surface: ['#1C1814', '#1C1814'] as const,
   scrim: ['transparent', 'rgba(15,13,10,0.0)', 'rgba(15,13,10,0.92)'] as const,
-  hologram: ['#FF7A45', '#E4501F'] as const,     // legacy alias → brand ramp
-  neon: ['#FF7A45', '#E4501F'] as const,         // legacy alias → brand ramp
+  hologram: ['#FF6B3D', '#FF6B3D'] as const,     // legacy alias → brand
+  neon: ['#FF6B3D', '#FF6B3D'] as const,         // legacy alias → brand
   darkSurface: ['#161310', '#0F0D0A'] as const,
 };
 
@@ -83,32 +103,54 @@ export const platformMeta: Record<string, { color: string; gradient: readonly [s
   unknown: { color: '#FF9770', gradient: ['#33251C', '#241A14'], icon: 'globe-outline', label: 'Web' },
 };
 
-/** Category visual identity — icon + tint for chips and cards.
- *  Vivid but warm-harmonized so they sit comfortably on ink. */
+/**
+ * Category identity is carried by the ICON and the LABEL — not by a hue.
+ *
+ * The previous map gave all 16 categories their own colour (fitness pink,
+ * cooking orange, tech teal, beauty magenta…). Designed products constrain
+ * colour; they don't assign every noun a hue. Both locked references forbid a
+ * second chromatic colour outright, and a 16-colour taxonomy is sixteen of them.
+ *
+ * Every category now resolves to the same quiet tint. `color` is retained as a
+ * key because ~6 call sites read it — they now all read the same value, so the
+ * rainbow disappears without a single component edit.
+ */
+const CATEGORY_TINT = '#B3A99A';   // = textSecondary; reads as label, not signal
+
 export const categoryMeta: Record<string, { icon: string; color: string }> = {
-  all: { icon: 'all', color: '#FF6B3D' },
-  fitness: { icon: 'fitness', color: '#FF6B8A' },
-  cooking: { icon: 'cooking', color: '#FFAE52' },
-  tech: { icon: 'tech', color: '#5FC9BD' },
-  motivation: { icon: 'motivation', color: '#FF8A5B' },
-  education: { icon: 'education', color: '#71C787' },
-  entertainment: { icon: 'entertainment', color: '#C98BFF' },
-  fashion: { icon: 'fashion', color: '#FF9BB1' },
-  beauty: { icon: 'beauty', color: '#E48BD2' },
-  travel: { icon: 'travel', color: '#5FB9E8' },
-  business: { icon: 'business', color: '#D9B36B' },
-  news: { icon: 'news', color: '#A29C90' },
-  health: { icon: 'health', color: '#63D69B' },
-  finance: { icon: 'finance', color: '#F4C430' },
-  general: { icon: 'general', color: '#B3A99A' },
-  other: { icon: 'other', color: '#B3A99A' },
+  all: { icon: 'all', color: CATEGORY_TINT },
+  fitness: { icon: 'fitness', color: CATEGORY_TINT },
+  cooking: { icon: 'cooking', color: CATEGORY_TINT },
+  tech: { icon: 'tech', color: CATEGORY_TINT },
+  motivation: { icon: 'motivation', color: CATEGORY_TINT },
+  education: { icon: 'education', color: CATEGORY_TINT },
+  entertainment: { icon: 'entertainment', color: CATEGORY_TINT },
+  fashion: { icon: 'fashion', color: CATEGORY_TINT },
+  beauty: { icon: 'beauty', color: CATEGORY_TINT },
+  travel: { icon: 'travel', color: CATEGORY_TINT },
+  business: { icon: 'business', color: CATEGORY_TINT },
+  news: { icon: 'news', color: CATEGORY_TINT },
+  health: { icon: 'health', color: CATEGORY_TINT },
+  finance: { icon: 'finance', color: CATEGORY_TINT },
+  general: { icon: 'general', color: CATEGORY_TINT },
+  other: { icon: 'other', color: CATEGORY_TINT },
 };
 
 export const categoryFor = (c?: string | null) =>
   categoryMeta[(c || 'other').toLowerCase()] ?? categoryMeta.other;
 
-/* ── Accent themes (Appearance) ──────────────────────────────────────────────
- * Five accent palettes; "ember" is the default brand look. Switching is LIVE:
+/* ── Accent theme (Appearance) ───────────────────────────────────────────────
+ * ONE accent. Iris / Ocean / Forest / Rose were removed 2026-07-31: a product
+ * whose accent the user can repaint does not own a colour, and both locked
+ * references ban a second chromatic hue (Cron: "Do not introduce additional
+ * vivid chromatic colors"; Warp: "a second hue breaks the restraint").
+ *
+ * The MECHANISM below is deliberately kept intact. It is load-bearing — every
+ * themed() sheet re-runs through it — and it costs nothing to keep while the
+ * set is a single entry. Re-adding a palette is a one-line change if that
+ * decision is ever reversed.
+ *
+ * Switching is LIVE:
  * `setAccentTheme()` mutates the token objects, regenerates every style sheet
  * created through `themed()` (module-level StyleSheet.create freezes values,
  * so those sheets are wrapped in factories that re-run on change), then
@@ -131,11 +173,7 @@ export interface AccentTheme {
 }
 
 export const accentThemes: readonly AccentTheme[] = [
-  { key: 'ember',  label: 'Ember',  accent: '#FF6B3D', accentDark: '#E4501F', accentLight: '#FF9770', ramp: ['#FF7A45', '#E4501F'] },
-  { key: 'iris',   label: 'Iris',   accent: '#8B7CFF', accentDark: '#6A55E8', accentLight: '#B0A6FF', ramp: ['#9C8CFF', '#6A55E8'] },
-  { key: 'ocean',  label: 'Ocean',  accent: '#3DA9FF', accentDark: '#1E7FE0', accentLight: '#7CC4FF', ramp: ['#55B4FF', '#1E7FE0'] },
-  { key: 'forest', label: 'Forest', accent: '#3DD68C', accentDark: '#21B473', accentLight: '#7BE5B3', ramp: ['#52DC99', '#21B473'] },
-  { key: 'rose',   label: 'Rose',   accent: '#FF5C8A', accentDark: '#E43D6F', accentLight: '#FF92B2', ramp: ['#FF6F97', '#E43D6F'] },
+  { key: 'ember',  label: 'Ember',  accent: '#FF6B3D', accentDark: '#E4501F', accentLight: '#FF9770', ramp: ['#FF6B3D', '#FF6B3D'] },
 ];
 
 function applyAccentTheme(t: AccentTheme) {
@@ -243,27 +281,57 @@ export const spacing = {
   xxl: 48,
 };
 
-/** Tighter, iOS-leaning corner hierarchy: controls < cards < sheets. */
+/**
+ * Three radii cover ~90% of the UI (Warp's rule): buttons 4, cards 16, pills
+ * for icon-only controls. A precise 4px control against a 16px card is what
+ * reads as engineered; uniform 12px everywhere reads as a default.
+ *
+ * Names are unchanged — call sites keep working, the shapes sharpen.
+ */
 export const radius = {
-  sm: 8,
-  md: 12,
-  lg: 16,
-  xl: 22,
-  full: 999,
+  sm: 4,      // buttons, inputs, chips — was 8
+  md: 10,     // small cards, toasts — was 12
+  lg: 16,     // cards, sheets (Warp: cards 16px)
+  xl: 20,     // large sheets — was 22
+  full: 999,  // pills — icon-only controls, badges
 };
 
-/** Typefaces. Manrope (loaded in app/_layout.tsx) is the display face for
- *  titles, headers and brand moments; body text stays on the system font
- *  (SF Pro on iOS) for native reading comfort. Until the font loads, RN falls
- *  back to the system face — same metrics class, no layout jump. */
+/**
+ * Motion, from Warp: 0.4s for state changes on a deliberately mechanical curve,
+ * 0.15s for micro-interactions. Deliberate and weighty, not bouncy.
+ *
+ * ⚠️ Warp's rule, worth keeping: transition COLOUR and OPACITY, never transform
+ * or scale, on anything navigational. Scale belongs to press feedback only
+ * (see components/Pressable.tsx), which is why it is not listed here.
+ */
+export const motion = {
+  instant: 120,   // toggles, checkbox fills
+  micro: 150,     // hover/press colour shifts
+  base: 240,      // enter/exit of local elements
+  state: 400,     // considered state change — Warp's signature duration
+  easing: [0.44, 0, 0.56, 1] as const,
+};
+
+/**
+ * ONE typeface. Manrope carries every weight; hierarchy comes from size and
+ * weight, not from switching family.
+ *
+ * Three families (Manrope + Fraunces serif + system) was a collection, not a
+ * system — and it is one of the audit's "assembled, not designed" tells. Both
+ * locked references use a single face across their whole range (Cron: Helvetica
+ * Neue from 13px to 140px; Warp: Matter for everything).
+ *
+ * `serif` / `serifBlack` are kept as KEYS and now resolve to Manrope, so the
+ * ~8 call sites that ask for a serif stop rendering a third font without any
+ * of them needing to change. Remove the keys in a later slice once those call
+ * sites are rewritten.
+ */
 export const typeface = {
   display: 'Manrope_800ExtraBold',
   displaySemi: 'Manrope_700Bold',
   displayMedium: 'Manrope_600SemiBold',
-  // Editorial serif for brand moments only: landing greeting, hero numbers,
-  // login wordmark, reel titles. Never on UI controls or body text.
-  serif: 'Fraunces_700Bold',
-  serifBlack: 'Fraunces_900Black',
+  serif: 'Manrope_800ExtraBold',        // was Fraunces_700Bold
+  serifBlack: 'Manrope_800ExtraBold',   // was Fraunces_900Black
 };
 
 /** Type scale — restrained, close to iOS defaults. Pair with the weights below. */
@@ -287,9 +355,15 @@ export const shadow = {
     ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.24, shadowRadius: 10 },
     default: { elevation: 5 },
   }),
+  /**
+   * ⚠️ Formerly an ember-tinted glow behind every primary action. Cron's
+   * explicit don't: "avoid box shadows that introduce strong light colors or
+   * blur". Now a plain neutral elevation, so ~10 call sites that spread
+   * `...shadow.glow` stop glowing without being edited.
+   */
   glow: Platform.select({
-    ios: { shadowColor: colors.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.32, shadowRadius: 12 },
-    default: { elevation: 8 },
+    ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.28, shadowRadius: 10 },
+    default: { elevation: 5 },
   }),
 } as const;
 

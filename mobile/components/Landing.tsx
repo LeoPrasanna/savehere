@@ -12,14 +12,12 @@ import { TodoGoalBar } from './TodoGoalBar';
 import { TODO_LANDING_TITLE } from '../constants/todoBrand';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
-import { AuroraBackground } from './AuroraBackground';
 import { ProfilePanel } from './ProfilePanel';
 import { colors, spacing, font, radius, gradients, shadow, typeface, themed } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { consumeReopenPanel } from '../services/sessionFlags';
 import { FEATURES, Feature } from '../constants/features';
 import { RollingTagline } from './RollingTagline';
-import { HolographicShimmer } from './HolographicShimmer';
 import { ASK_MIN_REELS } from '../constants/limits';
 
 // How many saves the home screen shows before handing off to the full library.
@@ -169,8 +167,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const [menuOpen, setMenuOpen] = useState(consumeReopenPanel());
   // A best-case "here's what SaveHere can do for you" line, picked once per open.
   const [greetingTip] = useState(() => GREETING_HELPERS[Math.floor(Math.random() * GREETING_HELPERS.length)]);
-  // Measured so the holographic shimmer can sweep the greeting line's exact box.
-  const [tipSize, setTipSize] = useState({ w: 0, h: 0 });
 
   useFocusEffect(
     useCallback(() => {
@@ -215,7 +211,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
 
   return (
     <View style={styles.screen}>
-      <AuroraBackground />
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.xl, paddingBottom: insets.bottom + 92 }]}
         showsVerticalScrollIndicator={false}
@@ -227,28 +222,11 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
             {fetchError ? (
               <Text style={styles.welcome}>Can't reach the server right now.</Text>
             ) : hasSaves ? (
-              // Best-case tip with a twinkling sparkle and a holographic shine
-              // sweeping across it — makes the line feel alive, not a dead stat.
-              <View
-                style={styles.tipWrap}
-                onLayout={(e) => {
-                  const { width, height } = e.nativeEvent.layout;
-                  setTipSize((s) => (s.w === width && s.h === height ? s : { w: width, h: height }));
-                }}
-              >
-                <MotiView
-                  from={{ opacity: 0.4, scale: 0.8, rotate: '-10deg' }}
-                  animate={{ opacity: 1, scale: 1.12, rotate: '10deg' }}
-                  transition={{ type: 'timing', duration: 1300, loop: true, repeatReverse: true }}
-                  style={styles.tipSparkle}
-                >
-                  <Icon name="sparkles" size={14} color={colors.accentLight} />
-                </MotiView>
-                <Text style={[styles.welcome, styles.tipText]}>{greetingTip}</Text>
-                {tipSize.w > 0 && (
-                  <HolographicShimmer width={tipSize.w} height={tipSize.h} color="rgba(255,255,255,0.10)" duration={1800} />
-                )}
-              </View>
+              // A plain line. It used to carry an animated sparkle and a
+              // holographic sweep — decoration standing in for hierarchy. If a
+              // line needs a twinkle to feel important, the type scale isn't
+              // doing its job.
+              <Text style={styles.welcome}>{greetingTip}</Text>
             ) : (
               <Text style={styles.welcome}>Your second brain for short-form content.</Text>
             )}
@@ -509,12 +487,6 @@ const styles = themed(() => StyleSheet.create({
   },
   hi: { color: colors.textPrimary, fontFamily: typeface.serifBlack, fontSize: font.display, lineHeight: 42, letterSpacing: -0.5 },
   welcome: { color: colors.textSecondary, fontSize: font.lg, lineHeight: 24, marginTop: spacing.sm },
-  tipWrap: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs,
-    marginTop: spacing.sm, overflow: 'hidden', borderRadius: radius.sm,
-  },
-  tipSparkle: { marginTop: 3 },
-  tipText: { flex: 1, marginTop: 0 },
 
   sectionLabel: { color: colors.textTertiary, fontSize: font.xs, fontWeight: '800', letterSpacing: 1.2 },
 
