@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pressable } from './Pressable';
@@ -6,7 +6,7 @@ import { Icon } from './Icon';
 import * as haptics from '../services/haptics';
 import { markEnteredLibrary, clearEnteredLibrary, hasEnteredLibrary } from '../services/sessionFlags';
 import { emitUi } from '../services/uiBus';
-import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
+import { colors, spacing, radius, themed } from '../constants/theme';
 
 /**
  * The app's primary navigation: five tabs, floating clear of the bottom edge.
@@ -31,14 +31,12 @@ interface Tab {
   key: string;
   icon: string;
   label: string;
-  /** The center action is the system's one inversion — filled, not outlined. */
-  primary?: boolean;
 }
 
 const TABS: Tab[] = [
   { key: 'home',    icon: 'home',     label: 'Home' },
   { key: 'library', icon: 'layers',   label: 'Library' },
-  { key: 'save',    icon: 'add',      label: 'Save', primary: true },
+  { key: 'save',    icon: 'add',      label: 'Save' },
   { key: 'slate',   icon: 'checkbox', label: 'Slate' },
   { key: 'ask',     icon: 'ask',      label: 'Ask' },
 ];
@@ -90,20 +88,22 @@ export function TabBar() {
           return (
             <Pressable
               key={t.key}
-              style={[styles.tab, t.primary && styles.tabPrimary]}
+              style={styles.tab}
               onPress={() => go(t.key)}
               accessibilityRole="button"
               accessibilityLabel={t.label}
             >
-              <Icon
-                name={t.icon}
-                size={t.primary ? 20 : 18}
-                color={t.primary ? colors.background : on ? colors.textPrimary : colors.textTertiary}
-                emphasis={on}
-              />
-              {!t.primary && (
-                <Text style={[styles.label, on && styles.labelOn]}>{t.label.toUpperCase()}</Text>
-              )}
+              {/* The active tab is a filled disc behind the glyph — the same
+                  inversion the primary button uses, just round. Nothing else
+                  marks state: no labels, no underline, no colour. */}
+              <View style={[styles.slot, on && styles.slotOn]}>
+                <Icon
+                  name={t.icon}
+                  size={19}
+                  color={on ? colors.background : colors.textSecondary}
+                  emphasis={on}
+                />
+              </View>
             </Pressable>
           );
         })}
@@ -121,31 +121,36 @@ const styles = themed(() => StyleSheet.create({
     paddingHorizontal: spacing.md,
     alignItems: 'center',
   },
-  // Floating: it sits clear of the bottom edge with canvas visible beneath, and
-  // carries a hairline rather than a shadow — this system has no elevation.
+  /**
+   * A floating PILL that hugs its contents rather than spanning the width —
+   * owner direction, matching the reference app's tab bar.
+   *
+   * ⚠️ Uses `radius.circle`, the system's one sanctioned round form (see
+   * constants/theme.ts). Everything that is not a tab bar, a category bubble or
+   * an auth button is still 0.
+   *
+   * The fill is a translucent ink wash rather than solid canvas, so the grid
+   * scrolling underneath stays faintly visible — that is what makes it read as
+   * floating above the content instead of a bar welded to the bottom.
+   */
   bar: {
     flexDirection: 'row',
-    alignItems: 'stretch',
-    alignSelf: 'stretch',
-    maxWidth: 460,
-    backgroundColor: colors.background,
+    alignItems: 'center',
+    alignSelf: 'center',
+    borderRadius: radius.circle,
+    backgroundColor: colors.tabBar,
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: colors.ghostLine,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    gap: 2,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: spacing.sm + 2,
+  tab: { alignItems: 'center', justifyContent: 'center' },
+  slot: {
+    width: 42, height: 42,
+    borderRadius: radius.circle,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
   },
-  // The one inversion, same grammar as the primary button everywhere else.
-  tabPrimary: { backgroundColor: colors.textPrimary },
-  label: {
-    color: colors.textTertiary,
-    fontFamily: typeface.label,
-    fontSize: 8,
-    letterSpacing: tracking.label,
-  },
-  labelOn: { color: colors.textPrimary },
+  slotOn: { backgroundColor: colors.textPrimary },
 }));

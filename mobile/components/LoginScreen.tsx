@@ -14,6 +14,10 @@ import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import * as haptics from '../services/haptics';
 
+import { Label, Body, Wordmark, GhostButton, FilledButton, Rule } from './kit';
+import { MockReel, MOCK_REEL_H } from './MockReel';
+import { colors, spacing, font, radius, tracking, typeface, themed } from '../constants/theme';
+
 /**
  * Apple and Google are mocked. Say so out loud rather than no-op.
  *
@@ -27,9 +31,6 @@ function notYet(provider: string) {
   if (Platform.OS === 'web') window.alert(msg);
   else Alert.alert('Not available yet', msg);
 }
-import { Label, Body, Wordmark, GhostButton, FilledButton, Rule } from './kit';
-import { MockReel, MOCK_REEL_H } from './MockReel';
-import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 
 type Mode = 'signin' | 'signup';
 type Step = 'welcome' | 'form';
@@ -526,11 +527,14 @@ const styles = themed(() => StyleSheet.create({
   welcome: { flex: 1, paddingHorizontal: spacing.lg, justifyContent: 'flex-end' },
   welcomeMid: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   welcomeSub: { marginTop: spacing.md, textAlign: 'center' },
-  authRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.sm },
-  // Square, not circular. The reference app's circular auth buttons are one of
-  // its most recognisable marks; this system is 0-radius everywhere anyway.
+  authRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.md },
+  // ⚠️ ROUND — owner direction, matching the reference app. These were square
+  // on the argument that the system is 0-radius everywhere; `radius.circle` now
+  // has a closed list of three sanctioned uses and this is one of them (see
+  // constants/theme.ts). Do not generalise it beyond that list.
   authBtn: {
-    width: 72, height: 72,
+    width: 68, height: 68,
+    borderRadius: radius.circle,
     borderWidth: 1,
     borderColor: colors.borderLight,
     alignItems: 'center',

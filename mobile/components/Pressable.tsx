@@ -5,6 +5,7 @@ import { motion } from '../constants/theme';
 interface Props {
   children?: ReactNode;
   onPress?: (e: GestureResponderEvent) => void;
+  onLongPress?: (e: GestureResponderEvent) => void;
   onLayout?: (e: LayoutChangeEvent) => void;
   style?: StyleProp<ViewStyle>;
   /** Ignored — kept so ~30 existing call sites don't need editing. See below. */
@@ -45,7 +46,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(RNPressable);
  * compiling. Delete the prop in a later sweep; it is not worth a 30-file diff.
  */
 export function Pressable({
-  children, onPress, onLayout, style, disabled, hitSlop,
+  children, onPress, onLongPress, onLayout, style, disabled, hitSlop,
   accessibilityLabel, accessibilityRole,
 }: Props) {
   const opacity = useRef(new Animated.Value(1)).current;
@@ -60,6 +61,7 @@ export function Pressable({
   return (
     <AnimatedPressable
       onPress={onPress}
+      onLongPress={onLongPress}
       onLayout={onLayout}
       onPressIn={() => !disabled && to(motion.pressOpacity)}
       onPressOut={() => to(1)}

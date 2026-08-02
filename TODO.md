@@ -426,6 +426,34 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
   bar, the pinned CTAs and the rebuilt tile all require a signed-in session, and
   the preview browser lost its staging token when the dev server restarted.
 
+- [x] **Round six — matching the reference more literally (2026-08-02).**
+  1. **Tab bar is a PILL**, icon-only, hugging its contents rather than spanning
+     the width. Active state is a filled disc behind the glyph — the system's
+     inversion, just round. Labels removed; the fill is a translucent wash
+     (`colors.tabBar`, new token) so content stays faintly visible through it,
+     which is what makes it read as floating rather than welded to the edge.
+  2. **⚠️ THE TILE NOW CARRIES NO TEXT AT ALL.** Third pass on this: caption
+     block → scrim overlay → bare picture. Each layer of metadata was the thing
+     making a wall of images read as a list of panels. Title, category, platform
+     and index are all gone from the grid; they live one tap away on the detail
+     screen, which has room for them. The only exception is a still-processing
+     save, which has no picture yet and would otherwise be an unexplained grey
+     rectangle.
+     ⚠️ **The visible × went with them, so delete moved to LONG-PRESS** (plus the
+     existing delete on the detail screen). Removing the affordance outright
+     would have been a silent functional loss; `Pressable` gained `onLongPress`
+     for it. If a visible control is wanted back on the grid, that is a one-line
+     revert — but it will cost the clean wall again.
+  3. **Auth buttons are round** (`radius.circle`, 68px). They were square on the
+     argument that the system is 0-radius everywhere.
+  ⚠️ `radius.circle` now has a **closed list of three sanctioned uses** — category
+  bubbles, the tab bar, the auth buttons — documented at the token. Everything
+  else is still 0, absolutely. Add to that list if you extend it; do not just
+  reach for it.
+  **Verified:** typecheck, `expo export`, auth buttons measured at 999px/68px on
+  a 393×852 viewport. **Still needs an owner pass:** tab bar and library grid,
+  both of which require a signed-in session.
+
 ---
 
 ## Mobile — Monetization

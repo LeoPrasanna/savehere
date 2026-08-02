@@ -55,6 +55,10 @@ interface Palette {
   danger: string; success: string; warning: string;
   scrimMid: string; scrimBottom: string;
   ghostLine: string; veil: string;
+  /** Translucent wash behind the floating tab bar, so content stays faintly
+   *  visible through it — that translucency is what makes it read as floating
+   *  above the page rather than welded to the bottom edge. */
+  tabBar: string;
 }
 
 /**
@@ -94,6 +98,7 @@ const PALETTES: Record<ColorScheme, Palette> = {
     scrimBottom: 'rgba(0,0,0,0.82)',
     ghostLine: 'rgba(248,248,248,0.12)',
     veil: 'rgba(248,248,248,0.45)',
+    tabBar: 'rgba(16,16,16,0.92)',
   },
   light: {
     background: '#FFFFFF',     // Arctic White (entire studios)
@@ -121,6 +126,7 @@ const PALETTES: Record<ColorScheme, Palette> = {
     scrimBottom: 'rgba(0,0,0,0.82)',
     ghostLine: 'rgba(0,0,0,0.14)',
     veil: 'rgba(248,248,248,0.45)',
+    tabBar: 'rgba(252,252,252,0.94)',
   },
 };
 
@@ -397,13 +403,18 @@ export const radius = {
   xl: 0,
   full: 0,
   /**
-   * ⚠️ THE ONE EXCEPTION, and it is deliberate.
+   * ⚠️ THE SANCTIONED CIRCLE — and its use is a closed list, not a free choice.
    *
-   * Owner direction (2026-08-01): category filters are round icon bubbles, the
-   * way the brief's reference app renders its avatar row. Nothing else in the
-   * system may use this — a circle is legible as "a person or a topic", which is
-   * exactly why it must not leak onto buttons, cards or inputs, where 0 is still
-   * absolute. Grep before you reach for it.
+   * Owner direction, matching the brief's reference app. Exactly three things
+   * may be round:
+   *   1. category filter bubbles (app/index.tsx)
+   *   2. the floating tab bar and its active slot (components/TabBar.tsx)
+   *   3. the welcome screen's auth buttons (components/LoginScreen.tsx)
+   *
+   * Everything else — cards, inputs, tiles, ghost/filled buttons, badges — is
+   * still 0, absolutely. The circle reads as "a chip you tap"; the moment it
+   * leaks onto a surface or a text field the system stops meaning anything.
+   * Grep this list before reaching for it, and add to the list if you extend it.
    */
   circle: 999,
 };

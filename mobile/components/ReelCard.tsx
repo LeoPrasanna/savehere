@@ -43,12 +43,13 @@ export function aspectFor(reel: { id: string; platform?: string | null }): numbe
 }
 
 /**
- * A mosaic tile. THE IMAGE IS THE TILE — nothing sits below it.
+ * A mosaic tile. THE IMAGE IS THE TILE — and nothing else is.
  *
- * Square-cornered, no card, no radius, no shadow, no coloured chrome; the title
- * and category ride on a scrim over the bottom of the picture. The separate
- * caption block this replaced was eating ~40% of every tile and turned the wall
- * into a column of black panels instead of a wall of images.
+ * Square-cornered, no card, no radius, no shadow, no chrome, and (after two
+ * rounds of owner review) no text either. It went caption-block → scrim overlay
+ * → bare picture, because each layer of metadata was the thing making a wall of
+ * images read as a list of panels. Title, category and platform all live one tap
+ * away on the detail screen, which has room for them.
  */
 function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardProps) {
   const router = useRouter();
@@ -91,7 +92,15 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
 
   return (
     <Animated.View style={[styles.frame, { opacity, aspectRatio: aspect }]}>
-      <Pressable style={styles.tap} onPress={() => router.push(`/reel/${reel.id}`)}>
+      {/* Long-press deletes. The visible × is gone — the reference grid has no
+          chrome on its tiles — but removing the affordance entirely would have
+          been a silent functional loss, so it moved to a gesture. Delete also
+          still lives on the detail screen, with a confirm. */}
+      <Pressable
+        style={styles.tap}
+        onPress={() => router.push(`/reel/${reel.id}`)}
+        onLongPress={handleDelete}
+      >
         {thumb ? (
           <Animated.Image
             // Keyed on the candidate so a fallback actually remounts the image
@@ -113,41 +122,26 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
           </View>
         )}
 
-        {/* Scrim: the title sits ON the image now, so it has to stay readable
-            over an unknown photograph. This keeps real gradient stops while
-            every other gradient in the system is flat. */}
-        <LinearGradient
-          colors={gradients.scrim}
-          start={{ x: 0, y: 0.3 }} end={{ x: 0, y: 1 }}
-          style={[styles.scrim, { pointerEvents: 'none' }]}
-        />
+        {/* ⚠️ NOTHING SITS ON THE PICTURE.
+            No title, no category, no index, no scrim — the reference grid this
+            is built against carries no text on its tiles at all, and every
+            overlay added here was the thing making the wall look like a list
+            instead of a wall. The title is one tap away on the detail screen.
 
-        <Text style={styles.overIndex}>{String(index + 1).padStart(2, '0')}</Text>
-
-        {/* Everything the tile has to say, over the image. The separate caption
-            block this replaces was taking ~40% of the tile and turned the wall
-            into a list of black panels; the image is the tile now. */}
-        <View style={styles.overlay}>
-          <View style={styles.statusRow}>
-            {isPending && (
-              <>
-                <ActivityIndicator size="small" color={onImage.primary} />
-                <Text style={styles.meta}>READING</Text>
-              </>
-            )}
-            {failed && <Text style={styles.meta}>NO TEXT</Text>}
+            The ONLY exception is a still-processing save, which has no picture
+            worth looking at yet and would otherwise be an unexplained grey
+            rectangle. It says so, and stops saying so the moment it lands. */}
+        {isPending && (
+          <View style={styles.statusStrip}>
+            <ActivityIndicator size="small" color={onImage.primary} />
+            <Text style={styles.meta}>READING</Text>
           </View>
-          <Text style={styles.title} numberOfLines={2}>
-            {reel.title || (isPending ? 'Saving…' : 'Untitled')}
-          </Text>
-          <Text style={styles.meta} numberOfLines={1}>
-            {(reel.category || 'other').toUpperCase()}
-          </Text>
-        </View>
-      </Pressable>
-
-      <Pressable style={styles.delete} onPress={handleDelete} hitSlop={10} accessibilityLabel="Remove save">
-        <Icon name="close" size={11} color={onImage.muted} />
+        )}
+        {failed && (
+          <View style={styles.statusStrip}>
+            <Text style={styles.meta}>NO TEXT</Text>
+          </View>
+        )}
       </Pressable>
     </Animated.View>
   );
@@ -178,54 +172,21 @@ const styles = themed(() => StyleSheet.create({
 
   image: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
   imageEmpty: { alignItems: 'center', justifyContent: 'center' },
-  // Taller than the old 72px strip because the title lives in here now.
-  scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '58%' },
 
-  overIndex: {
+  // The one thing allowed on a tile, and only while it is still processing.
+  statusStrip: {
     position: 'absolute',
-    top: spacing.sm,
-    left: spacing.sm,
-    color: onImage.muted,
-    fontFamily: typeface.label,
-    fontSize: font.xs,
-    letterSpacing: tracking.label,
-    fontVariant: ['tabular-nums'],
-  },
-
-  overlay: {
-    position: 'absolute',
-    left: spacing.sm,
-    right: spacing.sm,
-    bottom: spacing.sm,
-    gap: 3,
-  },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  // ⚠️ Fixed light tones, not `colors.*` — this text sits on a photograph, and
-  // the photograph does not invert between light and dark mode.
-  title: {
-    color: onImage.primary,
-    fontFamily: typeface.display,
-    fontSize: font.sm,
-    lineHeight: 16,
-    letterSpacing: -0.2,
-  },
-  meta: {
-    color: onImage.muted,
-    fontFamily: typeface.label,
-    fontSize: font.xs,
-    letterSpacing: tracking.label,
-  },
-
-  // Quieter than it was: a white X on every tile read as the loudest mark on
-  // the wall. Muted, and it sits on the scrim rather than the picture.
-  delete: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 28,
-    height: 28,
+    left: spacing.sm, right: spacing.sm, bottom: spacing.sm,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 10,
+    gap: spacing.xs,
+  },
+  // ⚠️ Fixed light tones, not `colors.*` — this sits on a photograph, and the
+  // photograph does not invert between light and dark mode.
+  meta: {
+    color: onImage.primary,
+    fontFamily: typeface.label,
+    fontSize: font.xs,
+    letterSpacing: tracking.label,
   },
 }));
