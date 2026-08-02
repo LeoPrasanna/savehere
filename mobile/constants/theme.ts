@@ -55,10 +55,11 @@ interface Palette {
   danger: string; success: string; warning: string;
   scrimMid: string; scrimBottom: string;
   ghostLine: string; veil: string;
-  /** Translucent wash behind the floating tab bar, so content stays faintly
-   *  visible through it — that translucency is what makes it read as floating
-   *  above the page rather than welded to the bottom edge. */
-  tabBar: string;
+  /** Top → bottom stops for the tab bar pill. A slightly lifted top edge is
+   *  what gives the pill its shape against a dark page; a flat fill reads as a
+   *  hole punched in the canvas. */
+  tabBarTop: string;
+  tabBarBottom: string;
 }
 
 /**
@@ -98,7 +99,8 @@ const PALETTES: Record<ColorScheme, Palette> = {
     scrimBottom: 'rgba(0,0,0,0.82)',
     ghostLine: 'rgba(248,248,248,0.12)',
     veil: 'rgba(248,248,248,0.45)',
-    tabBar: 'rgba(16,16,16,0.92)',
+    tabBarTop: 'rgba(46,46,46,0.96)',
+    tabBarBottom: 'rgba(12,12,12,0.96)',
   },
   light: {
     background: '#FFFFFF',     // Arctic White (entire studios)
@@ -126,7 +128,8 @@ const PALETTES: Record<ColorScheme, Palette> = {
     scrimBottom: 'rgba(0,0,0,0.82)',
     ghostLine: 'rgba(0,0,0,0.14)',
     veil: 'rgba(248,248,248,0.45)',
-    tabBar: 'rgba(252,252,252,0.94)',
+    tabBarTop: 'rgba(255,255,255,0.98)',
+    tabBarBottom: 'rgba(232,232,232,0.98)',
   },
 };
 
@@ -385,6 +388,19 @@ export const spacing = {
   xl: 32,
   xxl: 48,
 };
+
+/**
+ * The mosaic gutter — used as BOTH the gap between tiles and the grid's own
+ * edge padding, so the rhythm is even all the way to the screen edge.
+ *
+ * ⚠️ ONE CONSTANT, THREE CONSUMERS: `app/index.tsx` (the masonry),
+ * `components/SkeletonCard.tsx` (the loading placeholder) and
+ * `app/rediscover.tsx`. They MUST agree — the skeleton renders on every
+ * category switch, and when its spacing didn't match the real grid the whole
+ * page visibly re-flowed the moment tiles landed. That was the "doesn't match
+ * in every category" symptom: not the tiles, the placeholder underneath them.
+ */
+export const GRID_GAP = 8;
 
 /**
  * ⚠️ EVERY RADIUS IS ZERO. This is the reference's one absolute rule: "Never

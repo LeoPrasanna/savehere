@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList, ActivityIndicator, useWindowDimensions } fr
 import { api, Reel } from '../services/api';
 import { ReelCard } from '../components/ReelCard';
 import { Label, Body, Title, Rule } from '../components/kit';
-import { colors, spacing, font, themed } from '../constants/theme';
+import { colors, spacing, font, GRID_GAP, themed } from '../constants/theme';
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -73,8 +73,8 @@ export default function RediscoverScreen() {
         keyExtractor={(r: any) => r.id}
         numColumns={numColumns}
         key={numColumns}
-        // Same 2px gutter as the library grid.
-        columnWrapperStyle={{ gap: 2 }}
+        // Same gutter as the library grid — one constant, no drift.
+        columnWrapperStyle={{ gap: GRID_GAP, paddingHorizontal: GRID_GAP }}
         ListHeaderComponent={
           <View style={styles.head}>
             <Body style={styles.sub}>
@@ -104,7 +104,7 @@ const styles = themed(() => StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
   },
-  list: { paddingBottom: spacing.xxl },
+  list: { paddingBottom: 116, gap: GRID_GAP },
   head: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg, gap: spacing.lg },
   sub: { fontSize: font.sm, lineHeight: 20 },
   emptyTitle: { marginTop: spacing.xs },

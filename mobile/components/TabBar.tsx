@@ -1,4 +1,5 @@
 import { View, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pressable } from './Pressable';
@@ -82,9 +83,27 @@ export function TabBar() {
       style={[styles.wrap, { paddingBottom: insets.bottom + spacing.sm }]}
       pointerEvents="box-none"
     >
+      {/* Content dissolves into the canvas behind the bar, rather than running
+          under a hard edge. Sits below the pill in the stack. */}
+      <LinearGradient
+        colors={['transparent', colors.background]}
+        style={[styles.fade, { pointerEvents: 'none' }]}
+      />
+
       <View style={styles.bar}>
+        {/* The pill's own fill is a gradient, not a flat wash: a slightly lifted
+            top edge is what gives it shape against a dark page. A flat fill
+            reads as a hole punched in the canvas. */}
+        <LinearGradient
+          colors={[colors.tabBarTop, colors.tabBarBottom]}
+          style={[styles.barFill, { pointerEvents: 'none' }]}
+        />
         {TABS.map(t => {
           const on = active === t.key;
+          // Save is deliberately larger and always filled — it is the action the
+          // whole app exists for, and at equal weight it disappeared into a row
+          // of five identical glyphs (owner: "make the + pop out a bit").
+          const isSave = t.key === 'save';
           return (
             <Pressable
               key={t.key}
@@ -96,12 +115,16 @@ export function TabBar() {
               {/* The active tab is a filled disc behind the glyph — the same
                   inversion the primary button uses, just round. Nothing else
                   marks state: no labels, no underline, no colour. */}
-              <View style={[styles.slot, on && styles.slotOn]}>
+              <View style={[
+                styles.slot,
+                on && styles.slotOn,
+                isSave && styles.slotSave,
+              ]}>
                 <Icon
                   name={t.icon}
-                  size={19}
-                  color={on ? colors.background : colors.textSecondary}
-                  emphasis={on}
+                  size={isSave ? 24 : 19}
+                  color={on || isSave ? colors.background : colors.textSecondary}
+                  emphasis={on || isSave}
                 />
               </View>
             </Pressable>
@@ -121,30 +144,35 @@ const styles = themed(() => StyleSheet.create({
     paddingHorizontal: spacing.md,
     alignItems: 'center',
   },
+  // The dissolve behind the bar. Tall enough that content is already fading
+  // before it reaches the pill.
+  fade: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 132 },
   /**
    * A floating PILL that hugs its contents rather than spanning the width —
    * owner direction, matching the reference app's tab bar.
    *
-   * ⚠️ Uses `radius.circle`, the system's one sanctioned round form (see
-   * constants/theme.ts). Everything that is not a tab bar, a category bubble or
-   * an auth button is still 0.
+   * ⚠️ Uses `radius.circle`, one of the system's three sanctioned round forms
+   * (see constants/theme.ts). Everything else is still 0.
    *
-   * The fill is a translucent ink wash rather than solid canvas, so the grid
-   * scrolling underneath stays faintly visible — that is what makes it read as
-   * floating above the content instead of a bar welded to the bottom.
+   * The fill is translucent so content stays faintly visible through it — that
+   * is what makes it read as floating above the page rather than welded to the
+   * bottom edge.
    */
   bar: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'center',
     borderRadius: radius.circle,
-    backgroundColor: colors.tabBar,
     borderWidth: 1,
     borderColor: colors.ghostLine,
     paddingHorizontal: 6,
     paddingVertical: 6,
     gap: 2,
+    // overflow:hidden clips the gradient fill to the pill's radius. Without it
+    // the LinearGradient paints a square behind the rounded border.
+    overflow: 'hidden',
   },
+  barFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   tab: { alignItems: 'center', justifyContent: 'center' },
   slot: {
     width: 42, height: 42,
@@ -153,4 +181,12 @@ const styles = themed(() => StyleSheet.create({
     justifyContent: 'center',
   },
   slotOn: { backgroundColor: colors.textPrimary },
+  // Bigger than its neighbours and permanently filled. `margin: -5` lets it
+  // outgrow the pill's own padding so it sits proud of the bar instead of
+  // stretching it.
+  slotSave: {
+    width: 52, height: 52,
+    margin: -5,
+    backgroundColor: colors.textPrimary,
+  },
 }));

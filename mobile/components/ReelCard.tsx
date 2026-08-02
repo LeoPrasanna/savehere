@@ -122,26 +122,32 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
           </View>
         )}
 
-        {/* ⚠️ NOTHING SITS ON THE PICTURE.
-            No title, no category, no index, no scrim — the reference grid this
-            is built against carries no text on its tiles at all, and every
-            overlay added here was the thing making the wall look like a list
-            instead of a wall. The title is one tap away on the detail screen.
+        {/* ⚠️ THE TEXT IS AN OVERLAY, NOT A CAPTION BLOCK — that distinction is
+            the whole point. It rides on a scrim INSIDE the picture's bounds, so
+            it costs the tile no height at all. The version that made the wall
+            look like a list added a panel BELOW the image and grew every tile
+            by ~40%; this adds nothing. */}
+        <LinearGradient
+          colors={gradients.scrim}
+          start={{ x: 0, y: 0.35 }} end={{ x: 0, y: 1 }}
+          style={[styles.scrim, { pointerEvents: 'none' }]}
+        />
 
-            The ONLY exception is a still-processing save, which has no picture
-            worth looking at yet and would otherwise be an unexplained grey
-            rectangle. It says so, and stops saying so the moment it lands. */}
-        {isPending && (
-          <View style={styles.statusStrip}>
-            <ActivityIndicator size="small" color={onImage.primary} />
-            <Text style={styles.meta}>READING</Text>
-          </View>
-        )}
-        {failed && (
-          <View style={styles.statusStrip}>
-            <Text style={styles.meta}>NO TEXT</Text>
-          </View>
-        )}
+        <View style={styles.overlay}>
+          {isPending && (
+            <View style={styles.statusRow}>
+              <ActivityIndicator size="small" color={onImage.primary} />
+              <Text style={styles.meta}>READING</Text>
+            </View>
+          )}
+          {failed && <Text style={styles.meta}>NO TEXT</Text>}
+          <Text style={styles.title} numberOfLines={2}>
+            {reel.title || (isPending ? 'Saving…' : 'Untitled')}
+          </Text>
+          <Text style={styles.meta} numberOfLines={1}>
+            {(reel.category || 'other').toUpperCase()}
+          </Text>
+        </View>
       </Pressable>
     </Animated.View>
   );
@@ -173,18 +179,25 @@ const styles = themed(() => StyleSheet.create({
   image: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
   imageEmpty: { alignItems: 'center', justifyContent: 'center' },
 
-  // The one thing allowed on a tile, and only while it is still processing.
-  statusStrip: {
+  // Inside the picture's bounds — costs the tile no height.
+  scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' },
+  overlay: {
     position: 'absolute',
     left: spacing.sm, right: spacing.sm, bottom: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
+    gap: 2,
   },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, marginBottom: 2 },
   // ⚠️ Fixed light tones, not `colors.*` — this sits on a photograph, and the
   // photograph does not invert between light and dark mode.
-  meta: {
+  title: {
     color: onImage.primary,
+    fontFamily: typeface.display,
+    fontSize: font.sm,
+    lineHeight: 16,
+    letterSpacing: -0.2,
+  },
+  meta: {
+    color: onImage.muted,
     fontFamily: typeface.label,
     fontSize: font.xs,
     letterSpacing: tracking.label,

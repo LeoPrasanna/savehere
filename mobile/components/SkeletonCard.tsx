@@ -1,12 +1,12 @@
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { colors, spacing, themed } from '../constants/theme';
+import { colors, spacing, GRID_GAP, themed } from '../constants/theme';
 
 /**
  * Content-shaped loading placeholder for the library grid.
  *
- * Matches the real frame exactly — 3:4 portrait, hairline seam, no radius, no
- * gutter — so nothing shifts when the real tiles land. A gentle opacity pulse
+ * Matches the real frame exactly — 3:4 portrait, no radius, same GRID_GAP — so
+ * nothing shifts when the real tiles land. A gentle opacity pulse
  * (no shimmer sweep); the pulse stops existing the moment real cards replace it,
  * so the loop never competes with content.
  */
@@ -40,7 +40,7 @@ export function SkeletonGrid({ columns = 2, rows = 3 }: { columns?: number; rows
   return (
     <View style={styles.grid}>
       {Array.from({ length: columns * rows }).map((_, i) => (
-        <View key={i} style={{ width: `${100 / columns}%`, padding: 1 }}>
+        <View key={i} style={{ width: `${100 / columns}%`, padding: GRID_GAP / 2 }}>
           <SkeletonCard index={i} />
         </View>
       ))}
@@ -49,10 +49,12 @@ export function SkeletonGrid({ columns = 2, rows = 3 }: { columns?: number; rows
 }
 
 const styles = themed(() => StyleSheet.create({
-  // Matches the real grid: full-bleed, 2px gutters, portrait tiles — so nothing
-  // jumps when the real ones land. The gutter comes from each cell's 1px
-  // padding (1 + 1 = 2 between neighbours); a `gap` here would double it.
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  // ⚠️ MUST MATCH THE REAL GRID. This renders on every category switch, and any
+  // difference in spacing shows up as the whole page re-flowing the instant the
+  // real tiles land. The gutter comes from each cell's half-gap padding
+  // (GRID_GAP/2 + GRID_GAP/2 = GRID_GAP between neighbours), and the outer
+  // padding gives the same space at the screen edge.
+  grid: { flexDirection: 'row', flexWrap: 'wrap', padding: GRID_GAP / 2 },
   frame: {
     aspectRatio: 3 / 4,
     backgroundColor: colors.card,

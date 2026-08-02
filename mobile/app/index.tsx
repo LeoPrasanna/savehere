@@ -17,7 +17,7 @@ import { Label, Body, Title, Rule, GhostButton, Wordmark } from '../components/k
 import { hasEnteredLibrary, markEnteredLibrary, clearEnteredLibrary } from '../services/sessionFlags';
 import { onUi, emitUi } from '../services/uiBus';
 import { ASK_MIN_REELS } from '../constants/limits';
-import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, themed } from '../constants/theme';
+import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, GRID_GAP, themed } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
 const PAGE = 24;
@@ -449,16 +449,20 @@ const styles = themed(() => StyleSheet.create({
   },
 
   grid: { flex: 1 },
-  // Full-bleed to the screen edge — no page margin — with a hairline GUTTER
-  // between tiles rather than a shared seam. The tiles carry no border of their
-  // own now that the image runs to their edge, so a 2px gap of canvas is what
-  // separates them; flush images with no gap read as one continuous smear.
-  masonry: { flexDirection: 'row', alignItems: 'flex-start', gap: 2 },
+  // ⚠️ GRID_GAP is used for BOTH the column gap and the page's own side padding,
+  // so the space at the screen edge matches the space between tiles. A gutter in
+  // the middle with none at the edges reads as a mistake.
+  masonry: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: GRID_GAP,
+    paddingHorizontal: GRID_GAP,
+  },
   // minWidth:0 is load-bearing on react-native-web — without it a long title
   // inside a tile can push its column wider than its share.
-  column: { flex: 1, minWidth: 0, gap: 2 },
+  column: { flex: 1, minWidth: 0, gap: GRID_GAP },
   // Clears the floating tab bar (its own height + the safe-area inset it adds).
-  list: { paddingBottom: 116 },
+  list: { paddingTop: GRID_GAP, paddingBottom: 116 },
   disclaimer: {
     fontSize: font.sm,
     lineHeight: 19,
