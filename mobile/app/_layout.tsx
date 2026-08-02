@@ -7,11 +7,15 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold,
 } from '@expo-google-fonts/inter';
-import { HeaderHomeButton } from '../components/HomeButton';
+import { HeaderMenuButton } from '../components/HomeButton';
 import { LoginScreen } from '../components/LoginScreen';
 import { Confetti } from '../components/Confetti';
+import { TabBar } from '../components/TabBar';
+import { ProfilePanel } from '../components/ProfilePanel';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { OnboardingModal } from '../components/OnboardingModal';
+import { onUi } from '../services/uiBus';
+import { consumeReopenPanel } from '../services/sessionFlags';
 import {
   colors, font, typeface, themed, onSchemeChange, setScheme, isDark, SCHEME_STORAGE_KEY,
 } from '../constants/theme';
@@ -36,7 +40,9 @@ function AppStack() {
           color: colors.textSecondary,
         },
         headerShadowVisible: false,
-        headerRight: () => <HeaderHomeButton />,
+        // Hamburger on every stack route — the owner's requirement that it be
+        // reachable everywhere. It was a Home button; Home is a tab now.
+        headerRight: () => <HeaderMenuButton />,
         contentStyle: { backgroundColor: colors.background },
       }}
     >
@@ -58,6 +64,21 @@ function AppStack() {
       <Stack.Screen name="workout/session/[reelId]" options={{ title: '', headerShown: false }} />
     </Stack>
   );
+}
+
+/**
+ * The one profile panel, owned by the root.
+ *
+ * Opened from any screen's hamburger via the ui bus. `reels` is empty on purpose
+ * — the panel prefers the server's own whole-library counts from `getUsage()`
+ * and only falls back to a passed-in sample, which was always an undercount
+ * anyway (it was whatever page happened to be loaded).
+ */
+function AppProfilePanel() {
+  // Reopens itself after a scheme switch remounts the tree (one-shot flag).
+  const [open, setOpen] = useState(consumeReopenPanel);
+  useEffect(() => onUi('openProfile', () => setOpen(true)), []);
+  return <ProfilePanel visible={open} onClose={() => setOpen(false)} reels={[]} />;
 }
 
 // Gate the whole app on auth: spinner during the initial session check, the login
@@ -99,7 +120,15 @@ function Gate() {
           <ActivityIndicator color={colors.textPrimary} size="large" />
         </View>
       ) : session ? (
-        <AppStack key={`app-${schemeEpoch}`} />
+        <>
+          <AppStack key={`app-${schemeEpoch}`} />
+          {/* The app chrome lives ABOVE the router so it is identical on every
+              route and cannot drift between them: the floating tab bar, and the
+              single profile panel that every screen's hamburger opens through
+              the ui bus. Previously each screen rendered its own panel. */}
+          <TabBar key={`tabs-${schemeEpoch}`} />
+          <AppProfilePanel key={`panel-${schemeEpoch}`} />
+        </>
       ) : (
         <LoginScreen key={`login-${schemeEpoch}`} />
       )}

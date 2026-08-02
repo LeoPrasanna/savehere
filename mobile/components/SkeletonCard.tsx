@@ -26,10 +26,9 @@ export function SkeletonCard({ index = 0 }: { index?: number }) {
 
   return (
     <Animated.View style={[styles.frame, { opacity: pulse }]}>
-      <View style={styles.cover} />
+      {/* Two lines low in the frame, where the real tile's title overlay sits. */}
       <View style={styles.body}>
         <View style={[styles.line, { width: '85%' }]} />
-        <View style={[styles.line, { width: '60%' }]} />
         <View style={[styles.line, styles.thin, { width: '40%' }]} />
       </View>
     </Animated.View>
@@ -41,7 +40,7 @@ export function SkeletonGrid({ columns = 2, rows = 3 }: { columns?: number; rows
   return (
     <View style={styles.grid}>
       {Array.from({ length: columns * rows }).map((_, i) => (
-        <View key={i} style={{ width: `${100 / columns}%` }}>
+        <View key={i} style={{ width: `${100 / columns}%`, padding: 1 }}>
           <SkeletonCard index={i} />
         </View>
       ))}
@@ -50,15 +49,16 @@ export function SkeletonGrid({ columns = 2, rows = 3 }: { columns?: number; rows
 }
 
 const styles = themed(() => StyleSheet.create({
-  // No page margin and no gutter — the real grid is full-bleed and flush, and a
-  // skeleton that isn't would make the whole page jump on load.
+  // Matches the real grid: full-bleed, 2px gutters, portrait tiles — so nothing
+  // jumps when the real ones land. The gutter comes from each cell's 1px
+  // padding (1 + 1 = 2 between neighbours); a `gap` here would double it.
   grid: { flexDirection: 'row', flexWrap: 'wrap' },
   frame: {
-    borderWidth: 0.5,
-    borderColor: colors.ghostLine,
+    aspectRatio: 3 / 4,
+    backgroundColor: colors.card,
+    justifyContent: 'flex-end',
   },
-  cover: { width: '100%', aspectRatio: 3 / 4, backgroundColor: colors.card },
   body: { padding: spacing.sm, gap: 6 },
-  line: { height: 9, backgroundColor: colors.card },
+  line: { height: 9, backgroundColor: colors.cardElevated },
   thin: { height: 7 },
 }));

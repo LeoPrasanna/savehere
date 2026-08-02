@@ -78,7 +78,7 @@ export default function ProScreen() {
       {page === 1 ? (
         /* ── 01 · What you get ────────────────────────────────────────────── */
         <ScrollView
-          contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + spacing.xxl }]}
+          contentContainerStyle={[styles.body, { paddingBottom: spacing.lg }]}
           showsVerticalScrollIndicator={false}
         >
           <Label wide style={styles.eyebrow}>SaveHere Pro</Label>
@@ -100,6 +100,16 @@ export default function ProScreen() {
             ))}
           </View>
 
+        </ScrollView>
+      ) : null}
+
+      {/* ⚠️ PLAN + PRICE ARE PINNED, NOT AT THE END OF THE SCROLL.
+          Five benefit paragraphs sat above this, so on a phone the price and the
+          Continue button were both below the fold — a paywall where you cannot
+          see what it costs without scrolling past the sales pitch. The benefits
+          scroll; what you are being asked to pay does not move. */}
+      {page === 1 && (
+        <View style={[styles.dock, { paddingBottom: insets.bottom + spacing.md }]}>
           <Label wide style={styles.pickHead}>Choose a plan</Label>
           <View style={styles.plans}>
             {pricing.plans.map(p => {
@@ -138,11 +148,13 @@ export default function ProScreen() {
             Auto-renews {plan.cadence === 'week' ? 'weekly' : 'monthly'} until cancelled. Cancel any
             time from your account. Prices shown in {pricing.code}.
           </Text>
-        </ScrollView>
-      ) : (
+        </View>
+      )}
+
+      {page === 2 && (
         /* ── 02 · Payment ─────────────────────────────────────────────────── */
         <ScrollView
-          contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + spacing.xxl }]}
+          contentContainerStyle={[styles.body, { paddingBottom: spacing.lg }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -202,13 +214,19 @@ export default function ProScreen() {
             placeholder="As printed" autoCapitalize="words" accessibilityLabel="Name on card"
           />
 
+        </ScrollView>
+      )}
+
+      {/* Same reasoning as page 01: the amount and the button that charges it
+          stay on screen while the card form scrolls. */}
+      {page === 2 && (
+        <View style={[styles.dock, { paddingBottom: insets.bottom + spacing.md }]}>
           {busy ? (
             <View style={styles.busy}><ActivityIndicator color={colors.textPrimary} /></View>
           ) : (
             <FilledButton
               label={`Pay ${money(pricing, plan.price)}`}
               onPress={pay}
-              style={styles.cta}
             />
           )}
 
@@ -221,7 +239,7 @@ export default function ProScreen() {
             Auto-renews {plan.cadence === 'week' ? 'weekly' : 'monthly'} at {money(pricing, plan.price)} until
             cancelled. Cancel any time from your account.
           </Text>
-        </ScrollView>
+        </View>
       )}
     </View>
   );
@@ -257,7 +275,16 @@ const styles = themed(() => StyleSheet.create({
   },
   topBtn: { padding: spacing.xs, marginLeft: -spacing.xs },
 
-  body: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl },
+  body: { paddingHorizontal: spacing.lg, paddingTop: spacing.xl, flexGrow: 1 },
+  // The pinned bottom section. Keeps price + CTA on screen while the sales copy
+  // and the card form scroll behind it.
+  dock: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.ghostLine,
+  },
   eyebrow: { marginBottom: spacing.md },
   hero: { marginBottom: spacing.md },
   lede: { marginBottom: spacing.xl },
@@ -278,8 +305,8 @@ const styles = themed(() => StyleSheet.create({
   },
   benefitDetail: { fontSize: font.sm, lineHeight: 20 },
 
-  pickHead: { marginBottom: spacing.md },
-  plans: { gap: spacing.sm, marginBottom: spacing.xl },
+  pickHead: { marginBottom: spacing.sm },
+  plans: { gap: spacing.sm, marginBottom: spacing.md },
   // Selection reads by BORDER WEIGHT, not fill or hue — the system has no
   // second colour to spend and a filled card would out-shout the CTA.
   plan: {

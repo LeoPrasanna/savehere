@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { Icon } from '../components/Icon';
 import { api } from '../services/api';
@@ -52,6 +53,7 @@ function parseError(e: any): string {
 
 export default function SaveScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
@@ -230,28 +232,34 @@ export default function SaveScreen() {
           </View>
         )}
 
+      </ScrollView>
+
+      {/* ⚠️ PINNED, NOT AT THE END OF THE SCROLL.
+          "Good to know" is eight paragraphs long, and with the button after it
+          the primary action of the screen sat below the fold on a phone — you
+          had to scroll past the small print to save anything. The notes scroll;
+          the button does not move. */}
+      <View style={[styles.footer, { paddingBottom: insets.bottom + spacing.md }]}>
         {loading ? (
           <GhostButton
             label={success ? 'Saved' : `Working  ${stepIdx + 1}/${N}`}
             disabled
-            style={styles.cta}
           />
         ) : (
           <FilledButton
             label="Save & summarize"
             trailing="→"
             onPress={handleSave}
-            style={styles.cta}
           />
         )}
-      </ScrollView>
+      </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = themed(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  inner: { flexGrow: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xxl },
+  inner: { flexGrow: 1, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.lg },
 
   title: { marginTop: spacing.sm },
   hint: { marginTop: spacing.sm },
@@ -308,5 +316,11 @@ const styles = themed(() => StyleSheet.create({
   noteIndex: { width: 22, paddingTop: 3 },
   noteText: { flex: 1, fontSize: font.sm, lineHeight: 19 },
 
-  cta: { marginTop: spacing.xl },
+  footer: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    backgroundColor: colors.background,
+    borderTopWidth: 1,
+    borderTopColor: colors.ghostLine,
+  },
 }));

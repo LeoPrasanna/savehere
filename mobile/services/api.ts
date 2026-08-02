@@ -18,6 +18,29 @@ export function thumbUrl(url?: string | null): string | undefined {
   return url;
 }
 
+/**
+ * The un-letterboxed YouTube thumbnail, when one exists.
+ *
+ * ⚠️ `hqdefault.jpg` / `hq2.jpg` are ALWAYS 480×360 (4:3). For a Short — i.e.
+ * most of what this app saves — the vertical frame is pillarboxed into that 4:3
+ * box with BLACK BARS BAKED INTO THE JPEG. No amount of `resizeMode` or cropping
+ * removes them cleanly; they are pixels in the file, and cropping hard enough to
+ * clear them throws away a third of the actual picture.
+ *
+ * `oardefault.jpg` ("original aspect ratio") serves the real 1080×1920 frame with
+ * no bars. Measured on a saved Short: hqdefault → 480×360, oardefault → 1080×1920.
+ *
+ * It does NOT exist for every video (regular 16:9 uploads have no separate OAR
+ * asset), so this is a CANDIDATE — callers must fall back to the stored URL on
+ * error. See ReelCard, which walks the candidate list on `onError`.
+ */
+export function thumbCandidates(url?: string | null): string[] {
+  const primary = thumbUrl(url);
+  if (!primary) return [];
+  const m = /^(https?:\/\/i\.ytimg\.com\/vi\/[^/]+)\/[^/?#]+$/.exec(primary);
+  return m ? [`${m[1]}/oardefault.jpg`, primary] : [primary];
+}
+
 export interface Reel {
   id: string;
   url: string;

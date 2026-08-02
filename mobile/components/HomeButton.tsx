@@ -3,6 +3,8 @@ import { router } from 'expo-router';
 import { Icon } from './Icon';
 import { Pressable } from './Pressable';
 import { clearEnteredLibrary } from '../services/sessionFlags';
+import { emitUi } from '../services/uiBus';
+import * as haptics from '../services/haptics';
 import { colors, spacing, onImage, themed } from '../constants/theme';
 
 /**
@@ -21,11 +23,28 @@ export function goHome() {
   else router.replace('/');
 }
 
-/** Home icon for the stack header (headerRight). */
-export function HeaderHomeButton() {
+/**
+ * Hamburger for the stack header (headerRight).
+ *
+ * ⚠️ This used to be a HOME icon. Home is a tab now (see components/TabBar), so
+ * a home button in the header was a second way to do the same thing. The
+ * hamburger is what every screen actually needs and did not have — the owner's
+ * requirement is that it is reachable from ALL pages, and the header is the one
+ * surface every stack route already shares.
+ *
+ * It opens the profile panel, which is rendered once at the root; the bus is
+ * how a header reaches it (see services/uiBus).
+ */
+export function HeaderMenuButton() {
   return (
-    <Pressable onPress={goHome} hitSlop={12} style={styles.header} accessibilityLabel="Home">
-      <Icon name="home" size={18} color={colors.textPrimary} />
+    <Pressable
+      onPress={() => { haptics.tap(); emitUi('openProfile'); }}
+      hitSlop={12}
+      style={styles.header}
+      accessibilityRole="button"
+      accessibilityLabel="Menu"
+    >
+      <Icon name="menu" size={19} color={colors.textPrimary} />
     </Pressable>
   );
 }

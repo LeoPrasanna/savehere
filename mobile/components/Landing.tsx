@@ -9,11 +9,10 @@ import { TodoGoalBar } from './TodoGoalBar';
 import { TODO_LANDING_TITLE } from '../constants/todoBrand';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
-import { ProfilePanel } from './ProfilePanel';
 import { Label, Body, Title, Rule, Index, GhostButton, FilledButton, Wordmark } from './kit';
 import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
-import { consumeReopenPanel } from '../services/sessionFlags';
+import { emitUi } from '../services/uiBus';
 import { FEATURES, Feature } from '../constants/features';
 import { RollingTagline } from './RollingTagline';
 import { ASK_MIN_REELS } from '../constants/limits';
@@ -171,8 +170,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   const { settings: todoSettings, ready: todoSettingsReady } = useTodoSettings();
   const [selected, setSelected] = useState<Feature | null>(null);
   const [catFilter, setCatFilter] = useState<string | null>(null);
-  // Reopens after a scheme switch remounts the tree (one-shot session flag).
-  const [menuOpen, setMenuOpen] = useState(consumeReopenPanel());
   // A best-case "here's what SaveHere can do for you" line, picked once per open.
   const [greetingTip] = useState(() => GREETING_HELPERS[Math.floor(Math.random() * GREETING_HELPERS.length)]);
 
@@ -220,13 +217,13 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   return (
     <View style={styles.screen}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 96 }]}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 112 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Masthead ─────────────────────────────────────────────────────── */}
         <View style={styles.headerRow}>
           <Wordmark size={22} />
-          <Pressable style={styles.menuBtn} onPress={() => setMenuOpen(true)} accessibilityLabel="Menu">
+          <Pressable style={styles.menuBtn} onPress={() => emitUi('openProfile')} accessibilityLabel="Menu">
             <Icon name="menu" size={17} color={colors.textPrimary} />
           </Pressable>
         </View>
@@ -413,14 +410,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         </Body>
       </ScrollView>
 
-      {/* ── Fixed bottom bar: Library + Save ─────────────────────────────────
-          Two squares sharing a seam. Save is the filled one — it is the single
-          most important action on the screen and the system's one inversion. */}
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.sm }]}>
-        <GhostButton label="Library" onPress={onEnter} style={styles.bottomBtn} />
-        <FilledButton label="Save" trailing="+" onPress={() => router.push('/save')} style={styles.bottomBtn} />
-      </View>
-
       {/* ── Feature detail ──────────────────────────────────────────────────── */}
       <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => setSelected(null)} statusBarTranslucent>
         <View style={styles.sheetOverlay}>
@@ -440,13 +429,6 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         </View>
       </Modal>
 
-      <ProfilePanel
-        visible={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        reels={reels}
-        total={total}
-        showAsk={askVisible}
-      />
     </View>
   );
 }
@@ -557,17 +539,6 @@ const styles = themed(() => StyleSheet.create({
   tips: { marginTop: spacing.md },
   disclaimer: { fontSize: font.sm, lineHeight: 19, paddingTop: spacing.md },
 
-  bottomBar: {
-    position: 'absolute', left: 0, right: 0, bottom: 0,
-    flexDirection: 'row',
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    backgroundColor: colors.background,
-    borderTopWidth: 1,
-    borderTopColor: colors.ghostLine,
-  },
-  bottomBtn: { flex: 1 },
 
   sheetOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.78)', justifyContent: 'flex-end' },
   sheetTap: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },

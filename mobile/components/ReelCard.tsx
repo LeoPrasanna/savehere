@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Platform, Animated, ActivityIndicator } from 'r
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from './Icon';
-import { Reel, api, thumbUrl } from '../services/api';
+import { Reel, api, thumbCandidates } from '../services/api';
 import * as haptics from '../services/haptics';
 import { Pressable } from './Pressable';
 import { Label } from './kit';
@@ -22,47 +22,41 @@ interface ReelCardProps {
 
 /**
  * The intrinsic ratio of a thumbnail is unknown until the image loads, and
- * resizing the tile at that point reflows every tile below it. So the mosaic
- * picks a stable ratio up front, seeded by two real signals:
+ * resizing the tile at that point reflows every tile below it — so the mosaic
+ * picks a stable ratio up front, hashed from the reel id. Deterministic: a tile
+ * never changes height between renders or sessions.
  *
- *   - PLATFORM. YouTube and LinkedIn serve landscape thumbnails; Instagram and
- *     TikTok serve vertical ones. Cropping a 16:9 still into a 9:16 well throws
- *     most of the frame away, so the landscape platforms trend shorter.
- *   - The reel id, hashed, to vary heights within a platform.
- *
- * Deterministic, so a tile never changes height between renders or sessions.
+ * ⚠️ EVERY RATIO IS PORTRAIT. Reels are vertical, and an earlier version handed
+ * YouTube and LinkedIn *landscape* wells on the theory that they serve landscape
+ * thumbnails. That put two different tile shapes in one grid, which is what made
+ * the wall look inconsistent — and it framed YouTube's baked-in pillarbox bars
+ * instead of cutting them. (The bars are now solved properly upstream, by
+ * requesting `oardefault.jpg` — see `thumbCandidates` in services/api.ts.)
  */
-const TALL = [3 / 4, 4 / 5, 9 / 16, 1];
-const WIDE = [4 / 5, 1, 5 / 4, 3 / 4];
+const RATIOS = [3 / 4, 4 / 5, 2 / 3, 9 / 16];
 
 export function aspectFor(reel: { id: string; platform?: string | null }): number {
-  const wide = reel.platform === 'youtube' || reel.platform === 'linkedin' || reel.platform === 'twitter';
-  const set = wide ? WIDE : TALL;
   let h = 0;
   const s = reel.id || '';
   for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-  return set[h % set.length];
+  return RATIOS[h % RATIOS.length];
 }
 
 /**
- * A contact-sheet frame.
+ * A mosaic tile. THE IMAGE IS THE TILE — nothing sits below it.
  *
- * The image is full-bleed and square-cornered, seamed to its neighbours by the
- * 1px ghost line — there is no card, no radius, no shadow and no coloured
- * chrome. Everything that used to be carried by colour (platform, category,
- * pending state) is now a small tracked uppercase word.
- *
- * Layout follows `entire studios`' product card: image on top, caption block
- * beneath. Julia Krantz overlays its labels directly on the photograph, which
- * works for two-letter project codes and fails for a real two-line video title
- * over an unknown thumbnail — so only the short, scrim-backed metadata sits on
- * the image.
+ * Square-cornered, no card, no radius, no shadow, no coloured chrome; the title
+ * and category ride on a scrim over the bottom of the picture. The separate
+ * caption block this replaced was eating ~40% of every tile and turned the wall
+ * into a column of black panels instead of a wall of images.
  */
 function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardProps) {
   const router = useRouter();
-  // The real thumbnail is the frame's content; fall back to an empty frame only
-  // when extraction couldn't get one (or the image itself fails to load).
-  const [thumbFailed, setThumbFailed] = useState(false);
+  // Walk the candidate list (see api.thumbCandidates): the un-letterboxed
+  // YouTube frame first, the stored URL if that 404s, an empty frame if both
+  // fail. `candidate` is an index into that list.
+  const candidates = thumbCandidates(reel.thumbnail_url);
+  const [candidate, setCandidate] = useState(0);
   const opacity = useRef(new Animated.Value(0)).current;
   const imgOpacity = useRef(new Animated.Value(0)).current;
 
@@ -93,69 +87,67 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
   const platform = platformMeta[reel.platform] ?? platformMeta.unknown;
   const isPending = reel.summary_status === 'pending';
   const failed = reel.summary_status === 'failed';
-  const thumb = !thumbFailed ? thumbUrl(reel.thumbnail_url) : undefined;
+  const thumb = candidates[candidate];
 
   return (
-    <Animated.View style={[styles.frame, { opacity }]}>
+    <Animated.View style={[styles.frame, { opacity, aspectRatio: aspect }]}>
       <Pressable style={styles.tap} onPress={() => router.push(`/reel/${reel.id}`)}>
-        <View style={styles.imageWrap}>
-          {thumb ? (
-            <Animated.Image
-              source={{ uri: thumb }}
-              style={[styles.image, { aspectRatio: aspect, opacity: imgOpacity }]}
-              resizeMode="cover"
-              onLoad={() => Animated.timing(imgOpacity, {
-                toValue: 1, duration: motion.micro, useNativeDriver: true,
-              }).start()}
-              onError={() => setThumbFailed(true)}
-            />
-          ) : (
-            /* No thumbnail: an empty frame with its platform named, rather than
-               a coloured tint standing in for a picture. */
-            <View style={[styles.image, styles.imageEmpty, { aspectRatio: aspect }]}>
-              <Icon name={platform.icon === 'globe-outline' ? 'link' : 'play'} size={20} color={colors.textTertiary} />
-            </View>
-          )}
-
-          {/* Scrim: overlay metadata has to stay readable over an unknown
-              photograph, so this keeps real gradient stops while every other
-              gradient in the system is flat. */}
-          <LinearGradient
-            colors={gradients.scrim}
-            start={{ x: 0, y: 0.45 }} end={{ x: 0, y: 1 }}
-            style={[styles.scrim, { pointerEvents: 'none' }]}
+        {thumb ? (
+          <Animated.Image
+            // Keyed on the candidate so a fallback actually remounts the image
+            // rather than reusing the failed one's element.
+            key={thumb}
+            source={{ uri: thumb }}
+            style={[styles.image, { opacity: imgOpacity }]}
+            resizeMode="cover"
+            onLoad={() => Animated.timing(imgOpacity, {
+              toValue: 1, duration: motion.micro, useNativeDriver: true,
+            }).start()}
+            onError={() => setCandidate(c => c + 1)}
           />
-
-          <Text style={styles.overIndex}>{String(index + 1).padStart(2, '0')}</Text>
-
-          <View style={styles.overFoot}>
-            <Text style={styles.overPlatform}>{platform.label.toUpperCase()}</Text>
-            {isPending && (
-              <View style={styles.pending}>
-                <ActivityIndicator size="small" color={onImage.primary} />
-                <Text style={styles.overPlatform}>READING</Text>
-              </View>
-            )}
-            {failed && <Text style={styles.overPlatform}>NO TEXT</Text>}
+        ) : (
+          /* No thumbnail: an empty frame with its platform named, rather than
+             a coloured tint standing in for a picture. */
+          <View style={[styles.image, styles.imageEmpty]}>
+            <Icon name={platform.icon === 'globe-outline' ? 'link' : 'play'} size={20} color={colors.textTertiary} />
           </View>
-        </View>
+        )}
 
-        {/* Caption block */}
-        <View style={styles.caption}>
+        {/* Scrim: the title sits ON the image now, so it has to stay readable
+            over an unknown photograph. This keeps real gradient stops while
+            every other gradient in the system is flat. */}
+        <LinearGradient
+          colors={gradients.scrim}
+          start={{ x: 0, y: 0.3 }} end={{ x: 0, y: 1 }}
+          style={[styles.scrim, { pointerEvents: 'none' }]}
+        />
+
+        <Text style={styles.overIndex}>{String(index + 1).padStart(2, '0')}</Text>
+
+        {/* Everything the tile has to say, over the image. The separate caption
+            block this replaces was taking ~40% of the tile and turned the wall
+            into a list of black panels; the image is the tile now. */}
+        <View style={styles.overlay}>
+          <View style={styles.statusRow}>
+            {isPending && (
+              <>
+                <ActivityIndicator size="small" color={onImage.primary} />
+                <Text style={styles.meta}>READING</Text>
+              </>
+            )}
+            {failed && <Text style={styles.meta}>NO TEXT</Text>}
+          </View>
           <Text style={styles.title} numberOfLines={2}>
             {reel.title || (isPending ? 'Saving…' : 'Untitled')}
           </Text>
-          <View style={styles.metaRow}>
-            <Label>{reel.category || 'other'}</Label>
-            {reel.tags.length > 0 && (
-              <Label style={styles.tag} numberOfLines={1}>{reel.tags[0]}</Label>
-            )}
-          </View>
+          <Text style={styles.meta} numberOfLines={1}>
+            {(reel.category || 'other').toUpperCase()}
+          </Text>
         </View>
       </Pressable>
 
-      <Pressable style={styles.delete} onPress={handleDelete} hitSlop={10}>
-        <Icon name="close" size={13} color={onImage.primary} />
+      <Pressable style={styles.delete} onPress={handleDelete} hitSlop={10} accessibilityLabel="Remove save">
+        <Icon name="close" size={11} color={onImage.muted} />
       </Pressable>
     </Animated.View>
   );
@@ -175,22 +167,19 @@ export const ReelCard = memo(ReelCardInner, (prev, next) =>
 );
 
 const styles = themed(() => StyleSheet.create({
-  // No margin: frames sit flush and are separated by their own hairline, the
-  // way a contact sheet's cells are. The grid supplies no gutter either.
+  // The tile IS the image. aspectRatio comes from the grid (see aspectFor), so
+  // the frame has no intrinsic height of its own and nothing below the picture.
   frame: {
     flex: 1,
-    borderWidth: 0.5,
-    borderColor: colors.ghostLine,
+    backgroundColor: colors.card,
+    overflow: 'hidden',
   },
   tap: { flex: 1 },
 
-  imageWrap: { position: 'relative', backgroundColor: colors.card },
-  // aspectRatio is supplied per-tile by the masonry grid (see aspectFor above);
-  // 3:4 portrait is the fallback for the fixed-row grids. The outgoing 16:10
-  // landscape crop cut the top and bottom off almost every reel thumbnail.
-  image: { width: '100%' },
+  image: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
   imageEmpty: { alignItems: 'center', justifyContent: 'center' },
-  scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 72 },
+  // Taller than the old 72px strip because the title lives in here now.
+  scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '58%' },
 
   overIndex: {
     position: 'absolute',
@@ -202,48 +191,39 @@ const styles = themed(() => StyleSheet.create({
     letterSpacing: tracking.label,
     fontVariant: ['tabular-nums'],
   },
-  overFoot: {
+
+  overlay: {
     position: 'absolute',
     left: spacing.sm,
     right: spacing.sm,
     bottom: spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
+    gap: 3,
   },
-  overPlatform: {
-    color: onImage.primary,
-    fontFamily: typeface.label,
-    fontSize: font.xs,
-    letterSpacing: tracking.labelWide,
-  },
-  pending: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-
-  caption: { padding: spacing.sm, gap: spacing.xs, flex: 1 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  // ⚠️ Fixed light tones, not `colors.*` — this text sits on a photograph, and
+  // the photograph does not invert between light and dark mode.
   title: {
-    color: colors.textPrimary,
+    color: onImage.primary,
     fontFamily: typeface.display,
     fontSize: font.sm,
-    lineHeight: 17,
+    lineHeight: 16,
     letterSpacing: -0.2,
   },
-  metaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: spacing.sm,
-    marginTop: 'auto',
-    paddingTop: spacing.xs,
+  meta: {
+    color: onImage.muted,
+    fontFamily: typeface.label,
+    fontSize: font.xs,
+    letterSpacing: tracking.label,
   },
-  tag: { flex: 1, textAlign: 'right' },
 
+  // Quieter than it was: a white X on every tile read as the loudest mark on
+  // the wall. Muted, and it sits on the scrim rather than the picture.
   delete: {
     position: 'absolute',
     top: 0,
     right: 0,
-    width: 30,
-    height: 30,
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,

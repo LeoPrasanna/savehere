@@ -384,6 +384,48 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
     for the INR pair, so the badge cannot render there — the guard works.
   ⚠️ Still unverified: paywall page 02, reel detail, todos, workout screens.
 
+- [x] **Round five — grid fidelity, floating tabs, pinned CTAs (2026-08-02).**
+  1. **⚠️ THE BLACK BARS WERE A BUG, NOT A CROP SETTING.** YouTube's
+     `hqdefault.jpg` / `hq2.jpg` are ALWAYS 480×360 (4:3) with pillarbox bars
+     **baked into the JPEG** for vertical Shorts — pixels in the file, so no
+     `resizeMode` removes them. Worse, `aspectFor` was handing YouTube/LinkedIn
+     *landscape* wells, which framed the bars instead of cutting them AND put two
+     tile shapes in one grid — the "not consistent" complaint.
+     Fixed properly at the source: `thumbCandidates()` in `services/api.ts` asks
+     for **`oardefault.jpg`** first, which serves the real 1080×1920 frame with no
+     bars (measured live: hqdefault → 480×360, oardefault → 1080×1920). It does
+     not exist for every video, so ReelCard walks the candidate list on `onError`
+     and falls back to the stored URL. All tile ratios are now portrait.
+  2. **The tile IS the image.** The caption block underneath was eating ~40% of
+     every tile and turned the wall into a column of black panels. Title and
+     category now ride a scrim over the bottom of the picture; 2px gutters
+     replace the flush seam, since images running edge to edge with no gap read
+     as one continuous smear.
+  3. **Floating 5-tab bar** (`components/TabBar.tsx`): Home · Library · **Save**
+     (centre, inverted) · Slate · Ask. Rendered ONCE at the root, above the
+     router, so it cannot drift between routes. Hidden on `/save`, `/pro` and the
+     workout session player — focused tasks with their own primary button, where
+     a floating nav would compete and a mis-tap would lose a pasted link.
+  4. **Hamburger on every page**, and only one profile panel. `HeaderHomeButton`
+     → `HeaderMenuButton` (Home is a tab now, so a header Home button was a
+     second way to do one thing). The panel moved to the root and is opened from
+     any screen through a 30-line `services/uiBus.ts` — previously **three**
+     screens each rendered their own copy with their own state.
+     The library header lost home/save/menu buttons and its bottom-docked search
+     (the tab bar owns that space; the two stacked left ~120px of permanent
+     chrome over the grid). Search moved up under the wordmark.
+  5. **CTAs pinned on `/save` and `/pro`.** "Good to know" is eight paragraphs,
+     so the Save button sat below the fold — you had to scroll past the small
+     print to save anything. On the paywall, five benefit paragraphs sat above
+     the price, so **you could not see what it cost without scrolling through the
+     sales pitch**. Both now dock: the copy scrolls, the price and the button do
+     not move.
+  6. **iPhone 16 Pro (393×852)** — verified no horizontal overflow, 2-column grid.
+  ⚠️ **Verified this round:** typecheck, `expo export` (all routes), login screen
+  at 393×852, zero console errors. **NOT verified — needs an owner pass:** the tab
+  bar, the pinned CTAs and the rebuilt tile all require a signed-in session, and
+  the preview browser lost its staging token when the dev server restarted.
+
 ---
 
 ## Mobile — Monetization

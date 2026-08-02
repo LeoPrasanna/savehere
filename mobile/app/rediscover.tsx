@@ -73,8 +73,8 @@ export default function RediscoverScreen() {
         keyExtractor={(r: any) => r.id}
         numColumns={numColumns}
         key={numColumns}
-        // Flush — the frames carry their own hairline seam, same as the library.
-        columnWrapperStyle={{ gap: 0 }}
+        // Same 2px gutter as the library grid.
+        columnWrapperStyle={{ gap: 2 }}
         ListHeaderComponent={
           <View style={styles.head}>
             <Body style={styles.sub}>

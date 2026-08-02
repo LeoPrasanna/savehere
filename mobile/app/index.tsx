@@ -12,10 +12,10 @@ import { ReelCard, aspectFor } from '../components/ReelCard';
 import { SkeletonGrid } from '../components/SkeletonCard';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
-import { ProfilePanel } from '../components/ProfilePanel';
 import { Landing } from '../components/Landing';
 import { Label, Body, Title, Rule, GhostButton, Wordmark } from '../components/kit';
-import { hasEnteredLibrary, markEnteredLibrary, clearEnteredLibrary, consumeReopenPanel } from '../services/sessionFlags';
+import { hasEnteredLibrary, markEnteredLibrary, clearEnteredLibrary } from '../services/sessionFlags';
+import { onUi, emitUi } from '../services/uiBus';
 import { ASK_MIN_REELS } from '../constants/limits';
 import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, themed } from '../constants/theme';
 
@@ -38,13 +38,12 @@ export default function HomeScreen() {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState<Reel[] | null>(null);
   const [searching, setSearching] = useState(false);
-  // Reopens automatically after a scheme switch remounts the tree (one-shot
-  // flag). Only consume it when THIS screen owns the visible panel — on the
-  // Landing branch, Landing renders its own panel and consumes the flag itself.
-  const [menuOpen, setMenuOpen] = useState(hasEnteredLibrary() ? consumeReopenPanel() : false);
   // Session-scoped (services/sessionFlags): remounts don't bounce back to the
   // landing, but a sign-out/sign-in resets it so new users start at Landing.
   const [entered, setEntered] = useState(hasEnteredLibrary());
+  // The Home and Library tabs flip that flag from OUTSIDE this route (the tab
+  // bar lives above the router), so the screen has to be told to re-read it.
+  useEffect(() => onUi('libraryState', () => setEntered(hasEnteredLibrary())), []);
   const [scrolled, setScrolled] = useState(false);
 
   const load = useCallback(async (category = activeCategory) => {
@@ -189,13 +188,13 @@ export default function HomeScreen() {
   /**
    * Distribute tiles into columns, shortest-column-first.
    *
-   * Running height is tracked in WIDTH-UNITS (a tile of aspect 0.75 is 0.75
-   * columns tall) plus a constant for the caption block, so the columns finish
-   * at roughly the same depth without measuring anything on screen. Ordering
+   * Running height is tracked in WIDTH-UNITS: a tile of aspect 0.75 is 1/0.75
+   * columns TALL. (An earlier version added `aspect` instead of its reciprocal,
+   * which inverted the comparison — the tiles it thought were tallest were
+   * actually the shortest, so the columns drifted badly out of level.) Ordering
    * within a column stays newest-first, which is what the user expects; only
-   * the left/right assignment is height-driven.
+   * the column assignment is height-driven.
    */
-  const CAPTION_UNITS = 0.42;
   const mosaic = useMemo(() => {
     const cols: { reel: Reel; aspect: number; idx: number }[][] =
       Array.from({ length: numColumns }, () => []);
@@ -205,7 +204,7 @@ export default function HomeScreen() {
       let shortest = 0;
       for (let i = 1; i < numColumns; i++) if (heights[i] < heights[shortest]) shortest = i;
       cols[shortest].push({ reel, aspect, idx });
-      heights[shortest] += aspect + CAPTION_UNITS;
+      heights[shortest] += 1 / aspect;   // height in width-units
     });
     return cols;
   }, [displayList, numColumns]);
@@ -220,24 +219,38 @@ export default function HomeScreen() {
           The wordmark, a count, and three square hairline buttons. No logo
           mark, no gradient, no shadow — the header is metadata about the sheet
           below it and speaks in the same small tracked voice. */}
+      {/* Header. Home and Save used to live here as buttons; both are tabs now,
+          so all that remains is identity and the hamburger the owner wants on
+          every page. */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
-        <Pressable onPress={goHome} style={styles.brandRow}>
+        <View style={styles.brandRow}>
           <Wordmark size={26} />
           <Label style={styles.count}>
             {total > 0 ? `${total} saved` : 'Nothing saved yet'}
           </Label>
-        </Pressable>
-        <View style={styles.headerActions}>
-          <Pressable style={styles.hBtn} onPress={goHome} accessibilityLabel="Home">
-            <Icon name="home" size={17} color={colors.textPrimary} />
-          </Pressable>
-          <Pressable style={styles.hBtn} onPress={() => router.push('/save')} accessibilityLabel="Save">
-            <Icon name="add" size={17} color={colors.textPrimary} />
-          </Pressable>
-          <Pressable style={styles.hBtn} onPress={() => setMenuOpen(true)} accessibilityLabel="Menu">
-            <Icon name="menu" size={17} color={colors.textPrimary} />
-          </Pressable>
         </View>
+        <Pressable style={styles.hBtn} onPress={() => emitUi('openProfile')} accessibilityLabel="Menu">
+          <Icon name="menu" size={17} color={colors.textPrimary} />
+        </Pressable>
+      </View>
+
+      {/* Search moved UP from the bottom edge: the floating tab bar owns that
+          space now, and stacking a docked search bar under it left ~120px of
+          permanent chrome over the grid. */}
+      <View style={styles.searchRow}>
+        <Search size={15} color={colors.textTertiary} strokeWidth={1.35} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search your saves"
+          placeholderTextColor={colors.textTertiary}
+          value={search}
+          onChangeText={setSearch}
+        />
+        {search.length > 0 && (
+          <Pressable onPress={() => setSearch('')} hitSlop={8} accessibilityLabel="Clear search">
+            <XCircle size={15} color={colors.textTertiary} strokeWidth={1.35} />
+          </Pressable>
+        )}
       </View>
       <Rule />
 
@@ -380,34 +393,6 @@ export default function HomeScreen() {
         </>
       )}
 
-      {/* ── Search, docked at the bottom (iOS pattern: Safari, App Store) ──
-          An underlined field rather than a pill: the system defines inputs with
-          the same 1px seam it uses everywhere else. */}
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.bottomWrap}
-        pointerEvents="box-none"
-      >
-        <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.sm }]}>
-          <View style={styles.search}>
-            <Search size={15} color={colors.textTertiary} strokeWidth={1.35} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search your saves"
-              placeholderTextColor={colors.textTertiary}
-              value={search}
-              onChangeText={setSearch}
-            />
-            {search.length > 0 && (
-              <Pressable onPress={() => setSearch('')} hitSlop={8}>
-                <XCircle size={15} color={colors.textTertiary} strokeWidth={1.35} />
-              </Pressable>
-            )}
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-
-      <ProfilePanel visible={menuOpen} onClose={() => setMenuOpen(false)} reels={reels} total={total} showAsk={total >= ASK_MIN_REELS} />
     </View>
   );
 }
@@ -464,14 +449,16 @@ const styles = themed(() => StyleSheet.create({
   },
 
   grid: { flex: 1 },
-  // ⚠️ NO GUTTERS AND NO PAGE MARGIN. Full-bleed to the screen edge; the only
-  // visual separator is the 1px ghost line each tile draws for itself, so
-  // neighbours share a seam instead of floating apart.
-  masonry: { flexDirection: 'row', alignItems: 'flex-start' },
+  // Full-bleed to the screen edge — no page margin — with a hairline GUTTER
+  // between tiles rather than a shared seam. The tiles carry no border of their
+  // own now that the image runs to their edge, so a 2px gap of canvas is what
+  // separates them; flush images with no gap read as one continuous smear.
+  masonry: { flexDirection: 'row', alignItems: 'flex-start', gap: 2 },
   // minWidth:0 is load-bearing on react-native-web — without it a long title
   // inside a tile can push its column wider than its share.
-  column: { flex: 1, minWidth: 0 },
-  list: { paddingBottom: 132 },
+  column: { flex: 1, minWidth: 0, gap: 2 },
+  // Clears the floating tab bar (its own height + the safe-area inset it adds).
+  list: { paddingBottom: 116 },
   disclaimer: {
     fontSize: font.sm,
     lineHeight: 19,
@@ -486,26 +473,23 @@ const styles = themed(() => StyleSheet.create({
   emptyText: { textAlign: 'center', maxWidth: 380 },
   emptyCta: { marginTop: spacing.sm, alignSelf: 'stretch', maxWidth: 320 },
 
-  bottomWrap: { position: 'absolute', left: 0, right: 0, bottom: 0 },
-  bottomBar: {
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.sm,
-    backgroundColor: colors.background,
-    borderTopWidth: 1,
-    borderTopColor: colors.ghostLine,
-  },
-  search: {
+  searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    marginHorizontal: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.ghostLine,
-    height: 44,
+    height: 42,
+    marginBottom: spacing.sm,
   },
   searchInput: {
     flex: 1,
     color: colors.textPrimary,
     fontFamily: typeface.body,
     fontSize: font.md,
+    // RN-web puts a focus ring on inputs; the system draws focus with the rule
+    // underneath instead.
+    outlineStyle: 'none' as any,
   },
 }));
