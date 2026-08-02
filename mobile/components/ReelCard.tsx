@@ -173,6 +173,10 @@ const styles = themed(() => StyleSheet.create({
     flex: 1,
     backgroundColor: colors.card,
     overflow: 'hidden',
+    // ⚠️ Pinned to 0, NOT `radius.*`. Controls and surfaces curve now; a
+    // photograph in a tight mosaic does not — rounded tiles read as stickers,
+    // and the reference grid is square-cornered.
+    borderRadius: 0,
   },
   tap: { flex: 1 },
 

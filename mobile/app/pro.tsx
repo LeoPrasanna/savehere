@@ -9,7 +9,7 @@ import { Pressable } from '../components/Pressable';
 import { Label, Body, Title, Rule, Index, GhostButton, FilledButton, TextAction, Rail } from '../components/kit';
 import * as haptics from '../services/haptics';
 import { pricingForDevice, savingPct, money, PRO_BENEFITS, Plan } from '../constants/pricing';
-import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
+import { colors, spacing, font, radius, tracking, typeface, themed } from '../constants/theme';
 
 /**
  * The Pro paywall — two pages.
@@ -110,6 +110,10 @@ export default function ProScreen() {
           scroll; what you are being asked to pay does not move. */}
       {page === 1 && (
         <View style={[styles.dock, { paddingBottom: insets.bottom + spacing.md }]}>
+          {/* ⚠️ COMPACT, AND A ROW. These were two stacked full-width cards with
+              display-size prices; the dock ate roughly half the screen and left
+              a sliver of the benefits visible above it (owner). Side by side at
+              body size, the whole dock is about a quarter. */}
           <Label wide style={styles.pickHead}>Choose a plan</Label>
           <View style={styles.plans}>
             {pricing.plans.map(p => {
@@ -121,14 +125,7 @@ export default function ProScreen() {
                   style={[styles.plan, on && styles.planOn]}
                   accessibilityLabel={`${p.period}, ${money(pricing, p.price)}`}
                 >
-                  <View style={styles.planTop}>
-                    <Label tone={on ? 'ink' : 'muted'} wide>{p.period}</Label>
-                    {/* Only rendered when the maths actually supports it —
-                        see savingPct() in constants/pricing.ts. */}
-                    {p.id === 'monthly' && saving !== null && (
-                      <Label tone={on ? 'ink' : 'muted'}>{`Save ${saving}%`}</Label>
-                    )}
-                  </View>
+                  <Label tone={on ? 'ink' : 'muted'} wide numberOfLines={1}>{p.period}</Label>
                   <View style={styles.planPriceRow}>
                     <Text style={[styles.planPrice, on && styles.planPriceOn]}>
                       {money(pricing, p.price)}
@@ -137,7 +134,11 @@ export default function ProScreen() {
                       <Text style={styles.planWas}>{money(pricing, p.wasPrice)}</Text>
                     )}
                   </View>
-                  <Label>{p.note}</Label>
+                  {/* Only rendered when the maths actually supports it — see
+                      savingPct() in constants/pricing.ts. */}
+                  <Label numberOfLines={1}>
+                    {p.id === 'monthly' && saving !== null ? `Save ${saving}%` : p.note}
+                  </Label>
                 </Pressable>
               );
             })}
@@ -145,8 +146,8 @@ export default function ProScreen() {
 
           <FilledButton label="Continue" trailing="→" onPress={toPayment} style={styles.cta} />
           <Text style={styles.terms}>
-            Auto-renews {plan.cadence === 'week' ? 'weekly' : 'monthly'} until cancelled. Cancel any
-            time from your account. Prices shown in {pricing.code}.
+            No commitment. Cancel anytime. Auto-renews{' '}
+            {plan.cadence === 'week' ? 'weekly' : 'monthly'} until cancelled. Prices in {pricing.code}.
           </Text>
         </View>
       )}
@@ -236,8 +237,8 @@ export default function ProScreen() {
             <TextAction label="Privacy" onPress={() => haptics.tap()} />
           </View>
           <Text style={styles.terms}>
-            Auto-renews {plan.cadence === 'week' ? 'weekly' : 'monthly'} at {money(pricing, plan.price)} until
-            cancelled. Cancel any time from your account.
+            No commitment. Cancel anytime. Auto-renews{' '}
+            {plan.cadence === 'week' ? 'weekly' : 'monthly'} at {money(pricing, plan.price)} until cancelled.
           </Text>
         </View>
       )}
@@ -306,29 +307,31 @@ const styles = themed(() => StyleSheet.create({
   benefitDetail: { fontSize: font.sm, lineHeight: 20 },
 
   pickHead: { marginBottom: spacing.sm },
-  plans: { gap: spacing.sm, marginBottom: spacing.md },
+  plans: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   // Selection reads by BORDER WEIGHT, not fill or hue — the system has no
   // second colour to spend and a filled card would out-shout the CTA.
   plan: {
+    flex: 1,
     borderWidth: 1,
     borderColor: colors.ghostLine,
-    padding: spacing.md,
-    gap: spacing.sm,
+    borderRadius: radius.md,
+    padding: spacing.sm + 2,
+    gap: 2,
   },
   planOn: { borderColor: colors.textPrimary },
-  planTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  planTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.xs },
   planPriceRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
   planPrice: {
     color: colors.textSecondary,
     fontFamily: typeface.display,
-    fontSize: font.xxl,
-    letterSpacing: tracking.title,
+    fontSize: font.xl,
+    letterSpacing: tracking.heading,
   },
   planPriceOn: { color: colors.textPrimary },
   planWas: {
     color: colors.textTertiary,
     fontFamily: typeface.body,
-    fontSize: font.md,
+    fontSize: font.sm,
     textDecorationLine: 'line-through',
   },
 

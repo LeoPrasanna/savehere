@@ -10,6 +10,7 @@ import { Icon } from '../components/Icon';
 import { TodoEditor } from '../components/TodoEditor';
 import { RollingTagline } from '../components/RollingTagline';
 import { TodoGoalBar } from '../components/TodoGoalBar';
+import { Label } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { TodoSettingsSheet } from '../components/TodoSettingsSheet';
 import { bucketOf, formatDue, todayISO, Bucket } from '../services/todoDates';
@@ -407,11 +408,22 @@ export default function TodosScreen() {
         {/* ── Hero: "My" — big M, smaller y — then the rolling name. Nested
             <Text> rather than two siblings, so the two sizes share one baseline
             automatically instead of being nudged into alignment by hand. ── */}
-        <View style={styles.heroRow}>
-          <Text style={styles.heroM}>M<Text style={styles.heroY}>y</Text></Text>
+        {/* ⚠️ Was a "M(y)" lockup — an oversized M with a small inline y, then
+            the rolling name beside it at a different size. The owner didn't like
+            it, and it was the one screen in the app inventing its own header
+            grammar. This is the same eyebrow-then-title pair every other screen
+            uses (ask, help, save, pro, profile); the rolling name is simply the
+            title, and the eyebrow carries the numbers that were buried in the
+            dashboard below. */}
+        <View style={styles.hero}>
+          <Label wide>
+            {stats
+              ? `${stats.open} open${stats.completed_today ? ` · ${stats.completed_today} done today` : ''}`
+              : 'Your slate'}
+          </Label>
           <RollingTagline
             lines={ROLL_LINES}
-            height={34}
+            height={40}
             intervalMs={5200}
             numberOfLines={1}
             alignLeft
@@ -587,22 +599,15 @@ const styles = themed(() => StyleSheet.create({
 
 
   // ── Hero ────────────────────────────────────────────────────────────
-  heroRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // ⚠️ heroM and heroText MUST stay the same fontSize/lineHeight — the owner's
-  // note was that the rolling half didn't match "My". They were 44 and 24.
-  heroM: {
-    color: colors.textPrimary, fontFamily: typeface.display,
-    fontSize: font.xxl, letterSpacing: tracking.title, lineHeight: 34,
-  },
-  heroY: { fontSize: font.lg },
+  hero: { gap: spacing.sm, marginBottom: spacing.md },
   heroRoll: { flex: 1, alignSelf: 'auto' },
-  // Same size as the "M" — see above. It was a notch smaller so the longest
-  // names ("Program of Entertainment 🎪") wouldn't ellipsize at 44px; dropping
-  // BOTH halves to 29 keeps them whole and makes the line read as one phrase.
+  // Exactly kit's <Title> — this screen's heading should be indistinguishable
+  // from every other screen's, the only difference being that it rolls.
   heroText: {
     fontFamily: typeface.display, fontSize: font.xxl, color: colors.textPrimary,
     letterSpacing: tracking.title,
-    textAlign: 'left', paddingHorizontal: 0, lineHeight: 34, fontStyle: 'normal',
+    textAlign: 'left', paddingHorizontal: 0, lineHeight: font.xxl * 1.05,
+    fontStyle: 'normal',
   },
   gearBtn: {
     width: 50, height: 50, borderRadius: radius.md,

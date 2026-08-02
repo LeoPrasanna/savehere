@@ -2,7 +2,7 @@ import { ReactNode } from 'react';
 import { View, Text, StyleSheet, TextStyle, ViewStyle, StyleProp, ScrollView } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pressable } from './Pressable';
-import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
+import { colors, spacing, font, radius, tracking, typeface, themed } from '../constants/theme';
 
 /**
  * The "Contact Sheet" primitive set.
@@ -309,6 +309,7 @@ const styles = themed(() => StyleSheet.create({
     backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: colors.textPrimary,
+    borderRadius: radius.full,
     paddingVertical: 15,
     paddingHorizontal: 20,
     alignItems: 'center',
@@ -324,6 +325,7 @@ const styles = themed(() => StyleSheet.create({
     backgroundColor: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.textPrimary,
+    borderRadius: radius.full,
     paddingVertical: 15,
     paddingHorizontal: 20,
     alignItems: 'center',

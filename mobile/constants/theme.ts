@@ -403,35 +403,32 @@ export const spacing = {
 export const GRID_GAP = 8;
 
 /**
- * ⚠️ EVERY RADIUS IS ZERO. This is the reference's one absolute rule: "Never
- * round corners — 0px is non-negotiable."
+ * ⚠️ REVERSED (owner, 2026-08-03). These were ALL ZERO — the primary style
+ * reference's one absolute rule was "never round corners; 0px is
+ * non-negotiable". The owner asked for soft curves, referencing the app this
+ * direction was briefed against, whose controls are pills and whose fields are
+ * ~10px rounded rectangles.
  *
- * The keys survive (and `full` still says 999 in spirit but resolves to 0) so
- * the ~30 call sites asking for `radius.full` on a pill or avatar render a
- * square without being edited. Square avatars are also the deliberate departure
- * from the app this direction was briefed against, whose circular avatars are
- * one of its most recognisable marks.
+ * So the rule is now: CONTROLS AND SURFACES CURVE, PHOTOGRAPHS DO NOT.
+ *   - buttons, chips, the tab bar          → `full` (pill)
+ *   - fields, cards, banners, modals       → `sm`–`lg`
+ *   - grid tiles, the hero image           → still 0, hardcoded at the call
+ *     site. A rounded photo in a tight mosaic reads as a sticker, and the
+ *     reference grid is square-cornered; keep it that way.
+ *
+ * Because ~30 call sites already ask for `radius.full`, flipping this constant
+ * turned them all back into pills in one move rather than 30 edits.
  */
 export const radius = {
-  sm: 0,
-  md: 0,
-  lg: 0,
-  xl: 0,
-  full: 0,
-  /**
-   * ⚠️ THE SANCTIONED CIRCLE — and its use is a closed list, not a free choice.
-   *
-   * Owner direction, matching the brief's reference app. Exactly three things
-   * may be round:
-   *   1. category filter bubbles (app/index.tsx)
-   *   2. the floating tab bar and its active slot (components/TabBar.tsx)
-   *   3. the welcome screen's auth buttons (components/LoginScreen.tsx)
-   *
-   * Everything else — cards, inputs, tiles, ghost/filled buttons, badges — is
-   * still 0, absolutely. The circle reads as "a chip you tap"; the moment it
-   * leaks onto a surface or a text field the system stops meaning anything.
-   * Grep this list before reaching for it, and add to the list if you extend it.
-   */
+  sm: 8,
+  md: 12,
+  lg: 16,
+  xl: 20,
+  /** Pill. Buttons, chips, the tab bar. */
+  full: 999,
+  /** A true circle. Category bubbles, tab-bar slots, auth buttons, avatars.
+   *  Identical to `full`; the separate name says "this is meant to be round",
+   *  not "this is a pill that happens to be square". */
   circle: 999,
 };
 
@@ -555,12 +552,12 @@ export const shadow = {
  * Deliberately NOT `as const`: applyScheme re-points these in place.
  */
 export const control = {
-  /** Transparent, 1px ink border, 0 radius, wide horizontal padding. */
+  /** Transparent, 1px ink border, PILL, wide horizontal padding. */
   ghost: {
     backgroundColor: 'transparent',
     borderWidth: 1,
     borderColor: colors.textPrimary,
-    borderRadius: 0,
+    borderRadius: 999,
     paddingVertical: 14,
     paddingHorizontal: 20,
   },
@@ -569,7 +566,7 @@ export const control = {
     backgroundColor: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.textPrimary,
-    borderRadius: 0,
+    borderRadius: 999,
     paddingVertical: 14,
     paddingHorizontal: 20,
   },
@@ -585,13 +582,13 @@ export const control = {
 export const glass = {
   card: {
     backgroundColor: colors.card,
-    borderRadius: 0,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.ghostLine,
   },
   cardElevated: {
     backgroundColor: colors.cardElevated,
-    borderRadius: 0,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.ghostLine,
   },
