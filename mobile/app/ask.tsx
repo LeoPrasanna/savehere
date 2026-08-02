@@ -10,6 +10,7 @@ import { Icon } from '../components/Icon';
 import { Disclaimer } from '../components/Disclaimer';
 import { Label, Body, Title, Rule, Index, GhostButton, FilledButton } from '../components/kit';
 import { ASK_MIN_REELS } from '../constants/limits';
+import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 
 const SUGGESTIONS = [
@@ -192,7 +193,7 @@ export default function AskScreen() {
 
 const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xxl },
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: TAB_BAR_CLEARANCE + spacing.xl },
   sub: { marginTop: spacing.md, fontSize: font.sm, lineHeight: 20 },
 
   // ── Locked state ──

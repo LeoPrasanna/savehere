@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList, ActivityIndicator, useWindowDimensions } fr
 import { api, Reel } from '../services/api';
 import { ReelCard } from '../components/ReelCard';
 import { Label, Body, Title, Rule } from '../components/kit';
+import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { colors, spacing, font, GRID_GAP, themed } from '../constants/theme';
 
 function shuffle<T>(arr: T[]): T[] {
@@ -104,7 +105,7 @@ const styles = themed(() => StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.md,
   },
-  list: { paddingBottom: 116, gap: GRID_GAP },
+  list: { paddingBottom: TAB_BAR_CLEARANCE + spacing.xl, gap: GRID_GAP },
   head: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg, gap: spacing.lg },
   sub: { fontSize: font.sm, lineHeight: 20 },
   emptyTitle: { marginTop: spacing.xs },

@@ -1,6 +1,7 @@
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
 import { FEATURES } from '../constants/features';
 import { Label, Body, Title, Rule, Index } from '../components/kit';
+import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 
 export default function HelpScreen() {
@@ -34,7 +35,7 @@ export default function HelpScreen() {
 
 const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xxl },
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: TAB_BAR_CLEARANCE + spacing.xl },
   sub: { marginTop: spacing.md, fontSize: font.sm, lineHeight: 20 },
 
   list: { marginTop: spacing.xl },

@@ -10,6 +10,7 @@ import { TODO_LANDING_TITLE } from '../constants/todoBrand';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { Label, Body, Title, Rule, Index, GhostButton, FilledButton, Wordmark } from './kit';
+import { TAB_BAR_CLEARANCE } from './TabBar';
 import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { emitUi } from '../services/uiBus';
@@ -217,7 +218,7 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
   return (
     <View style={styles.screen}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + 112 }]}
+        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.md, paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + spacing.xl }]}
         showsVerticalScrollIndicator={false}
       >
         {/* ── Masthead ─────────────────────────────────────────────────────── */}

@@ -18,6 +18,7 @@ import { goHome } from '../../components/HomeButton';
 import { TaskList } from '../../components/TaskList';
 import { TodoEditor } from '../../components/TodoEditor';
 import { Disclaimer } from '../../components/Disclaimer';
+import { TAB_BAR_CLEARANCE } from '../../components/TabBar';
 import { colors, spacing, font, radius, gradients, shadow, typeface, tracking, onImage, platformMeta, categoryFor, categoryMeta, CATEGORY_OPTIONS, themed } from '../../constants/theme';
 
 export default function ReelDetailScreen() {
@@ -853,7 +854,7 @@ export default function ReelDetailScreen() {
 const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1, backgroundColor: 'transparent' },
-  content: { padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.md, maxWidth: 720, width: '100%', alignSelf: 'center' },
+  content: { padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE + spacing.xl, gap: spacing.md, maxWidth: 720, width: '100%', alignSelf: 'center' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   notFound: { color: colors.textSecondary, fontSize: font.md },
 

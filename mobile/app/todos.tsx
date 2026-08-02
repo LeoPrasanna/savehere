@@ -10,15 +10,13 @@ import { Icon } from '../components/Icon';
 import { TodoEditor } from '../components/TodoEditor';
 import { RollingTagline } from '../components/RollingTagline';
 import { TodoGoalBar } from '../components/TodoGoalBar';
+import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { TodoSettingsSheet } from '../components/TodoSettingsSheet';
-import { ProfilePanel } from '../components/ProfilePanel';
-import { goHome } from '../components/HomeButton';
-import { markEnteredLibrary } from '../services/sessionFlags';
 import { bucketOf, formatDue, todayISO, Bucket } from '../services/todoDates';
 import { useTodoSettings } from '../services/todoSettings';
 import { TODO_QUOTES, TODO_ROLL_NAMES, TODO_ADD_LABEL } from '../constants/todoBrand';
 import * as haptics from '../services/haptics';
-import { colors, spacing, font, radius, gradients, shadow, themed } from '../constants/theme';
+import { colors, spacing, font, radius, tracking, typeface, gradients, shadow, themed } from '../constants/theme';
 
 /**
  * Priority marks.
@@ -44,9 +42,16 @@ const SECTIONS: { key: Bucket; label: string }[] = [
   { key: 'someday', label: 'SOMEDAY' },
 ];
 
-/** How long a deleted task can be taken back. Long enough to notice and react,
- *  short enough that the bar isn't loitering over the list. */
-const UNDO_MS = 2000;
+/**
+ * How long a deleted task can be taken back.
+ *
+ * ⚠️ Was 2000. Two seconds is not long enough to notice a bar appear, read
+ * which task it names and move a thumb to it — the window closed while you were
+ * still deciding, which is half of why undo "didn't work". (The other half was
+ * that the bar was rendering underneath the floating tab bar; see
+ * TAB_BAR_CLEARANCE.) Five seconds is the common bar-style-undo default.
+ */
+const UNDO_MS = 5000;
 /** Clears the New task bar (its 50px button plus the bar's own padding). */
 const UNDO_ABOVE_BAR = 74;
 
@@ -177,14 +182,10 @@ export default function TodosScreen() {
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Todo | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(false);
   // Declared up here because load() reads it — see the delete/undo block below
   // for what it's for.
   const pending = useRef<{ todo: Todo; timer: ReturnType<typeof setTimeout> } | null>(null);
   const [undoFor, setUndoFor] = useState<Todo | null>(null);
-  // Only for the profile panel's "saves" counter. Fetched when the panel opens
-  // rather than on mount — this screen otherwise has no reason to touch reels.
-  const [reelTotal, setReelTotal] = useState<number | undefined>(undefined);
   const { settings, update: updateSettings, ready: settingsReady } = useTodoSettings();
   // Set when a reel-linked task is completed: the "delete the saved card?" ask.
   const [finished, setFinished] = useState<Todo | null>(null);
@@ -211,28 +212,13 @@ export default function TodosScreen() {
   }, [settings.showCompleted]);
 
   useFocusEffect(useCallback(() => {
-    // The rolling hero is the page title, so the nav bar stays bare — and the
-    // stack's global Home button is dropped here because this screen has its own
-    // Home/Library pair in the body. Two home buttons on one screen is worse
-    // than none.
-    navigation.setOptions({ title: '', headerRight: () => null });
+    // The rolling hero is the page title, so the nav bar carries no title —
+    // but it KEEPS its global hamburger (the owner's requirement that the menu
+    // is reachable from every page). The body's own Home/Library/menu trio was
+    // removed rather than the header's.
+    navigation.setOptions({ title: '' });
     if (settingsReady) load();
   }, [load, navigation, settingsReady]));
-
-  /** `/` renders the landing page OR the library off a session flag; setting it
-   *  first is what makes this land on the library rather than the greeting. */
-  const openLibrary = () => {
-    markEnteredLibrary();
-    router.replace('/');
-  };
-
-  const openPanel = () => {
-    setMenuOpen(true);
-    // Only for the panel's saves counter, and only the first time it's opened.
-    if (reelTotal === undefined) {
-      api.listReels({ limit: 1 }).then(d => setReelTotal(d.total)).catch(() => {});
-    }
-  };
 
   const toggle = async (todo: Todo) => {
     const next = !todo.completed;
@@ -400,7 +386,7 @@ export default function TodosScreen() {
   return (
     <View style={styles.screen}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 92 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 92 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl
@@ -414,28 +400,9 @@ export default function TodosScreen() {
           />
         }
       >
-        {/* ── Header actions. Same trio the Library screen uses (index.tsx):
-            two hairline circles around one gradient circle, so this page reads
-            as part of the app rather than its own thing. The centre slot holds
-            whatever that screen's primary destination is — Save uses "+", this
-            one uses the Library mark. ── */}
-        <View style={styles.headerActions}>
-          <Pressable style={styles.menuBtn} onPress={goHome} scaleTo={0.9}>
-            <Icon name="home" size={20} color={colors.textPrimary} />
-          </Pressable>
-          <Pressable style={styles.saveBtnWrap} onPress={openLibrary} scaleTo={0.9}>
-            <LinearGradient
-              colors={gradients.primary}
-              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-              style={styles.saveBtn}
-            >
-              <Icon name="bookmark" size={19} color={colors.onAction} />
-            </LinearGradient>
-          </Pressable>
-          <Pressable style={styles.menuBtn} onPress={openPanel} scaleTo={0.9}>
-            <Icon name="menu" size={20} color={colors.textPrimary} />
-          </Pressable>
-        </View>
+        {/* Header actions used to be a Home / Library / menu trio here. Home
+            and Library are TABS now, and the hamburger is the stack header's
+            global button — three duplicated controls removed (owner). */}
 
         {/* ── Hero: "My" — big M, smaller y — then the rolling name. Nested
             <Text> rather than two siblings, so the two sizes share one baseline
@@ -530,7 +497,7 @@ export default function TodosScreen() {
             animate={{ opacity: 1, translateY: 0 }}
             exit={{ opacity: 0, translateY: 48 }}
             transition={{ type: 'timing', duration: 240 }}
-            style={[styles.undoWrap, { bottom: insets.bottom + UNDO_ABOVE_BAR }]}
+            style={[styles.undoWrap, { bottom: insets.bottom + TAB_BAR_CLEARANCE + UNDO_ABOVE_BAR }]}
             pointerEvents="box-none"
           >
             <View style={styles.undoBar}>
@@ -546,7 +513,7 @@ export default function TodosScreen() {
         )}
       </AnimatePresence>
 
-      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + spacing.sm }]}>
+      <View style={[styles.bottomBar, { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }]}>
         <Pressable style={styles.addWrap} onPress={openNew} scaleTo={0.97}>
           <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.addBtn}>
             <Icon name="add" size={18} color={colors.onAction} />
@@ -566,12 +533,6 @@ export default function TodosScreen() {
         onSaved={onSaved}
       />
 
-      <ProfilePanel
-        visible={menuOpen}
-        onClose={() => setMenuOpen(false)}
-        reels={[]}
-        total={reelTotal}
-      />
 
       <TodoSettingsSheet
         visible={settingsOpen}
@@ -624,38 +585,24 @@ const styles = themed(() => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
   content: { padding: spacing.lg, gap: spacing.lg, flexGrow: 1 },
 
-  // ── Header actions — copied from the Library screen's header so the two
-  // pages share one visual language. Keep in sync with app/index.tsx.
-  headerActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.sm },
-  saveBtnWrap: { borderRadius: radius.full, ...shadow.glow },
-  saveBtn: {
-    width: 38, height: 38, borderRadius: radius.full,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  menuBtn: {
-    width: 38, height: 38, borderRadius: radius.full,
-    backgroundColor: colors.card,
-    borderWidth: 1, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center',
-  },
 
   // ── Hero ────────────────────────────────────────────────────────────
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // Accent-coloured, so it tracks whichever Appearance theme is active.
+  // ⚠️ heroM and heroText MUST stay the same fontSize/lineHeight — the owner's
+  // note was that the rolling half didn't match "My". They were 44 and 24.
   heroM: {
-    color: colors.accent, fontSize: font.display,
-    fontWeight: '800', letterSpacing: -0.5, lineHeight: 38,
+    color: colors.textPrimary, fontFamily: typeface.display,
+    fontSize: font.xxl, letterSpacing: tracking.title, lineHeight: 34,
   },
-  heroY: { fontSize: font.xl },
+  heroY: { fontSize: font.lg },
   heroRoll: { flex: 1, alignSelf: 'auto' },
-  // A notch smaller than the "M" deliberately. Inline means the rolling half
-  // only gets the row minus "My", and the longest entries ("Program of
-  // Entertainment 🎪", "Things as They Happened ⏳") would ellipsize at display
-  // size on a narrow phone. This keeps every name whole while "My" still
-  // anchors the line.
+  // Same size as the "M" — see above. It was a notch smaller so the longest
+  // names ("Program of Entertainment 🎪") wouldn't ellipsize at 44px; dropping
+  // BOTH halves to 29 keeps them whole and makes the line read as one phrase.
   heroText: {
-    fontSize: font.xl, fontWeight: '800', color: colors.textPrimary,
-    textAlign: 'left', paddingHorizontal: 0, lineHeight: 30, fontStyle: 'normal',
+    fontFamily: typeface.display, fontSize: font.xxl, color: colors.textPrimary,
+    letterSpacing: tracking.title,
+    textAlign: 'left', paddingHorizontal: 0, lineHeight: 34, fontStyle: 'normal',
   },
   gearBtn: {
     width: 50, height: 50, borderRadius: radius.md,

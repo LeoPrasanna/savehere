@@ -9,6 +9,7 @@ import { Pressable } from '../components/Pressable';
 import { Label, Body, Title, Rule, FilledButton } from '../components/kit';
 import { useAuth, AVATAR_OPTIONS } from '../contexts/AuthContext';
 import * as haptics from '../services/haptics';
+import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { colors, spacing, font, typeface, themed } from '../constants/theme';
 
 /** Underlined field — a rule, not a box. Same grammar as login and save. */
@@ -116,7 +117,7 @@ export default function ProfileScreen() {
 // between light and dark. See constants/theme.ts.
 const styles = themed(() => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  inner: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.xxl },
+  inner: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: TAB_BAR_CLEARANCE + spacing.xl },
   email: { marginTop: spacing.sm },
 
   field: { gap: spacing.xs, marginTop: spacing.lg },

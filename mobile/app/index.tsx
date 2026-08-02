@@ -17,6 +17,7 @@ import { Label, Body, Title, Rule, GhostButton, Wordmark } from '../components/k
 import { hasEnteredLibrary, markEnteredLibrary, clearEnteredLibrary } from '../services/sessionFlags';
 import { onUi, emitUi } from '../services/uiBus';
 import { ASK_MIN_REELS } from '../constants/limits';
+import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, GRID_GAP, themed } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
@@ -462,7 +463,7 @@ const styles = themed(() => StyleSheet.create({
   // inside a tile can push its column wider than its share.
   column: { flex: 1, minWidth: 0, gap: GRID_GAP },
   // Clears the floating tab bar (its own height + the safe-area inset it adds).
-  list: { paddingTop: GRID_GAP, paddingBottom: 116 },
+  list: { paddingTop: GRID_GAP, paddingBottom: TAB_BAR_CLEARANCE + spacing.xl },
   disclaimer: {
     fontSize: font.sm,
     lineHeight: 19,

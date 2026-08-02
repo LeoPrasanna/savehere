@@ -28,6 +28,20 @@ import { colors, spacing, radius, themed } from '../constants/theme';
 /** Routes that own their whole surface and must not be overlaid. */
 const HIDE_ON = ['/save', '/pro', '/workout/session'];
 
+/**
+ * How much room the bar occupies ABOVE the safe-area inset — pill height
+ * (42 slot + 6+6 padding + 2 border = 56) plus the gap it floats by.
+ *
+ * ⚠️ EVERY SCREEN WITH ITS OWN BOTTOM CHROME MUST ADD THIS. The bar is
+ * `position: absolute` at the root, so it silently covers anything a screen
+ * pins to the bottom — which is exactly what happened to the to-do screen's
+ * "New task" button and its Undo bar. Undo looked broken because the button was
+ * underneath the tab bar, not because the logic failed.
+ *
+ * Use as `paddingBottom: insets.bottom + TAB_BAR_CLEARANCE`.
+ */
+export const TAB_BAR_CLEARANCE = 72;
+
 interface Tab {
   key: string;
   icon: string;
