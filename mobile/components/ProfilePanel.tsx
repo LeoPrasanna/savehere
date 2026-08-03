@@ -8,6 +8,7 @@ import { Icon } from './Icon';
 import { Label, Body, Title, Rule, GhostButton, FilledButton, Index } from './kit';
 import { useAuth } from '../contexts/AuthContext';
 import { markReopenPanel } from '../services/sessionFlags';
+import { clearSaveCount } from '../services/saveCount';
 import {
   colors, spacing, font, tracking, typeface, themed,
   SchemePreference, getSchemePreference, setScheme,
@@ -100,6 +101,9 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
     setDeleting(false);
     setShowDeleteConfirm(false);
     onClose();
+    // The home screen seeds its stage from a remembered count; the next person
+    // to open the app on this device must not inherit a stranger's number.
+    clearSaveCount();
     if (result.error) {
       // Alert.alert is a silent no-op on react-native-web — errors must be
       // visible on every platform or deletion failures look like nothing.

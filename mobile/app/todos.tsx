@@ -14,6 +14,7 @@ import { Label } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { TodoSettingsSheet } from '../components/TodoSettingsSheet';
 import { bucketOf, formatDue, todayISO, Bucket } from '../services/todoDates';
+import { mergeTodoList } from '../services/todoMerge';
 import { useTodoSettings } from '../services/todoSettings';
 import { TODO_QUOTES, TODO_ROLL_NAMES, TODO_ADD_LABEL } from '../constants/todoBrand';
 import * as haptics from '../services/haptics';
@@ -186,6 +187,21 @@ export default function TodosScreen() {
   // Declared up here because load() reads it — see the delete/undo block below
   // for what it's for.
   const pending = useRef<{ todo: Todo; timer: ReturnType<typeof setTimeout> } | null>(null);
+  /**
+   * Tasks the user brought back with Undo.
+   *
+   * ⚠️ THE MIRROR OF `pending`. That ref keeps a deleted-but-not-yet-committed
+   * row OUT of a refetch; this one keeps a restored row IN.
+   *
+   * Needed because `load()` asks the server for `settings.showCompleted`. Undo a
+   * COMPLETED task while completed items are hidden and the server correctly
+   * omits it — so every later refetch (a pull, a focus, saving another task)
+   * silently dropped the row again. The task was never deleted; it was
+   * invisible, which to the user is the same thing.
+   *
+   * Cleared when the user changes that filter themselves, or leaves the screen.
+   */
+  const restored = useRef<Map<string, Todo>>(new Map());
   const [undoFor, setUndoFor] = useState<Todo | null>(null);
   const { settings, update: updateSettings, ready: settingsReady } = useTodoSettings();
   // Set when a reel-linked task is completed: the "delete the saved card?" ask.
@@ -200,8 +216,12 @@ export default function TodosScreen() {
       const d = await api.listTodos(settings.showCompleted, todayISO());
       // A refresh inside the undo window would otherwise resurrect the row the
       // user just deleted — the server hasn't been told yet, by design.
-      const dropped = pending.current?.todo.id;
-      setTodos(dropped ? d.items.filter(t => t.id !== dropped) : d.items);
+      // Both client-side facts the server can't know about, in one tested
+      // place — see services/todoMerge.ts and its test.
+      setTodos(mergeTodoList(d.items, {
+        dropId: pending.current?.todo.id,
+        restored: restored.current,
+      }));
       setStats(d.stats);
       setError(null);
     } catch (e: any) {
@@ -211,6 +231,10 @@ export default function TodosScreen() {
       setRefreshing(false);
     }
   }, [settings.showCompleted]);
+
+  // Changing the filter is an explicit instruction about what to show; a row
+  // held open by Undo must not outlive it.
+  useEffect(() => { restored.current.clear(); }, [settings.showCompleted]);
 
   useFocusEffect(useCallback(() => {
     // The rolling hero is the page title, so the nav bar carries no title —
@@ -318,6 +342,9 @@ export default function TodosScreen() {
     // A second delete inside the window commits the first — one undo slot keeps
     // the interaction honest instead of stacking toasts nobody reads.
     flushPending();
+    // Deleting something previously restored retracts that restoration —
+    // otherwise `load()` would keep re-inserting a row the user just binned.
+    restored.current.delete(todo.id);
     setTodos(ts => ts.filter(t => t.id !== todo.id));
     setStats(s => s && {
       ...s,
@@ -351,32 +378,41 @@ export default function TodosScreen() {
       open: todo.completed ? s.open : s.open + 1,
       completed: todo.completed ? s.completed + 1 : s.completed,
     });
+    // Remember it, so no later refetch can drop it again — see `restored`.
+    // An earlier fix merely SKIPPED the refetch for this case, which delayed the
+    // disappearance to the next pull/focus/save instead of preventing it.
+    restored.current.set(todo.id, todo);
     // …then a quiet refetch restores its real position. Sorting locally would
     // mean a second copy of the server's date-then-priority rule, which is
     // exactly the kind of duplicate that drifts.
-    //
-    // ⚠️ BUT ONLY WHEN THE RESTORED TASK WILL BE IN THAT RESPONSE.
-    //
-    // `load()` asks the server for `settings.showCompleted`. A COMPLETED task,
-    // with completed items hidden, is simply absent from the reply — so the
-    // refetch's `setTodos(d.items)` wiped the row undo had just put back. The
-    // reported symptom exactly: complete a task, delete it, undo, watch it
-    // reappear and then vanish a moment later.
-    //
-    // The task itself was never in danger: undo cancels the timer, so
-    // `commitDelete` never ran and the row still exists server-side. This was a
-    // display bug — turning "show completed" on would have revealed it sitting
-    // there the whole time.
-    if (!todo.completed || settings.showCompleted) load();
+    load();
   };
 
-  const onSaved = (saved: Todo) => {
-    setTodos(ts => {
-      const without = ts.filter(t => t.id !== saved.id);
-      return [...without, saved];
-    });
-    // Re-fetch so server-side ordering (date → priority) is authoritative.
-    load();
+  /** A brand-new task, shown before the server has confirmed it. */
+  const onOptimistic = (draft: Todo) => {
+    setTodos(ts => [...ts, draft]);
+    setStats(s => s && { ...s, total: s.total + 1, open: s.open + 1 });
+  };
+
+  /**
+   * The server's version of a task, replacing the draft if there was one.
+   *
+   * ⚠️ NO `load()` HERE ANY MORE. It used to refetch the whole list purely to
+   * get ordering right, which on a cold backend meant a SECOND multi-second wait
+   * after the create — the new task sat there looking stuck. Grouping is done
+   * client-side from `due_date` anyway, so the row lands in the correct section
+   * immediately; only its position WITHIN a section waits for the next natural
+   * refresh, which nobody notices.
+   */
+  const onSaved = (saved: Todo, replaces?: string) => {
+    setTodos(ts => [...ts.filter(t => t.id !== saved.id && t.id !== replaces), saved]);
+  };
+
+  /** The create failed after the sheet closed. Take the draft back out and say why. */
+  const onFailed = (draftId: string, message: string) => {
+    setTodos(ts => ts.filter(t => t.id !== draftId));
+    setStats(s => s && { ...s, total: Math.max(0, s.total - 1), open: Math.max(0, s.open - 1) });
+    setError(message);
   };
 
   const openNew = () => { setEditing(null); setEditorOpen(true); };
@@ -555,6 +591,8 @@ export default function TodosScreen() {
         editing={editing}
         defaultPriority={settings.defaultPriority}
         onClose={() => { setEditorOpen(false); setEditing(null); }}
+        onOptimistic={onOptimistic}
+        onFailed={onFailed}
         onSaved={onSaved}
       />
 
