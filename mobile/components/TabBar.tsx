@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { View, StyleSheet, Animated, Easing, AccessibilityInfo } from 'react-native';
+import { View, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -57,48 +56,10 @@ const TABS: Tab[] = [
   { key: 'ask',     icon: 'ask',      label: 'Ask' },
 ];
 
-/**
- * The Save glyph breathes — a slow, small scale pulse (owner: "make the + a
- * little popping animation").
- *
- * Kept deliberately gentle: 1.00 → 1.08 over 1.1s each way. Anything faster or
- * larger on a control that is ALWAYS on screen stops being an invitation and
- * becomes a twitch you want to swat.
- *
- * ⚠️ Honours reduce-motion. A permanently animating element with no way to stop
- * it is precisely what that OS setting exists for.
- */
-function usePop() {
-  const scale = useRef(new Animated.Value(1)).current;
-  const [reduceMotion, setReduceMotion] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    AccessibilityInfo.isReduceMotionEnabled()
-      .then(on => { if (!cancelled) setReduceMotion(on); })
-      .catch(() => {});
-    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
-    return () => { cancelled = true; sub?.remove?.(); };
-  }, []);
-
-  useEffect(() => {
-    if (reduceMotion) { scale.setValue(1); return; }
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(scale, { toValue: 1.08, duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-      Animated.timing(scale, { toValue: 1,    duration: 1100, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
-    ]));
-    loop.start();
-    return () => loop.stop();
-  }, [reduceMotion]);
-
-  return scale;
-}
-
 export function TabBar() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const pop = usePop();
 
   if (HIDE_ON.some(p => pathname.startsWith(p))) return null;
 
@@ -151,12 +112,13 @@ export function TabBar() {
           colors={[colors.tabBarTop, colors.tabBarBottom]}
           style={[styles.barFill, { pointerEvents: 'none' }]}
         />
+        {/* ⚠️ EVERY TAB IS IDENTICAL. Save was briefly larger, filled and
+            pulsing; the owner asked for uniformity, and they were right — a
+            permanently animating, permanently highlighted control in a row of
+            five reads as an alert, not a destination. Emphasis in a tab bar
+            should mean "you are here", nothing else. */}
         {TABS.map(t => {
           const on = active === t.key;
-          // Save is deliberately larger and always filled — it is the action the
-          // whole app exists for, and at equal weight it disappeared into a row
-          // of five identical glyphs (owner: "make the + pop out a bit").
-          const isSave = t.key === 'save';
           return (
             <Pressable
               key={t.key}
@@ -165,26 +127,18 @@ export function TabBar() {
               accessibilityRole="button"
               accessibilityLabel={t.label}
             >
-              {/* ⚠️ The active tab is an OUTLINED disc, not a filled one
-                  (owner). A filled white circle was the brightest thing on the
-                  screen and read as a button you had not pressed yet; a ring
-                  marks position without shouting. Save keeps its fill — it is
-                  an action, not a location. */}
-              <Animated.View
-                style={[
-                  styles.slot,
-                  on && styles.slotOn,
-                  isSave && styles.slotSave,
-                  isSave && { transform: [{ scale: pop }] },
-                ]}
-              >
+              {/* The active tab is an OUTLINED disc, not a filled one (owner).
+                  A filled white circle was the brightest thing on the screen
+                  and read as a button you had not pressed yet; a ring marks
+                  position without shouting. */}
+              <View style={[styles.slot, on && styles.slotOn]}>
                 <Icon
                   name={t.icon}
-                  size={isSave ? 24 : 19}
-                  color={isSave ? colors.background : on ? colors.textPrimary : colors.textSecondary}
-                  emphasis={on || isSave}
+                  size={19}
+                  color={on ? colors.textPrimary : colors.textSecondary}
+                  emphasis={on}
                 />
-              </Animated.View>
+              </View>
             </Pressable>
           );
         })}
@@ -239,12 +193,4 @@ const styles = themed(() => StyleSheet.create({
     justifyContent: 'center',
   },
   slotOn: { borderWidth: 1.5, borderColor: colors.textPrimary },
-  // Bigger than its neighbours and permanently filled. `margin: -5` lets it
-  // outgrow the pill's own padding so it sits proud of the bar instead of
-  // stretching it.
-  slotSave: {
-    width: 52, height: 52,
-    margin: -5,
-    backgroundColor: colors.textPrimary,
-  },
 }));

@@ -354,7 +354,20 @@ export default function TodosScreen() {
     // …then a quiet refetch restores its real position. Sorting locally would
     // mean a second copy of the server's date-then-priority rule, which is
     // exactly the kind of duplicate that drifts.
-    load();
+    //
+    // ⚠️ BUT ONLY WHEN THE RESTORED TASK WILL BE IN THAT RESPONSE.
+    //
+    // `load()` asks the server for `settings.showCompleted`. A COMPLETED task,
+    // with completed items hidden, is simply absent from the reply — so the
+    // refetch's `setTodos(d.items)` wiped the row undo had just put back. The
+    // reported symptom exactly: complete a task, delete it, undo, watch it
+    // reappear and then vanish a moment later.
+    //
+    // The task itself was never in danger: undo cancels the timer, so
+    // `commitDelete` never ran and the row still exists server-side. This was a
+    // display bug — turning "show completed" on would have revealed it sitting
+    // there the whole time.
+    if (!todo.completed || settings.showCompleted) load();
   };
 
   const onSaved = (saved: Todo) => {

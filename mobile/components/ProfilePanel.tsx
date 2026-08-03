@@ -76,9 +76,20 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
 
   const go = (path: string) => { onClose(); router.push(path as any); };
 
-  const total = totalProp ?? reels.length;
-  // Prefer the server's whole-library counts; fall back to the loaded sample only
-  // until usage loads (the sample undercounts — it's just the visible page).
+  /**
+   * ⚠️ THE SAVED COUNT MUST COME FROM THE SERVER FIRST.
+   *
+   * This read `totalProp ?? reels.length`, which was fine while each screen
+   * rendered its own panel and passed its own list in. The panel now lives at
+   * the root and is handed `reels={[]}` with no total — so it showed **0 saved**
+   * next to a server-supplied "14 categories, 4 platforms". Three numbers from
+   * two sources, one of them empty.
+   *
+   * `usage.saves.used` is the whole-library count the backend already computes
+   * for the quota meter. The props are kept only as a fallback for the first
+   * frame before `getUsage()` lands.
+   */
+  const total = usage?.saves?.used ?? totalProp ?? reels.length;
   const categories = usage?.categories ?? new Set(reels.map(r => r.category).filter(Boolean)).size;
   const platforms = usage?.platforms ?? new Set(reels.map(r => r.platform).filter(Boolean)).size;
 
