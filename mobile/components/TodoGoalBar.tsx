@@ -1,7 +1,6 @@
 import { View, Text, StyleSheet, StyleProp, ViewStyle } from 'react-native';
-import { MotiView } from 'moti';
-import { Icon } from './Icon';
-import { colors, spacing, font, radius, themed } from '../constants/theme';
+import { Label } from './kit';
+import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 
 /**
  * Today's completion progress against the user's daily goal.
@@ -12,7 +11,12 @@ import { colors, spacing, font, radius, themed } from '../constants/theme';
  * that can get stuck and leave yesterday's number on screen.
  *
  * `done` may exceed `goal` (finishing 7 against a goal of 5 is a good day, not
- * an error); the bar clamps but the label keeps the real number.
+ * an error); the marks clamp but the label keeps the real number.
+ *
+ * ⚠️ Was a filled bar that turned green on completion. Achromatic now, so it is
+ * one mark PER TASK: five marks for a goal of five, filled as you go. That reads
+ * as "three of five" instantly where a part-filled grey bar reads as "some" —
+ * and hitting the goal is a full row of marks, which needs no colour at all.
  */
 interface Props {
   done: number;
@@ -21,51 +25,51 @@ interface Props {
   style?: StyleProp<ViewStyle>;
 }
 
+/** Above this, per-task marks get too thin to see and it falls back to a bar. */
+const MAX_MARKS = 12;
+
 export function TodoGoalBar({ done, goal, compact, style }: Props) {
   if (goal <= 0) return null;                    // goal switched off in settings
   const hit = done >= goal;
-  const pct = Math.min(100, Math.round((done / goal) * 100));
+  const marks = Math.min(goal, MAX_MARKS);
+  const perMark = goal / marks;
 
   return (
     <View style={[styles.wrap, style]}>
       <View style={styles.labelRow}>
-        <Text style={[styles.label, compact && styles.labelCompact]} numberOfLines={1}>
-          {hit ? "Today's goal met" : "Today's goal"}
-        </Text>
-        <View style={styles.countRow}>
-          {hit && <Icon name="flame" size={compact ? 11 : 13} color={colors.success} />}
-          <Text style={[styles.count, compact && styles.labelCompact, hit && styles.countHit]}>
-            {done}/{goal}
-          </Text>
-        </View>
+        <Label numberOfLines={1}>{hit ? "Today's goal met" : "Today's goal"}</Label>
+        <Text style={[styles.count, hit && styles.countHit]}>{done}/{goal}</Text>
       </View>
 
-      <View style={[styles.track, compact && styles.trackCompact]}>
-        <MotiView
-          // Animated so completing a task visibly moves the bar — the payoff
-          // that makes the goal feel worth chasing.
-          animate={{ width: `${pct}%` }}
-          transition={{ type: 'timing', duration: 420 }}
-          style={[styles.fill, hit && styles.fillHit]}
-        />
+      <View style={styles.track}>
+        {Array.from({ length: marks }).map((_, i) => (
+          <View
+            key={i}
+            style={[
+              styles.mark,
+              compact && styles.markCompact,
+              i * perMark < done && styles.markOn,
+            ]}
+          />
+        ))}
       </View>
     </View>
   );
 }
 
 const styles = themed(() => StyleSheet.create({
-  wrap: { gap: 5 },
-  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  label: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '700' },
-  labelCompact: { fontSize: 10 },
-  countRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  count: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '800' },
-  countHit: { color: colors.success },
-  track: {
-    height: 6, borderRadius: radius.full,
-    backgroundColor: colors.border, overflow: 'hidden',
+  wrap: { gap: spacing.xs },
+  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  count: {
+    color: colors.textSecondary,
+    fontFamily: typeface.label,
+    fontSize: font.xs,
+    letterSpacing: tracking.label,
+    fontVariant: ['tabular-nums'],
   },
-  trackCompact: { height: 4 },
-  fill: { height: '100%', borderRadius: radius.full, backgroundColor: colors.accent },
-  fillHit: { backgroundColor: colors.success },
+  countHit: { color: colors.textPrimary },
+  track: { flexDirection: 'row', gap: 3 },
+  mark: { flex: 1, height: 5, backgroundColor: colors.ghostLine },
+  markCompact: { height: 3 },
+  markOn: { backgroundColor: colors.textPrimary },
 }));

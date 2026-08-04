@@ -143,7 +143,7 @@ export default function WorkoutSessionScreen() {
         <FloatingHomeButton top={insets.top + spacing.xs} />
         <View style={styles.readyHeader}>
           <LinearGradient colors={gradients.vibrant} style={styles.readyIcon}>
-            <Icon name="barbell" size={30} color="#FFF" />
+            <Icon name="barbell" size={30} color={colors.onAction} />
           </LinearGradient>
           <Text style={styles.readyTitle}>{plan.workout_name}</Text>
           <Text style={styles.readyMeta}>
@@ -307,7 +307,7 @@ function GradientButton({ icon, label, gradient, onPress, glow }: {
   return (
     <Pressable onPress={onPress} style={[styles.bigBtnWrap, glow && shadow.glow]} scaleTo={0.97}>
       <LinearGradient colors={gradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.bigBtn}>
-        <Icon name={icon} size={20} color="#FFF" />
+        <Icon name={icon} size={20} color={colors.onAction} />
         <Text style={styles.bigBtnText}>{label}</Text>
       </LinearGradient>
     </Pressable>
@@ -345,7 +345,7 @@ const styles = themed(() => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
     borderRadius: radius.md, padding: spacing.md, minHeight: 58,
   },
-  bigBtnText: { color: '#FFF', fontSize: font.lg, fontWeight: '800' },
+  bigBtnText: { color: colors.onAction, fontSize: font.lg, fontWeight: '800' },
 
   // Exercise
   exerciseCounter: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '800', letterSpacing: 2, textAlign: 'center' },
@@ -364,7 +364,7 @@ const styles = themed(() => StyleSheet.create({
     width: 150, height: 150, borderRadius: 75, alignItems: 'center', justifyContent: 'center',
     marginTop: spacing.md, ...shadow.glow,
   },
-  targetNumber: { color: '#FFF', fontSize: 60, fontWeight: '900', lineHeight: 66 },
+  targetNumber: { color: colors.onAction, fontSize: 60, fontWeight: '900', lineHeight: 66 },
   targetUnit: { color: 'rgba(255,255,255,0.85)', fontSize: font.xs, letterSpacing: 3, fontWeight: '800' },
 
   secondaryRow: { flexDirection: 'row', justifyContent: 'center', gap: spacing.xl, marginTop: spacing.xs },
@@ -373,7 +373,7 @@ const styles = themed(() => StyleSheet.create({
   // Rest
   restLabel: { color: colors.accentLight, fontSize: font.sm, letterSpacing: 6, fontWeight: '800' },
   motivation: { color: colors.textSecondary, fontSize: font.md, fontStyle: 'italic' },
-  restCount: { color: '#FFF', fontSize: 110, fontWeight: '900', lineHeight: 116 },
+  restCount: { color: colors.onAction, fontSize: 110, fontWeight: '900', lineHeight: 116 },
   restUnit: { color: colors.textSecondary, fontSize: font.sm, letterSpacing: 4, fontWeight: '700', marginTop: -spacing.sm },
   restBarTrack: { width: '80%', height: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: radius.full, overflow: 'hidden', marginTop: spacing.md },
   restBarFillWrap: { height: '100%' },

@@ -1,40 +1,52 @@
 import { View, Text, ScrollView, StyleSheet } from 'react-native';
-import { Icon } from '../components/Icon';
 import { FEATURES } from '../constants/features';
-import { colors, spacing, font, radius } from '../constants/theme';
+import { Label, Body, Title, Rule, Index } from '../components/kit';
+import { TAB_BAR_CLEARANCE } from '../components/TabBar';
+import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 
 export default function HelpScreen() {
   return (
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sub}>SaveHere isn't just a bookmark — here's everything it can do with your saves.</Text>
+        <Title>Not just a bookmark.</Title>
+        <Body style={styles.sub}>
+          Everything SaveHere can do with what you save.
+        </Body>
 
-        {FEATURES.map(f => (
-          <View key={f.title} style={styles.card}>
-            <View style={[styles.iconWrap, { backgroundColor: f.color + '22' }]}>
-              <Icon name={f.icon} size={20} color={f.color} />
+        <View style={styles.list}>
+          <Rule />
+          {FEATURES.map((f, i) => (
+            <View key={f.title}>
+              <View style={styles.row}>
+                <Index n={i + 1} style={styles.index} />
+                <View style={styles.text}>
+                  <Text style={styles.title}>{f.title}</Text>
+                  <Body style={styles.detail}>{f.detail}</Body>
+                </View>
+              </View>
+              <Rule />
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>{f.title}</Text>
-              <Text style={styles.cardDetail}>{f.detail}</Text>
-            </View>
-          </View>
-        ))}
+          ))}
+        </View>
       </ScrollView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md, gap: spacing.sm, paddingBottom: spacing.xxl },
-  sub: { color: colors.textSecondary, fontSize: font.sm, lineHeight: 20, marginBottom: spacing.xs },
-  card: {
-    flexDirection: 'row', gap: spacing.sm,
-    backgroundColor: colors.card, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.md,
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: TAB_BAR_CLEARANCE + spacing.xl },
+  sub: { marginTop: spacing.md, fontSize: font.sm, lineHeight: 20 },
+
+  list: { marginTop: spacing.xl },
+  row: { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.lg },
+  index: { width: 22, paddingTop: 4 },
+  text: { flex: 1, minWidth: 0, gap: spacing.sm },
+  title: {
+    color: colors.textPrimary,
+    fontFamily: typeface.display,
+    fontSize: font.lg,
+    letterSpacing: tracking.heading,
   },
-  iconWrap: { width: 40, height: 40, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  cardTitle: { color: colors.textPrimary, fontSize: font.md, fontWeight: '800', marginBottom: 4 },
-  cardDetail: { color: colors.textSecondary, fontSize: font.sm, lineHeight: 20 },
-});
+  detail: { fontSize: font.sm, lineHeight: 20 },
+}));

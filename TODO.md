@@ -189,6 +189,303 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
 
 ---
 
+## Mobile — Design
+
+- [~] **UI/UX overhaul — "Contact Sheet" (branch `design/contact-sheet`, 2026-08-01).**
+  Briefed against the **Savee** iOS app (owner-supplied reference), then built from
+  a different source so it shares Savee's *thesis* without copying its *execution*.
+  Full reference lock sits at the top of `mobile/constants/theme.ts`.
+  ⚠️ **This is the FOURTH direction in a week** (Cron Calendar restraint → Sticker
+  Bomb → Golden Hour → this). The previous branch `design/loud-rebrand` was deleted
+  as instructed; its 5 commits are preserved under the tag **`archive/loud-rebrand`**
+  (`git show archive/loud-rebrand`). Delete the tag if you want them truly gone.
+  **Why this one is different, and worth stopping on:** SaveHere's cards are
+  THUMBNAILS. Every previous direction put brand colour on the surface *around*
+  them, and colour-vs-thumbnail is a fight the chrome always loses. This system's
+  governing rule — from Julia Krantz, "colour is entirely absent from the UI layer;
+  all chromatic interest is delegated to the photography" — is the first one that
+  matches what the product actually shows.
+  **Research (Refero):** primary **Julia Krantz** (darkroom contact sheet: absolute
+  #000, 1px ghost-line seams, 0 radius, weight-300 display type). Borrowed: **mono**
+  (ghost outline control — no filled colour CTAs) and **entire studios** (small
+  tracked uppercase labels as the metadata voice). Savee's own screens + its 13-step
+  onboarding flow supplied the JOURNEY, not the styling.
+  **Deliberate departures from Savee** (so this isn't a clone): ghost outline CTA
+  instead of its filled white pill · square auth buttons and avatars instead of its
+  circles · a numbered `01 / 06` rail instead of its dot pagination (whose active
+  dot is also its only spot of colour) · weight 300 instead of its medium/semibold ·
+  fully achromatic chrome, where Savee keeps a blue accent.
+  **Done:**
+  - **Token layer rewritten.** Absolute #000 / #FFF canvases — never a "near"
+    value. One foreground tone, one muted, one ghost line. **Every radius is 0**
+    (`radius.full` included, so ~30 pill/avatar call sites went square unedited).
+    **No shadows** (`shadow.*` are empty objects). Gradients flattened to solid
+    fills — `scrim` is the one exception and keeps real stops, because it makes
+    overlay text legible over an unknown photograph.
+  - **⚠️ `app.json`'s `userInterfaceStyle` was `"dark"`** — that forces
+    `Appearance.getColorScheme()`, so light mode could never have worked on a
+    device. Now `"automatic"`. Both schemes verified live in the browser.
+  - **Accent themes deleted** (5 ember/iris/ocean/forest/rose swatches). An
+    achromatic system has no accent to switch. Replaced by **Light / Dark /
+    System**, inline in ProfilePanel — a whole route for one three-way choice was
+    never worth the tap.
+  - **Colour-carried meaning re-encoded, not dropped.** Priority marks (to-dos,
+    home widget) are now SHAPE — solid / hollow / hairline. Disclaimer severity is
+    a stated heading ("NOT MEDICAL ADVICE") plus border weight. Platform is a
+    tracked wordmark, not a coloured badge. Progress meters are discrete marks
+    rather than filled bars. Each of these is *more* accessible than what it
+    replaced: red-vs-amber was never distinguishable to a red-green colourblind
+    reader, and those are the notices that matter most.
+  - **Grid is full-bleed and flush** — no page margin, no gutters; tiles share a
+    1px seam, contact-sheet style. Frames are 3:4 portrait (was 16:10 landscape,
+    which cropped the top and bottom off nearly every reel thumbnail stored).
+  - **Two-step auth**, following Savee's flow: welcome (wordmark + auth choice over
+    an empty contact sheet) → form. Apple/Google are deliberately ABSENT rather
+    than present-and-dead; the row is built so they drop in when wired.
+  - **Onboarding** recomposed full-bleed: title, copy, a monochrome geometric
+    figure, numbered rail, pinned CTA. No skip (2026-07-20 decision preserved).
+  - Retired glassmorphism layer **deleted** (Aurora/BorderBeam/Shimmer/
+    ParticleField/LibraryBackdrop/GlassCard) — still mounted and still painting the
+    old ember palette. New `components/kit.tsx` primitive set. Fredoka+Fraunces →
+    **Space Grotesk + DM Sans**. Icon strokes thinned 2.4/2/1.75 → 1.6/1.35/1.1.
+  - **Press feedback is opacity, not scale.** `Pressable`'s `scaleTo` is now a
+    no-op prop kept for ~30 call sites; a contact sheet whose tiles bounce is a
+    contradiction, and at 0 radius a scaling rectangle reads as a glitch.
+  - **Bug found and fixed while verifying:** `_layout.tsx` gave `<StatusBar>` and
+    the gate's child the same `key={schemeEpoch}`. Sibling keys share a namespace,
+    so both were `"0"` — React warned about duplicate children on every render and
+    can legally *drop* one. Keys are prefixed now.
+  ⚠️ **Contrast note:** the reference's own `#707070` muted tone measures **4.24:1**
+  on black and fails AA at the 10px label sizes this system leans on. Both ash
+  values were walked until they pass (`#787878` = 4.8:1 dark, `#6E6E6E` = 5.1:1
+  light). Preserving an accessibility bug is not preserving a signature trait.
+  **Remaining — screens that inherit the tokens but were NOT recomposed:**
+  `reel/[id]` and `todos` got targeted passes (whites that would have gone
+  invisible on the now-white filled controls, priority marks, hero chips, display
+  type) but keep their card-based layout rather than the ruled-row grammar.
+  `workout/[reelId]` and `workout/session/[reelId]` are token-inherited only.
+  ⚠️ **Owner visual pass required** — the agent's preview browser has no session,
+  so only the login/welcome flow and the token layer were verified live. Verified:
+  typecheck clean, `expo export --platform web` clean, both schemes paint
+  correctly, no console errors.
+
+- [x] **Round two — owner review (2026-08-01).** Six items, all shipped.
+  1. **Typeface → Inter, one family.** Space Grotesk + DM Sans at weight 300 were
+     dropped for a single neutral Helvetica-class grotesque at 400/500/600, to
+     match the brief's reference app. Tracking loosened -0.04em → **-0.025em** at
+     display sizes: tight negative tracking exists to stop LIGHT letterforms
+     drifting apart, and applied to semibold it jams the counters shut. Four font
+     packages uninstalled (space-grotesk, dm-sans, fraunces, manrope) — Inter is
+     the only one left.
+  2. **⚠️ `<button> cannot contain a nested <button>` — MY BUG, fixed.** Round one
+     added `accessibilityRole = 'button'` as a *default* on `components/Pressable`.
+     react-native-web renders that as a literal `<button>`, and this component is
+     nested inside itself all over the app (a tappable row that also holds
+     edit/delete controls — TaskList, TodoEditor, the reel detail hero). Invalid
+     HTML, and the inner control stops receiving clicks. The role is now
+     undefined by default (RN-web emits a `<div>` with correct ARIA, which nests
+     legally) and passed **explicitly** on leaf controls only — `GhostButton`,
+     `FilledButton`, the welcome auth button — so screen-reader semantics survive.
+     Verified in the DOM: 1 button, 0 nested pairs.
+  3. **Category filter → round icon bubbles** with the name beneath, mirroring the
+     reference's avatar row. `radius.circle` is added to the token layer as **the
+     one sanctioned circle in the system** — grep before reusing it; everything
+     else is still 0. Selection inverts (filled bubble, canvas-coloured icon)
+     rather than tinting, since there is no accent hue to tint with.
+  4. **Library is a staggered masonry**, not aligned rows. Each tile goes to
+     whichever column is currently shortest; running height is tracked in
+     width-units so columns finish level without measuring anything on screen.
+     Tile aspect comes from `aspectFor()` — seeded by **platform** (YouTube and
+     LinkedIn serve landscape thumbnails, Instagram and TikTok vertical) plus a
+     hash of the reel id, so it is real signal, deterministic, and never reflows
+     on image load. ⚠️ **This traded FlatList virtualization for a ScrollView** —
+     masonry and row-virtualization are incompatible without measuring every
+     tile. Fine for tens-to-hundreds of saves; at a few thousand the fix is a
+     windowed masonry, not a smaller diff. `onEndReached` is reimplemented by hand
+     on `onScroll`.
+  5. **Login backdrop is a live collage of the user's own saves.** New
+     `services/thumbCache.ts` persists up to 12 recent thumbnail URLs; the
+     signed-out welcome screen renders them as three tilted columns that **drift
+     continuously in alternating directions** (odd rise, even fall) at three
+     different speeds. First-ever launch has nothing cached and correctly falls
+     back to the numbered empty sheet.
+     **Why the user's own thumbnails and not stock imagery:** bundled stock is
+     someone else's work plus a licence to track; hotlinking is someone else's
+     bandwidth and copyright. Their own saves cost nothing, need no licence, and
+     are better product — the reference app shows you strangers' content, this
+     shows you what you came back for. `clearThumbs()` runs on account deletion.
+     ⚠️ **Asked for as a GIF; built in code instead.** No image/video generation
+     tool is available in this environment, and a GIF would have been a
+     fixed-size, block-compressed asset of someone else's content shipping in
+     every bundle forever. The coded version weighs nothing, stays sharp at any
+     density, and adapts to the user's library.
+     ⚠️ **Respects `AccessibilityInfo.isReduceMotionEnabled()`** — continuous
+     unstoppable background motion is exactly what that setting exists for, and a
+     sign-in screen is not the place to overrule it.
+     ⚠️ Second bug caught here: the first attempt made all three columns drift the
+     SAME way. `Animated.add(...).interpolate(...)` was over-clever; replaced with
+     a plain from/to swap per direction. Verified in the browser: UP / DOWN / UP.
+  6. **No blur on the collage** (the reference blurs its own). `expo-blur` is a
+     native module and this project has no dev build yet — the tilt plus a heavy
+     scrim carries the same "atmosphere, not content" read. Revisit once a native
+     build exists.
+  ⚠️ The scrim is the **canvas colour**, not black — it dims the wall in dark
+  mode and lightens it in light mode, so the wordmark on top stays legible in
+  both. A fixed black scrim would leave black-on-black text in light mode.
+
+- [x] **Round three — welcome screen, no photography (2026-08-01).**
+  1. **⚠️ ALL BITMAPS REMOVED FROM THE LOGIN SCREEN.** Owner raised the copyright
+     question on the thumbnail collage. The honest resolution is not to reason
+     about which images are safe — it is to have none. The tiles are now **mock
+     reel cards drawn entirely from Views**: a "REEL" label, a `•••` glyph, a
+     tonal well with an outlined play mark, a part-played scrubber, and an action
+     row. Nothing depicts anything, so there is no licence to track and no asset
+     to ship. Verified in the DOM: **0 `<img>` elements on the screen.**
+     *(For the record: the cached thumbnails were never the real exposure —
+     showing a user their own saves is what every other screen does. Bundled or
+     hotlinked stock would have been, and that was already avoided. Synthetic is
+     simply strictly safer AND a smaller diff.)*
+     `services/thumbCache.ts` and all its wiring are **deleted** — it existed only
+     for this screen.
+  2. **The action glyph is a BOOKMARK, not a heart.** This is a saving app; save
+     is the verb it cares about. Small detail, but it is the one thing on the mock
+     card that says whose product it is.
+  3. **Bottom ramp added.** A `LinearGradient` to solid canvas over the lower 58%,
+     on top of the flat wash — the controls and legal text live down there and
+     were competing with moving tiles. Measured: solid canvas behind the auth row.
+  4. **Apple + Google buttons added as MOCKS.** Round one left them out on the
+     grounds that a dead button is worse than no button; the owner asked for them,
+     so they exist and **say so when tapped** rather than failing silently. Email
+     is the one that works and carries the system's inversion (filled) to show it.
+     ⚠️ Still blocked on the same two things: the $99 Apple developer account, and
+     Apple guideline 4.8 — offering Google *requires* Sign in with Apple, so they
+     ship together or not at all.
+  5. **Scene compositions in the mock reels** (`components/MockReel.tsx`).
+     Asked for as "AI-created reel content"; **no image-generation tool exists in
+     this environment**, so photographic frames could not be authored. The honest
+     alternative is procedural: six composition kinds — portrait, horizon,
+     top-down, product, skyline, title — built from Views and gradients in the
+     palette's own tones. At tile size, behind a scrim and drifting, they read as
+     a wall of monochrome stills rather than a grid of grey rectangles, and the
+     zero-bitmap property from item 1 is preserved exactly.
+     **If real photography is ever wanted, the ONLY safe route is licensed assets
+     the owner supplies** — a paid stock licence that permits app embedding, or
+     shot in-house. Wiring them in is small: give `Scene` an image branch and drop
+     files in `assets/`. Do not swap in scraped or hotlinked images.
+
+  **Logged-in screens finally verified (2026-08-02).** A real staging session was
+  present in the preview browser, so the screens that had been unverifiable since
+  round one were checked live against a 63-save library:
+  - Category bubbles render circular (`border-radius: 999px`, 15 of them).
+  - **Masonry confirmed staggered**, not aligned rows — measured tile offsets of
+    391/451/764 in one column against 551/923/1379 in the next.
+  - Paywall page 01 renders, and the **`SAVE 20%` badge appears in USD** (where
+    $2/wk = $8.70/mo against $7 is a genuine 20%). The same function returns null
+    for the INR pair, so the badge cannot render there — the guard works.
+  ⚠️ Still unverified: paywall page 02, reel detail, todos, workout screens.
+
+- [x] **Round five — grid fidelity, floating tabs, pinned CTAs (2026-08-02).**
+  1. **⚠️ THE BLACK BARS WERE A BUG, NOT A CROP SETTING.** YouTube's
+     `hqdefault.jpg` / `hq2.jpg` are ALWAYS 480×360 (4:3) with pillarbox bars
+     **baked into the JPEG** for vertical Shorts — pixels in the file, so no
+     `resizeMode` removes them. Worse, `aspectFor` was handing YouTube/LinkedIn
+     *landscape* wells, which framed the bars instead of cutting them AND put two
+     tile shapes in one grid — the "not consistent" complaint.
+     Fixed properly at the source: `thumbCandidates()` in `services/api.ts` asks
+     for **`oardefault.jpg`** first, which serves the real 1080×1920 frame with no
+     bars (measured live: hqdefault → 480×360, oardefault → 1080×1920). It does
+     not exist for every video, so ReelCard walks the candidate list on `onError`
+     and falls back to the stored URL. All tile ratios are now portrait.
+  2. **The tile IS the image.** The caption block underneath was eating ~40% of
+     every tile and turned the wall into a column of black panels. Title and
+     category now ride a scrim over the bottom of the picture; 2px gutters
+     replace the flush seam, since images running edge to edge with no gap read
+     as one continuous smear.
+  3. **Floating 5-tab bar** (`components/TabBar.tsx`): Home · Library · **Save**
+     (centre, inverted) · Slate · Ask. Rendered ONCE at the root, above the
+     router, so it cannot drift between routes. Hidden on `/save`, `/pro` and the
+     workout session player — focused tasks with their own primary button, where
+     a floating nav would compete and a mis-tap would lose a pasted link.
+  4. **Hamburger on every page**, and only one profile panel. `HeaderHomeButton`
+     → `HeaderMenuButton` (Home is a tab now, so a header Home button was a
+     second way to do one thing). The panel moved to the root and is opened from
+     any screen through a 30-line `services/uiBus.ts` — previously **three**
+     screens each rendered their own copy with their own state.
+     The library header lost home/save/menu buttons and its bottom-docked search
+     (the tab bar owns that space; the two stacked left ~120px of permanent
+     chrome over the grid). Search moved up under the wordmark.
+  5. **CTAs pinned on `/save` and `/pro`.** "Good to know" is eight paragraphs,
+     so the Save button sat below the fold — you had to scroll past the small
+     print to save anything. On the paywall, five benefit paragraphs sat above
+     the price, so **you could not see what it cost without scrolling through the
+     sales pitch**. Both now dock: the copy scrolls, the price and the button do
+     not move.
+  6. **iPhone 16 Pro (393×852)** — verified no horizontal overflow, 2-column grid.
+  ⚠️ **Verified this round:** typecheck, `expo export` (all routes), login screen
+  at 393×852, zero console errors. **NOT verified — needs an owner pass:** the tab
+  bar, the pinned CTAs and the rebuilt tile all require a signed-in session, and
+  the preview browser lost its staging token when the dev server restarted.
+
+- [x] **Round six — matching the reference more literally (2026-08-02).**
+  1. **Tab bar is a PILL**, icon-only, hugging its contents rather than spanning
+     the width. Active state is a filled disc behind the glyph — the system's
+     inversion, just round. Labels removed; the fill is a translucent wash
+     (`colors.tabBar`, new token) so content stays faintly visible through it,
+     which is what makes it read as floating rather than welded to the edge.
+  2. **⚠️ THE TILE NOW CARRIES NO TEXT AT ALL.** Third pass on this: caption
+     block → scrim overlay → bare picture. Each layer of metadata was the thing
+     making a wall of images read as a list of panels. Title, category, platform
+     and index are all gone from the grid; they live one tap away on the detail
+     screen, which has room for them. The only exception is a still-processing
+     save, which has no picture yet and would otherwise be an unexplained grey
+     rectangle.
+     ⚠️ **The visible × went with them, so delete moved to LONG-PRESS** (plus the
+     existing delete on the detail screen). Removing the affordance outright
+     would have been a silent functional loss; `Pressable` gained `onLongPress`
+     for it. If a visible control is wanted back on the grid, that is a one-line
+     revert — but it will cost the clean wall again.
+  3. **Auth buttons are round** (`radius.circle`, 68px). They were square on the
+     argument that the system is 0-radius everywhere.
+  ⚠️ `radius.circle` now has a **closed list of three sanctioned uses** — category
+  bubbles, the tab bar, the auth buttons — documented at the token. Everything
+  else is still 0, absolutely. Add to that list if you extend it; do not just
+  reach for it.
+  **Verified:** typecheck, `expo export`, auth buttons measured at 999px/68px on
+  a 393×852 viewport. **Still needs an owner pass:** tab bar and library grid,
+  both of which require a signed-in session.
+
+---
+
+## Mobile — Monetization
+
+- [~] **Pro paywall — two pages, UI only (2026-08-01).** `app/pro.tsx`: page 01
+  lists what Pro unlocks (grounded in gates that exist in the code today) plus the
+  plan picker; page 02 is the order summary and card form.
+  ⚠️ **PAGE 02 IS A MOCK.** No payment provider is wired up — "Pay" waits a beat
+  and reports that nothing was charged. A loud TEST-MODE banner sits above the
+  form and **must not be removed before real billing lands**: a payment form that
+  looks real and does nothing is how someone types a real card number into a dead
+  field. Real billing is StoreKit/Play Billing via RevenueCat (Apple takes its cut
+  on digital goods; a raw card form would fail review anyway), whose webhook writes
+  `app_metadata.tier = "pro"` — the value `app/quota.py::daily_limit_for` already
+  reads, so no quota code changes.
+  ⚠️ **THE INR PRICING IS UPSIDE DOWN.** Owner-specified: ₹20/week, ₹120→₹99/month;
+  $2/week, $7/month. ₹20/week is **₹86.96/month** at 4.348 weeks — so the ₹99
+  monthly plan is the WORSE deal, while the same pair in USD saves 19%.
+  `savingPct()` in `constants/pricing.ts` computes the real number and returns
+  null when there is no saving, so the UI **physically cannot** render a false
+  "SAVE X%" badge. Fix the prices, not the badge: ₹99/mo needs weekly at ~₹30 to
+  read as a discount.
+  ⚠️ **Still contradicts the cost study** (2026-07-24, see "Pricing & Monetization"):
+  it put break-even at ~4.2% conversion and recommended **₹149/mo**, calling ₹99
+  "underwater — it barely covers a pro user's own AI cost". If ₹99 ships,
+  `AI_PRO_DAILY_LIMIT` (currently 100) has to come down with it or every Pro user
+  is a loss. **Owner decision, unresolved.**
+  **Remaining:** RevenueCat + StoreKit/Play Billing integration; real restore-
+  purchases; server-side receipt validation; the tier webhook.
+
+---
+
 ## Mobile — Features
 
 - [ ] **Share Extension (iOS)** — same as blocker above; listed here for implementation tracking.

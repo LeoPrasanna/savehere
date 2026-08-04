@@ -28,7 +28,25 @@ const DATE_PRESETS = (): { label: string; value: string | null }[] => ([
 interface Props {
   visible: boolean;
   onClose: () => void;
-  onSaved: (todo: Todo) => void;
+  /** `replaces` is the temporary id handed to `onOptimistic`, if that path ran. */
+  onSaved: (todo: Todo, replaces?: string) => void;
+  /**
+   * Optional FAST PATH for creating a new task.
+   *
+   * ⚠️ Without this the sheet stayed open `await`ing the create. On a cold
+   * backend that is several seconds of spinner before a task the user has
+   * already fully described appears — which reads as the app being broken.
+   *
+   * When supplied, the sheet closes immediately, the parent shows a draft row,
+   * and the request runs behind it. `onSaved` swaps the draft for the real row;
+   * `onFailed` removes it and surfaces the reason. Nothing is left in a silent
+   * half-saved state either way.
+   *
+   * Not used when EDITING — an edit has a row on screen already, and swapping
+   * it out from under the user would be worse than a brief spinner.
+   */
+  onOptimistic?: (draft: Todo) => void;
+  onFailed?: (draftId: string, message: string) => void;
   /** Create-from-a-save: links the todo to this reel and lets the server copy
    *  in the reel's title + summary when the fields are left untouched. */
   reelId?: string;
@@ -42,7 +60,7 @@ interface Props {
 }
 
 export function TodoEditor({
-  visible, onClose, onSaved, reelId, defaultTitle, defaultDescription, editing,
+  visible, onClose, onSaved, onOptimistic, onFailed, reelId, defaultTitle, defaultDescription, editing,
   defaultPriority = 'medium',
 }: Props) {
   const [title, setTitle] = useState('');
@@ -84,22 +102,52 @@ export function TodoEditor({
 
   const submit = async () => {
     if (!canSave) return;
-    setSaving(true);
     setError(null);
-    try {
-      const body = {
-        title: title.trim(),
-        description: description.trim() || null,
+    const body = {
+      title: title.trim(),
+      description: description.trim() || null,
+      priority,
+      due_date: due,
+      // due_date is nullable, so the server can't tell "omitted" from "clear it".
+      clear_due_date: due === null,
+    };
+
+    // ── Fast path: close now, save behind it. See `onOptimistic` above. ──
+    if (onOptimistic && !editing) {
+      const draft: Todo = {
+        id: `draft-${Date.now()}`,
+        reel_id: reelId ?? null,
+        title: body.title,
+        description: body.description,
         priority,
         due_date: due,
-        // due_date is nullable, so the server can't tell "omitted" from "clear it".
-        clear_due_date: due === null,
+        completed: false,
+        completed_at: null,
+        completed_on: null,
+        created_at: new Date().toISOString(),
       };
+      haptics.success();
+      onOptimistic(draft);
+      onClose();
+      try {
+        const saved = reelId
+          ? await api.createTodoFromReel(reelId, body)
+          : await api.createTodo({ ...body, title: body.title });
+        onSaved(saved, draft.id);
+      } catch (e: any) {
+        haptics.error();
+        onFailed?.(draft.id, e?.message || 'Could not save that. Try again.');
+      }
+      return;
+    }
+
+    setSaving(true);
+    try {
       const saved = editing
         ? await api.updateTodo(editing.id, body)
         : reelId
           ? await api.createTodoFromReel(reelId, body)
-          : await api.createTodo({ ...body, title: title.trim() });
+          : await api.createTodo({ ...body, title: body.title });
       haptics.success();
       onSaved(saved);
       onClose();
@@ -226,7 +274,7 @@ export function TodoEditor({
               style={[styles.saveBtn, !canSave && styles.saveBtnOff]}
             >
               {saving
-                ? <ActivityIndicator color="#FFF" size="small" />
+                ? <ActivityIndicator color={colors.onAction} size="small" />
                 : <Text style={styles.saveText}>{editing ? 'Save changes' : `Add${due ? ` · ${formatDue(due)}` : ''}`}</Text>}
             </LinearGradient>
           </Pressable>
@@ -295,5 +343,5 @@ const styles = themed(() => StyleSheet.create({
   saveWrap: { borderRadius: radius.md, marginTop: spacing.md },
   saveBtn: { borderRadius: radius.md, paddingVertical: spacing.md, alignItems: 'center', justifyContent: 'center', minHeight: 50 },
   saveBtnOff: { opacity: 0.45 },
-  saveText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
+  saveText: { color: colors.onAction, fontSize: font.md, fontWeight: '800' },
 }));

@@ -34,7 +34,7 @@ export function Confetti() {
   );
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}>
       {pieces.map((p) => (
         <MotiView
           key={p.key}

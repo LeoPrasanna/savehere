@@ -116,9 +116,9 @@ export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tas
               disabled={editing}
             >
               {toggling === task.id
-                ? <ActivityIndicator size="small" color={task.completed ? '#FFF' : colors.accent} />
+                ? <ActivityIndicator size="small" color={task.completed ? colors.onAction : colors.textPrimary} />
                 : task.completed
-                  ? <Icon name="checkmark" size={15} color="#FFF" />
+                  ? <Icon name="checkmark" size={15} color={colors.onAction} />
                   : isSteps
                     ? <Text style={styles.stepNum}>{i + 1}</Text>
                     : null}
@@ -188,7 +188,7 @@ export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tas
           returnKeyType="done"
         />
         <Pressable style={[styles.addBtn, !newText.trim() && styles.addBtnDisabled]} onPress={handleAdd} disabled={!newText.trim() || adding} scaleTo={0.9}>
-          {adding ? <ActivityIndicator size="small" color="#FFF" /> : <Icon name="add" size={18} color="#FFF" />}
+          {adding ? <ActivityIndicator size="small" color={colors.onAction} /> : <Icon name="add" size={18} color={colors.onAction} />}
         </Pressable>
       </View>
     </View>

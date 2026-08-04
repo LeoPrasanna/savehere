@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { View, StyleSheet, FlatList, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { api, Reel } from '../services/api';
 import { ReelCard } from '../components/ReelCard';
-import { Icon } from '../components/Icon';
-import { colors, spacing, font } from '../constants/theme';
+import { Label, Body, Title, Rule } from '../components/kit';
+import { TAB_BAR_CLEARANCE } from '../components/TabBar';
+import { colors, spacing, font, GRID_GAP, themed } from '../constants/theme';
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -36,27 +37,27 @@ export default function RediscoverScreen() {
   }, [reels]);
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator color={colors.accent} size="large" /></View>;
+    return <View style={styles.center}><ActivityIndicator color={colors.textPrimary} size="large" /></View>;
   }
 
   if (error) {
     return (
       <View style={styles.center}>
-        <Icon name="alert-circle" size={40} color={colors.danger} />
-        <Text style={styles.emptyTitle}>Couldn't load your saves</Text>
-        <Text style={styles.emptyText}>Make sure the server is running, then try again.</Text>
+        <Label wide>Offline</Label>
+        <Title style={styles.emptyTitle}>Couldn't load your saves</Title>
+        <Body style={styles.emptyText}>Make sure the server is running, then try again.</Body>
       </View>
     );
   }
 
   if (picks.length === 0) {
     return (
-      <View style={styles.screen}>
-        <View style={styles.center}>
-          <Icon name="rediscover" size={44} color={colors.textTertiary} />
-          <Text style={styles.emptyTitle}>Nothing to rediscover yet</Text>
-          <Text style={styles.emptyText}>Save a few reels — we'll resurface them here so they don't get forgotten.</Text>
-        </View>
+      <View style={styles.center}>
+        <Label wide>Empty sheet</Label>
+        <Title style={styles.emptyTitle}>Nothing to rediscover yet</Title>
+        <Body style={styles.emptyText}>
+          Save a few links — they'll resurface here so they don't get forgotten.
+        </Body>
       </View>
     );
   }
@@ -73,9 +74,15 @@ export default function RediscoverScreen() {
         keyExtractor={(r: any) => r.id}
         numColumns={numColumns}
         key={numColumns}
-        columnWrapperStyle={{ gap: spacing.sm }}
+        // Same gutter as the library grid — one constant, no drift.
+        columnWrapperStyle={{ gap: GRID_GAP, paddingHorizontal: GRID_GAP }}
         ListHeaderComponent={
-          <Text style={styles.sub}>A few past saves worth a second look — revisit them, act on them, or clear them out.</Text>
+          <View style={styles.head}>
+            <Body style={styles.sub}>
+              A few past saves worth a second look — revisit them, act on them, or clear them out.
+            </Body>
+            <Rule />
+          </View>
         }
         renderItem={({ item, index }) => (
           item.__ghost
@@ -89,11 +96,18 @@ export default function RediscoverScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  center: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },
-  list: { padding: spacing.md, gap: spacing.sm },
-  sub: { color: colors.textSecondary, fontSize: font.sm, lineHeight: 20, marginBottom: spacing.md },
-  emptyTitle: { color: colors.textPrimary, fontSize: font.lg, fontWeight: '700', marginTop: spacing.sm },
-  emptyText: { color: colors.textSecondary, fontSize: font.sm, textAlign: 'center', lineHeight: 20 },
-});
+  center: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.lg,
+    gap: spacing.md,
+  },
+  list: { paddingBottom: TAB_BAR_CLEARANCE + spacing.xl, gap: GRID_GAP },
+  head: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg, gap: spacing.lg },
+  sub: { fontSize: font.sm, lineHeight: 20 },
+  emptyTitle: { marginTop: spacing.xs },
+  emptyText: { fontSize: font.sm, lineHeight: 20, maxWidth: 420 },
+}));

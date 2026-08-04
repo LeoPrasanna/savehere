@@ -4,13 +4,14 @@ import {
   ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { api, AskResponse } from '../services/api';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { Disclaimer } from '../components/Disclaimer';
+import { Label, Body, Title, Rule, Index, GhostButton, FilledButton } from '../components/kit';
 import { ASK_MIN_REELS } from '../constants/limits';
-import { colors, spacing, font, radius, gradients, categoryFor, themed } from '../constants/theme';
+import { TAB_BAR_CLEARANCE } from '../components/TabBar';
+import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 
 const SUGGESTIONS = [
   'What recipes have I saved?',
@@ -25,6 +26,7 @@ export default function AskScreen() {
   const [result, setResult] = useState<AskResponse | null>(null);
   const [streamingText, setStreamingText] = useState('');   // grows token-by-token
   const [error, setError] = useState('');
+  const [focused, setFocused] = useState(false);
   // Save count gate: the entry points already hide Ask below the threshold, but a
   // deep link / back-navigation could still land here, so guard the screen too.
   // null = still checking (don't flash the locked state before we know).
@@ -59,22 +61,20 @@ export default function AskScreen() {
     const remaining = ASK_MIN_REELS - (savedCount ?? 0);
     return (
       <View style={styles.screen}>
-        <View style={styles.lockWrap}>
-          <View style={styles.lockIcon}><Icon name="lock" size={30} color={colors.accent} /></View>
-          <Text style={styles.lockTitle}>Ask unlocks at {ASK_MIN_REELS} saves</Text>
-          <Text style={styles.lockSub}>
+        <View style={styles.lock}>
+          <Label wide>Locked</Label>
+          <Title style={styles.lockTitle}>Ask unlocks at {ASK_MIN_REELS} saves</Title>
+          <Body style={styles.lockSub}>
             Ask answers questions from your own library — it needs a few saves to draw on.
             You have {savedCount}. Save {remaining} more to unlock it.
-          </Text>
+          </Body>
+          {/* Segmented: "3 of 5" reads instantly; a part-filled grey bar doesn't. */}
           <View style={styles.lockTrack}>
-            <View style={[styles.lockFill, { width: `${((savedCount ?? 0) / ASK_MIN_REELS) * 100}%` }]} />
+            {Array.from({ length: ASK_MIN_REELS }).map((_, i) => (
+              <View key={i} style={[styles.lockTick, i < (savedCount ?? 0) && styles.lockTickOn]} />
+            ))}
           </View>
-          <Pressable style={styles.lockBtnWrap} onPress={() => router.push('/save')} scaleTo={0.97}>
-            <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.lockBtn}>
-              <Icon name="add" size={18} color="#FFF" />
-              <Text style={styles.lockBtnText}>Save a reel</Text>
-            </LinearGradient>
-          </Pressable>
+          <FilledButton label="Save a link" trailing="→" onPress={() => router.push('/save')} style={styles.lockCta} />
         </View>
       </View>
     );
@@ -84,95 +84,104 @@ export default function AskScreen() {
     <View style={styles.screen}>
       <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-          <Text style={styles.sub}>Ask anything about what you've saved — answers come only from your own library.</Text>
+          <Title>Ask your library.</Title>
+          <Body style={styles.sub}>
+            Answers come only from what you've saved — never from the open web.
+          </Body>
 
-          <View style={styles.inputRow}>
-            <Icon name="ask" size={18} color={colors.textSecondary} style={{ marginTop: 2 }} />
-            <TextInput
-              style={styles.input}
-              placeholder="e.g. what was that high-protein recipe?"
-              placeholderTextColor={colors.textSecondary}
-              value={q}
-              onChangeText={t => { setQ(t); setError(''); }}
-              onSubmitEditing={() => ask(q)}
-              returnKeyType="search"
-              multiline
-              editable={!loading}
-            />
-            <Pressable onPress={() => ask(q)} disabled={loading} scaleTo={0.9}>
-              <LinearGradient colors={gradients.primary} style={styles.sendInner}>
-                {loading ? <ActivityIndicator size="small" color="#FFF" /> : <Icon name="send" size={16} color="#FFF" />}
-              </LinearGradient>
-            </Pressable>
+          {/* Underlined field with the send action inline. */}
+          <View style={styles.field}>
+            <View style={styles.fieldRow}>
+              <TextInput
+                style={styles.input}
+                placeholder="e.g. what was that high-protein recipe?"
+                placeholderTextColor={colors.textTertiary}
+                value={q}
+                onChangeText={t => { setQ(t); setError(''); }}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+                onSubmitEditing={() => ask(q)}
+                returnKeyType="search"
+                multiline
+                editable={!loading}
+              />
+              <Pressable onPress={() => ask(q)} disabled={loading} style={styles.send} accessibilityLabel="Ask">
+                {loading
+                  ? <ActivityIndicator size="small" color={colors.textPrimary} />
+                  : <Icon name="send" size={17} color={colors.textPrimary} />}
+              </Pressable>
+            </View>
+            <View style={[styles.fieldRule, focused && styles.fieldRuleOn]} />
           </View>
 
           {!result && !loading && !error && (
             <View style={styles.suggestions}>
-              {SUGGESTIONS.map(s => (
-                <Pressable key={s} style={styles.chip} onPress={() => ask(s)}>
-                  <Text style={styles.chipText}>{s}</Text>
-                </Pressable>
+              <Label wide style={styles.suggestHead}>Try</Label>
+              <Rule />
+              {SUGGESTIONS.map((s, i) => (
+                <View key={s}>
+                  <Pressable style={styles.suggestRow} onPress={() => ask(s)}>
+                    <Index n={i + 1} style={styles.suggestIndex} />
+                    <Body tone="primary" style={styles.suggestText}>{s}</Body>
+                    <Icon name="arrow-forward" size={14} color={colors.textTertiary} />
+                  </Pressable>
+                  <Rule />
+                </View>
               ))}
             </View>
           )}
 
           {error ? (
             <View style={styles.errorBox}>
-              <Icon name="alert-circle" size={16} color={colors.danger} />
-              <Text style={styles.errorText}>{error}</Text>
+              <Icon name="alert-circle" size={15} color={colors.textPrimary} />
+              <Body tone="primary" style={styles.errorText}>{error}</Body>
             </View>
           ) : null}
 
           {/* Before the first token: a brief "searching" state. Once text starts
-              streaming, show it live in the answer card with a caret. */}
+              streaming, show it live in the answer block with a caret. */}
           {loading && !streamingText && (
             <View style={styles.thinking}>
-              <ActivityIndicator color={colors.accent} />
-              <Text style={styles.thinkingText}>Searching your library…</Text>
+              <ActivityIndicator color={colors.textPrimary} size="small" />
+              <Label>Searching your library…</Label>
             </View>
           )}
 
-          {loading && streamingText ? (
-            <View style={styles.answerCard}>
-              <View style={styles.answerHeader}>
-                <Icon name="sparkles" size={15} color={colors.accent} />
-                <Text style={styles.answerLabel}>Answer</Text>
-              </View>
+          {(loading && streamingText) || (result && !loading) ? (
+            <View style={styles.answer}>
+              <Label wide>Answer</Label>
+              <Rule style={{ marginTop: spacing.sm }} />
               <Text style={styles.answerText}>
-                {streamingText}
-                <Text style={styles.caret}>▍</Text>
+                {loading ? streamingText : result?.answer}
+                {loading ? <Text style={styles.caret}>▍</Text> : null}
               </Text>
             </View>
           ) : null}
 
           {result && !loading && (
             <>
-              <View style={styles.answerCard}>
-                <View style={styles.answerHeader}>
-                  <Icon name="sparkles" size={15} color={colors.accent} />
-                  <Text style={styles.answerLabel}>Answer</Text>
-                </View>
-                <Text style={styles.answerText}>{result.answer}</Text>
-              </View>
-
               <Disclaimer variant="ai" />
 
               {result.sources.length > 0 && (
-                <>
-                  <Text style={styles.sourcesLabel}>FROM THESE SAVES</Text>
-                  {result.sources.map(r => {
-                    const cat = categoryFor(r.category);
-                    return (
-                      <Pressable key={r.id} style={styles.sourceRow} onPress={() => router.push(`/reel/${r.id}`)}>
-                        <View style={[styles.sourceIcon, { backgroundColor: cat.color + '22' }]}>
-                          <Icon name={cat.icon} size={14} color={cat.color} />
+                <View style={styles.sources}>
+                  <Label wide style={styles.suggestHead}>From these saves</Label>
+                  <Rule />
+                  {result.sources.map((r, i) => (
+                    <View key={r.id}>
+                      <Pressable style={styles.sourceRow} onPress={() => router.push(`/reel/${r.id}`)}>
+                        <Index n={i + 1} style={styles.suggestIndex} />
+                        <View style={styles.sourceText}>
+                          <Body tone="primary" style={styles.sourceTitle} numberOfLines={2}>
+                            {r.title || 'Untitled'}
+                          </Body>
+                          <Label>{r.category || 'other'}</Label>
                         </View>
-                        <Text style={styles.sourceTitle} numberOfLines={2}>{r.title || 'Untitled'}</Text>
-                        <Icon name="chevron-right" size={16} color={colors.textTertiary} />
+                        <Icon name="chevron-right" size={14} color={colors.textTertiary} />
                       </Pressable>
-                    );
-                  })}
-                </>
+                      <Rule />
+                    </View>
+                  ))}
+                </View>
               )}
             </>
           )}
@@ -184,70 +193,64 @@ export default function AskScreen() {
 
 const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
-  sub: { color: colors.textSecondary, fontSize: font.sm, lineHeight: 20 },
+  content: { paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: TAB_BAR_CLEARANCE + spacing.xl },
+  sub: { marginTop: spacing.md, fontSize: font.sm, lineHeight: 20 },
 
-  // Locked state — shown when the library is below the Ask unlock threshold.
-  lockWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.sm },
-  lockIcon: {
-    width: 72, height: 72, borderRadius: radius.full,
-    backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border,
-    alignItems: 'center', justifyContent: 'center', marginBottom: spacing.xs,
-  },
-  lockTitle: { color: colors.textPrimary, fontSize: font.lg, fontWeight: '800', textAlign: 'center' },
-  lockSub: { color: colors.textSecondary, fontSize: font.sm, lineHeight: 20, textAlign: 'center' },
-  lockTrack: {
-    width: '80%', height: 6, borderRadius: radius.full, overflow: 'hidden',
-    backgroundColor: colors.border, marginTop: spacing.sm,
-  },
-  lockFill: { height: '100%', borderRadius: radius.full, backgroundColor: colors.accent },
-  lockBtnWrap: { marginTop: spacing.md, borderRadius: radius.md },
-  lockBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm + 4,
-  },
-  lockBtnText: { color: '#FFF', fontSize: font.md, fontWeight: '800' },
+  // ── Locked state ──
+  lock: { flex: 1, justifyContent: 'center', paddingHorizontal: spacing.lg, gap: spacing.md },
+  lockTitle: { marginTop: spacing.xs },
+  lockSub: { fontSize: font.sm, lineHeight: 20 },
+  lockTrack: { flexDirection: 'row', gap: 3, marginTop: spacing.sm },
+  lockTick: { flex: 1, height: 4, backgroundColor: colors.ghostLine },
+  lockTickOn: { backgroundColor: colors.textPrimary },
+  lockCta: { marginTop: spacing.lg },
 
-  inputRow: {
-    flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm,
-    backgroundColor: colors.card, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.sm + 2,
+  field: { marginTop: spacing.xl },
+  fieldRow: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.sm },
+  input: {
+    flex: 1,
+    color: colors.textPrimary,
+    fontFamily: typeface.body,
+    fontSize: font.lg,
+    minHeight: 40,
+    paddingVertical: spacing.sm,
+    textAlignVertical: 'top',
   },
-  input: { flex: 1, color: colors.textPrimary, fontSize: font.md, minHeight: 36, textAlignVertical: 'top' },
-  sendInner: { width: 40, height: 40, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
+  send: { paddingBottom: spacing.sm, paddingLeft: spacing.sm },
+  fieldRule: { height: 1, backgroundColor: colors.ghostLine },
+  fieldRuleOn: { backgroundColor: colors.textPrimary },
 
-  suggestions: { gap: spacing.sm },
-  chip: {
-    backgroundColor: colors.card, borderRadius: radius.full,
-    borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-  },
-  chipText: { color: colors.textSecondary, fontSize: font.sm },
+  suggestions: { marginTop: spacing.xl },
+  suggestHead: { marginBottom: spacing.sm },
+  suggestRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
+  suggestIndex: { width: 22 },
+  suggestText: { flex: 1, fontSize: font.sm },
 
   errorBox: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.danger + '1A', borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.danger, padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.textPrimary,
+    padding: spacing.md,
+    marginTop: spacing.lg,
   },
-  errorText: { flex: 1, color: colors.danger, fontSize: font.sm },
+  errorText: { flex: 1, fontSize: font.sm, lineHeight: 20 },
 
-  thinking: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md },
-  thinkingText: { color: colors.textSecondary, fontSize: font.sm },
+  thinking: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
 
-  answerCard: {
-    backgroundColor: colors.card, borderRadius: radius.lg,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.md, gap: spacing.sm,
+  answer: { marginTop: spacing.xl },
+  answerText: {
+    color: colors.textPrimary,
+    fontFamily: typeface.body,
+    fontSize: font.md,
+    lineHeight: 24,
+    marginTop: spacing.md,
   },
-  answerHeader: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  answerLabel: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '800', letterSpacing: 0.5, textTransform: 'uppercase' },
-  answerText: { color: colors.textPrimary, fontSize: font.md, lineHeight: 23 },
-  caret: { color: colors.accent, fontWeight: '800' },
+  caret: { color: colors.textPrimary },
 
-  sourcesLabel: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '800', letterSpacing: 1, marginTop: spacing.xs },
-  sourceRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.card, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border, padding: spacing.sm + 2,
-  },
-  sourceIcon: { width: 30, height: 30, borderRadius: radius.full, alignItems: 'center', justifyContent: 'center' },
-  sourceTitle: { flex: 1, color: colors.textPrimary, fontSize: font.sm, fontWeight: '600' },
+  sources: { marginTop: spacing.lg },
+  sourceRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md },
+  sourceText: { flex: 1, minWidth: 0, gap: 2 },
+  sourceTitle: { fontSize: font.sm },
 }));
