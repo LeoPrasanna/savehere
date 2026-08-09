@@ -395,10 +395,10 @@ export default function TodosScreen() {
   };
 
   /** A brand-new task, shown before the server has confirmed it. */
-  const onOptimistic = (draft: Todo) => {
+  const onOptimistic = useCallback((draft: Todo) => {
     setTodos(ts => [...ts, draft]);
     setStats(s => s && { ...s, total: s.total + 1, open: s.open + 1 });
-  };
+  }, []);
 
   /**
    * The server's version of a task, replacing the draft if there was one.
@@ -410,16 +410,21 @@ export default function TodosScreen() {
    * immediately; only its position WITHIN a section waits for the next natural
    * refresh, which nobody notices.
    */
-  const onSaved = (saved: Todo, replaces?: string) => {
+  const onSaved = useCallback((saved: Todo, replaces?: string) => {
     setTodos(ts => [...ts.filter(t => t.id !== saved.id && t.id !== replaces), saved]);
-  };
+  }, []);
 
   /** The create failed after the sheet closed. Take the draft back out and say why. */
-  const onFailed = (draftId: string, message: string) => {
+  const onFailed = useCallback((draftId: string, message: string) => {
     setTodos(ts => ts.filter(t => t.id !== draftId));
     setStats(s => s && { ...s, total: Math.max(0, s.total - 1), open: Math.max(0, s.open - 1) });
     setError(message);
-  };
+  }, []);
+
+  // Stable so the memoized sheets below actually skip re-rendering. An inline
+  // arrow here would defeat their memo on every parent render.
+  const closeEditor = useCallback(() => { setEditorOpen(false); setEditing(null); }, []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
   const openNew = () => { setEditing(null); setEditorOpen(true); };
   const openEdit = useCallback((t: Todo) => { setEditing(t); setEditorOpen(true); }, []);
@@ -606,7 +611,7 @@ export default function TodosScreen() {
         visible={editorOpen}
         editing={editing}
         defaultPriority={settings.defaultPriority}
-        onClose={() => { setEditorOpen(false); setEditing(null); }}
+        onClose={closeEditor}
         onOptimistic={onOptimistic}
         onFailed={onFailed}
         onSaved={onSaved}
@@ -617,7 +622,7 @@ export default function TodosScreen() {
         visible={settingsOpen}
         settings={settings}
         onChange={updateSettings}
-        onClose={() => setSettingsOpen(false)}
+        onClose={closeSettings}
       />
 
       {/* ── Done → keep or delete the save it came from ────────────────────

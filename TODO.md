@@ -826,5 +826,18 @@ code has been modified yet.
 - [ ] **Light Mode Visual Sanity Check:**
   * Symptom: The new gradient elements (like the background haze) look visually unappealing or degrade contrast when `schemePref` is toggled to light.
   * Task: Ensure the root haze wrapper gracefully collapses to a solid white canvas in light mode to maintain contrast integrity.
+- [ ] **Fix Workout Plan Rest-Time Contrast (Bug 1):**
+  * Symptom: Rest-time text color is unreadable in dark mode and invisible in light mode.
+  * Task: Retarget rest text elements in the workout detail layout to `colors.textSecondary` or `colors.textTertiary` (which was bumped to `#7E7E7E` specifically to hit 4.7:1 AA against our new base) [23].
+- [ ] **Fix Navigation Tab Active Indicator Collision (Bug 2):**
+  * Symptom: Tab indicator remains stuck on Home when navigating between Home and Library.
+  * Task: Modify the active checker in `mobile/components/TabBar.tsx` to exact-match `/` (`p === '/' ? pathname === '/' : pathname.startsWith(p)`), resolving prefix wildcard collisions [24].
+- [ ] **Remove Library Header Search Option (Feature Change 3):**
+  * Task 1: Completely delete the `<TextInput>` search bar from the top of the Library grid page.
+  * Task 2: In its place, render our memoized `RollingTagline.tsx` component to scroll vertical text explaining what the user can do (e.g., "Summarize any reel", "Extract cooking recipes", "Build guided workouts") [25].
+- [ ] **Implement Ask Screen Focus Hand-Off (Feature Change 4):**
+  * Task 1: Replace "Ask your <saves> saves" static caption on the Home card with an animating, high-emphasis `"ASK YOUR LIBRARY"` text block [24].
+  * Task 2: Configure the input element in `mobile/app/ask.tsx` to automatically call `.focus()` on transition mount with a small timer offset to ensure the keyboard opens immediately.
+
 
 

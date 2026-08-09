@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { View, Text, StyleSheet, Modal, ScrollView, Switch } from 'react-native';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
@@ -33,7 +34,7 @@ function Row({ title, hint, children }: { title: string; hint?: string; children
 
 /** Preferences for this screen only. Stored on the device — see
  *  services/todoSettings.ts for why these aren't server-side. */
-export function TodoSettingsSheet({ visible, settings, onChange, onClose }: Props) {
+function TodoSettingsSheetImpl({ visible, settings, onChange, onClose }: Props) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <Pressable style={styles.overlay} onPress={onClose} scaleTo={1}>
@@ -172,3 +173,6 @@ const styles = themed(() => StyleSheet.create({
   chipText: { color: colors.textSecondary, fontSize: font.xs, fontWeight: '700' },
   chipTextOn: { color: colors.accentLight },
 }));
+
+/** Memoized for the same reason as TodoEditor — mounted-but-idle while closed. */
+export const TodoSettingsSheet = memo(TodoSettingsSheetImpl);

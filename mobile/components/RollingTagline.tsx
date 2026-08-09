@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { View, Text, StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { MotiView, AnimatePresence } from 'moti';
 import { colors, spacing, font, themed } from '../constants/theme';
@@ -71,7 +71,7 @@ function shuffledIndices(n: number, avoidFirst?: number): number[] {
   return a;
 }
 
-export function RollingTagline({
+function RollingTaglineImpl({
   style, lines = APP_TAGLINES, compact, textStyle, height,
   intervalMs = INTERVAL_MS, numberOfLines, alignLeft, shuffle,
 }: Props) {
@@ -138,3 +138,7 @@ const styles = themed(() => StyleSheet.create({
     textAlign: 'center', paddingHorizontal: spacing.md, lineHeight: 22,
   },
 }));
+
+/** Memoized so a parent re-render doesn't re-run this subtree (AnimatePresence +
+ *  MotiView) — its own interval still re-renders it, which is local and cheap. */
+export const RollingTagline = memo(RollingTaglineImpl);

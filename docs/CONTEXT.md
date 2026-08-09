@@ -168,8 +168,12 @@ that section is now marked **RETIRED**. Full spec: [`DESIGN_PROPOSAL.md`](DESIGN
 - **Runtime Scheme Re-Theming & Light Mode Guard (2026-08-09):** The `setScheme` function in `theme.ts` erases key types via `as Record<string, readonly string[]>` casting, which masks stale references and skips runtime re-theming for `haze`. The light scheme must remain strictly flat monochrome to prevent dark/chromatic washes from rendering over a white UI and violating WCAG AA boundaries.
 - **Haze Backdrop Visibility Constraints:** The `gradients.haze` background wash is visually blocked by full-bleed library grid thumbnails. Keep haze as an atmospheric layer for sparse screens only (Login wall, Workout rest phases). Do not use blur overlays due to performance overhead on web previews.
 - **Absolute Navigation Clearance & Hiding Rules (2026-08-09):** Primary screens with pinned bottom CTAs (such as `/save`, `/pro`, and `/workout/`) must hide the absolute capsule navigation bar by registering their paths in TabBar.tsx's `HIDE_ON` array. This keeps the primary view fully interactive without introducing complex padding calculations. All other scrollable screens must clear the floating bar using the unified `TAB_BAR_CLEARANCE = 72` constant.
+**Haze Backdrop Visibility Constraints (2026-08-09):** The `gradients.haze` background wash is visually blocked by full-bleed library grid thumbnails. Keep haze as an atmospheric layer for sparse screens only (Login wall, Workout rest phases). Do not try to solve grid coverage with blur due to performance overhead on web previews.
+
+**Monochrome Light Scheme Integrity:** The "Nocturnal Dimension" color shifts apply strictly to the dark scheme. The light scheme must remain flat monochrome to avoid breaking WCAG AAA text/contrast safety gates, except for the high-contrast semantic `danger` state (#B3323E).
 
 ## 5. Known gotchas / constraints
+
 - **Windows dev**; line endings show LF→CRLF warnings (harmless).
 - **YouTube/IG bot-block on datacenter IPs** — extraction fails from the Codespace **and will fail on Railway/Render/Fly** (all datacenter IPs). Needs a residential proxy / managed API in prod — see §4 "Extraction & bot-detection". Biggest prod reliability risk for the core feature.
 - Rate limiter is **in-memory + per-process** — fine for one instance; needs Redis for multiple.
@@ -179,6 +183,7 @@ that section is now marked **RETIRED**. Full spec: [`DESIGN_PROPOSAL.md`](DESIGN
 - Audio transcription needs **ffmpeg** installed (optional path).
 
 ## 6. Next steps (recommended order)
+
 0. **Fix recipe extraction fallback** — `workout_extractor.py` `extract_tasks()` + mobile error UX (see §3 "Pending fix"). One-file backend change + one-function mobile change.
 1. **Set the Anthropic console monthly budget cap** (owner action — the only hard cost ceiling today).
 2. **Auth + per-user data** (Supabase): users table, `user_id` everywhere, per-user filtering, per-user AI quota. *Largest pure-code unlock; enables tiers/referrals/quota.*
@@ -188,5 +193,10 @@ that section is now marked **RETIRED**. Full spec: [`DESIGN_PROPOSAL.md`](DESIGN
 6. Pricing/IAP config in App Store Connect (intro offer, offer code, regional prices) — at launch.
 
 See [`TODO.md`](../TODO.md) for the full, categorized checklist.
+
 ## 7. Theme & Layout Constraints
-1.  **Absolute Capsule Navigation Offsets (2026-08-09):** The absolute-positioned capsule bottom navigation bar floats over app screens [4]. All primary CTAs (e.g., "Start Workout", "Create Itinerary", "Study Plan") and list footers must explicitly reserve a bottom offset container padding (e.g., `paddingBottom: insets.bottom + 80`) to remain visible and fully interactive. Never allow content to render underneath the navigation layer.
+
+1. **Absolute Capsule Navigation Offsets (2026-08-09):** The absolute-positioned capsule bottom navigation bar floats over app screens [4]. All primary CTAs (e.g., "Start Workout", "Create Itinerary", "Study Plan") and list footers must explicitly reserve a bottom offset container padding (e.g., `paddingBottom: insets.bottom + 80`) to remain visible and fully interactive. Never allow content to render underneath the navigation layer.
+
+2. **Active Tab Bar Matching Rules (2026-08-09):** Custom sliding tab indicators that rely on path-matching must explicitly handle the root path `/` using exact equality (`pathname === '/'`) rather than prefix matching (`startsWith`). This prevents matcher collisions where child directories (like `/library`) activate the Home indicator [5].
+3. **Mobile Focus Transitions:** To maximize typing efficiency, navigating to text-input intensive screens (such as "Ask Your Library") must programmatically trigger input focus on transition mount (`autoFocus={true}` or ref-driven delayed focus), ensuring the user's keyboard is immediately open with zero extra taps [22].
