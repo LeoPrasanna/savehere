@@ -158,19 +158,18 @@ that section is now marked **RETIRED**. Full spec: [`DESIGN_PROPOSAL.md`](DESIGN
   workout rest phase). Do **not** try to solve grid coverage with blur — that
   reintroduces the `expo-blur`/`backdrop-filter` cost this direction exists to
   avoid, on web previews and Android alike.
-- **Monochrome light-scheme integrity:** the Nocturnal Dimension colour shifts
+<!-- - **Monochrome light-scheme integrity:** the Nocturnal Dimension colour shifts
   apply **strictly to the dark scheme**. Light stays flat monochrome so the
   contrast gates hold, with one exception: the semantic `danger` state
-  (`#B3323E`, 6.1:1 on white).
+  (`#B3323E`, 6.1:1 on white). -->
 - **Not yet built:** capsule tab bar, centre FAB, home haze/pill row. `theme.ts`
   is the only source file changed so far — see the TODO section
   "Design Experiment: Refactor Home & Nav to Nocturnal Dimension".
-- **Runtime Scheme Re-Theming & Light Mode Guard (2026-08-09):** The `setScheme` function in `theme.ts` erases key types via `as Record<string, readonly string[]>` casting, which masks stale references and skips runtime re-theming for `haze`. The light scheme must remain strictly flat monochrome to prevent dark/chromatic washes from rendering over a white UI and violating WCAG AA boundaries.
-- **Haze Backdrop Visibility Constraints:** The `gradients.haze` background wash is visually blocked by full-bleed library grid thumbnails. Keep haze as an atmospheric layer for sparse screens only (Login wall, Workout rest phases). Do not use blur overlays due to performance overhead on web previews.
+<!-- - **Runtime Scheme Re-Theming & Light Mode Guard (2026-08-09):** The `setScheme` function in `theme.ts` erases key types via `as Record<string, readonly string[]>` casting, which masks stale references and skips runtime re-theming for `haze`. The light scheme must remain strictly flat monochrome to prevent dark/chromatic washes from rendering over a white UI and violating WCAG AA boundaries.
+- **Haze Backdrop Visibility Constraints:** The `gradients.haze` background wash is visually blocked by full-bleed library grid thumbnails. Keep haze as an atmospheric layer for sparse screens only (Login wall, Workout rest phases). Do not use blur overlays due to performance overhead on web previews. -->
 - **Absolute Navigation Clearance & Hiding Rules (2026-08-09):** Primary screens with pinned bottom CTAs (such as `/save`, `/pro`, and `/workout/`) must hide the absolute capsule navigation bar by registering their paths in TabBar.tsx's `HIDE_ON` array. This keeps the primary view fully interactive without introducing complex padding calculations. All other scrollable screens must clear the floating bar using the unified `TAB_BAR_CLEARANCE = 72` constant.
 **Haze Backdrop Visibility Constraints (2026-08-09):** The `gradients.haze` background wash is visually blocked by full-bleed library grid thumbnails. Keep haze as an atmospheric layer for sparse screens only (Login wall, Workout rest phases). Do not try to solve grid coverage with blur due to performance overhead on web previews.
-
-**Monochrome Light Scheme Integrity:** The "Nocturnal Dimension" color shifts apply strictly to the dark scheme. The light scheme must remain flat monochrome to avoid breaking WCAG AAA text/contrast safety gates, except for the high-contrast semantic `danger` state (#B3323E).
+<!-- **Monochrome Light Scheme Integrity:** The "Nocturnal Dimension" color shifts apply strictly to the dark scheme. The light scheme must remain flat monochrome to avoid breaking WCAG AAA text/contrast safety gates, except for the high-contrast semantic `danger` state (#B3323E). -->
 
 ## 5. Known gotchas / constraints
 

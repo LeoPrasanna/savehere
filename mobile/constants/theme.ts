@@ -168,31 +168,36 @@ export const colors = {
   action: PALETTES.dark.textPrimary,
   onAction: PALETTES.dark.background,
 
-  // ── Compatibility aliases ────────────────────────────────────────────────
-  // The retired ember/neon/glass identity. Kept as keys so call sites that
-  // still read them inherit achromatic values instead of a dead colour.
-  hologram: PALETTES.dark.textPrimary as string,
-  neonPink: PALETTES.dark.textPrimary as string,
-  neonCyan: PALETTES.dark.textPrimary as string,
-  neonViolet: PALETTES.dark.textPrimary as string,
-  glassBg: PALETTES.dark.card as string,
-  glassBorder: PALETTES.dark.ghostLine as string,
-  glassBorderLight: PALETTES.dark.borderLight as string,
+  // The retired ember/neon/glass compatibility aliases (`hologram`, `neonPink`,
+  // `neonCyan`, `neonViolet`, `glassBg`, `glassBorder`, `glassBorderLight`) were
+  // removed 2026-08-09 — grep confirmed zero readers outside this file, so they
+  // were only being kept alive by their own re-theme lines in applyScheme.
 };
 
 type Ramp4 = readonly [string, string, string, string];
 
 /**
- * The haze stops. DARK ONLY carries hue — in light the ramp collapses to four
- * copies of the canvas, i.e. a flat fill, because a dark chromatic wash over a
- * white UI breaks both the look and the contrast gates. See CONTEXT.md §4
- * "Monochrome light-scheme integrity". Called from both the initial `gradients`
- * literal and `applyScheme`, so the stops exist in exactly one place.
+ * The haze stops. DARK ONLY carries hue — a chromatic wash over a white UI
+ * breaks both the look and the contrast gates, so the light scheme stays flat
+ * monochrome (the one exception is the semantic `danger` token). Called from
+ * both the initial `gradients` literal and `applyScheme`, so the stops exist in
+ * exactly one place.
+ *
+ * ⚠️ Light collapses to TRANSPARENT, not to four copies of the canvas.
+ * Opaque canvas stops made this an opaque white sheet, and the haze is rendered
+ * ABOVE content on some screens (LoginScreen paints it over the drifting reel
+ * wall) — so a "flat white" fallback silently erased the whole animation in
+ * light mode. Dark gets away with opaque end-stops only because its middle
+ * stops are rgba() and the ramp interpolates to partial transparency.
+ *
+ * Screens that need a canvas underneath set their own `backgroundColor`
+ * (e.g. `styles.center` on the workout rest screen), so a transparent ramp
+ * changes nothing there — it just stops the layer from covering anything.
  */
 function hazeFor(p: Palette, s: ColorScheme): Ramp4 {
   return s === 'dark'
     ? [p.background, 'rgba(253,66,156,0.10)', 'rgba(233,107,52,0.14)', p.background]
-    : [p.background, p.background, p.background, p.background];
+    : ['transparent', 'transparent', 'transparent', 'transparent'];
 }
 
 /**
@@ -302,13 +307,6 @@ function applyScheme(s: ColorScheme) {
     (platformMeta[k] as { gradient: readonly [string, string] }).gradient = [p.card, p.card];
   }
   // Aliases that shadow palette values have to be re-pointed by hand.
-  colors.hologram = p.textPrimary;
-  colors.neonPink = p.textPrimary;
-  colors.neonCyan = p.textPrimary;
-  colors.neonViolet = p.textPrimary;
-  colors.glassBg = p.card;
-  colors.glassBorder = p.ghostLine;
-  colors.glassBorderLight = p.borderLight;
   // No cast. The compiler checks these key names, so deleting a gradient can
   // never again leave a silent dangling reference here (the old loop still
   // named `vibrant`/`sunset`/`cool`/`hologram`/`neon`/`surface`/`darkSurface`
