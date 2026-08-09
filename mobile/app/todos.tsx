@@ -56,6 +56,9 @@ const SECTIONS: { key: Bucket; label: string }[] = [
 const UNDO_MS = 5000;
 /** Clears the New task bar (its 50px button plus the bar's own padding). */
 const UNDO_ABOVE_BAR = 74;
+/** Scroll content has to clear the New task bar too, plus a little air so the
+ *  last row isn't flush against it. Sits on top of TAB_BAR_CLEARANCE. */
+const BOTTOM_BAR_CLEARANCE = 92;
 
 /** Only the name + emoji rolls — "My" is fixed beside it, so it reads as one
  *  steady phrase with a changing tail rather than the whole title flickering. */
@@ -457,7 +460,7 @@ export default function TodosScreen() {
   return (
     <View style={styles.screen}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + 92 }]}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE + BOTTOM_BAR_CLEARANCE }]}
         showsVerticalScrollIndicator={false}
         refreshControl={
           <RefreshControl

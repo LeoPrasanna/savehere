@@ -16,7 +16,7 @@ import * as haptics from '../services/haptics';
 
 import { Label, Body, Wordmark, GhostButton, FilledButton, Rule } from './kit';
 import { MockReel, MOCK_REEL_H } from './MockReel';
-import { colors, spacing, font, radius, tracking, typeface, themed, gradients, hazeLocations } from '../constants/theme';
+import { colors, spacing, font, radius, tracking, typeface, themed, gradients, hazeLocations, isDark } from '../constants/theme';
 
 /**
  * Apple and Google are mocked. Say so out loud rather than no-op.
@@ -301,11 +301,26 @@ export function LoginScreen() {
   if (step === 'welcome') {
     return (
       <View style={styles.container}>
+        {/* ── Atmosphere is DARK-ONLY (2026-08-09) ───────────────────────────
+            In light, MockReel's cards are near-white on a white canvas, so the
+            drift columns animate something invisible — white-on-white, paid for
+            in GPU every frame. `hazeFor` already collapses the haze to a flat
+            white fill in light, making that layer a wasted full-screen draw too.
+            Light therefore gets the clean flat surface and none of the cost;
+            dark keeps the full chromatic treatment.
+
+            Read at render, not subscribed: `setScheme` remounts the tree via the
+            root layout's scheme epoch, which is the established pattern here
+            (see app/_layout.tsx and MockReel.tsx). */}
         <ReelWallBackdrop />
-        {/* Flat wash over the whole wall — keeps it as atmosphere. */}
+        {/* Flat wash over the whole wall — keeps it as atmosphere. Its opacity
+            is scheme-aware (see styles.scrim): light tiles sit ~3% off the
+            canvas, so the wash that reads as atmosphere in dark erased the wall
+            completely in light. */}
         <View style={[styles.scrim, { pointerEvents: 'none' }]} />
-        {/* Nocturnal Dimension haze. Sits ABOVE the wash but BELOW the bottom
-            ramp below, so the ramp keeps doing its legibility job unchanged. */}
+        {/* Nocturnal Dimension haze. Sits ABOVE the wash but BELOW the
+            bottom ramp, so the ramp keeps doing its legibility job.
+            Transparent in light — see hazeFor(). */}
         <LinearGradient
           colors={gradients.haze}
           locations={hazeLocations}
@@ -521,7 +536,10 @@ const styles = themed(() => StyleSheet.create({
   scrim: {
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     backgroundColor: colors.background,
-    opacity: 0.74,
+    // Dark tiles (#17171A card, salt-ink shapes) survive a heavy wash. Light
+    // tiles are #F2F2F2 on a #FFFFFF canvas — barely 3% apart — so 0.74 white
+    // over them left nothing to see. Lower in light, same atmosphere in dark.
+    opacity: isDark() ? 0.74 : 0.42,
   },
   // Ramps to solid canvas across the bottom half, so the auth row and the legal
   // text sit on a clean surface instead of over moving tiles.

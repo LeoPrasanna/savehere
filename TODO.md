@@ -794,43 +794,30 @@ code has been modified yet.
 - [ ] **Contrast audit** — `#F7F4EF` on `#101012` and `#101012` on `#E96B34` both need re-measuring; the current palette's ratios are documented in `theme.ts` comments and must not regress.
 
 ## Active Refactoring & Optimization Backlog
-- [ ] **Optimize To-Do List Interaction Latency:**
-  * Symptom: Clicking a To-Do item triggers noticeable rendering delays before updating the state.
-  * Task: Audit the FlatList item rendering or state-dispatch loops. Introduce memoization via `React.memo` or verify if parent-level re-renders are bottlenecking the click lifecycle.
-- [ ] **Light Scheme Haze Sanity Check:**
-  * Symptom: Gradient elements evaluated during the revamp render poorly when `schemePref` is toggled to light.
-  * Task: Ensure the root haze wrapper gracefully falls back to a solid light surface background when the light theme is active.
-- [ ] **Fix setScheme Runtime Key Mapping:**
-  * Resolve type erasure at `theme.ts:302` by dropping the `Record` cast. 
-  * Add `haze` to the re-theme loop (resolving to flat light surface in light mode, chromatic gradient in dark mode). 
-  * Delete the five dead keys (`vibrant`, `sunset`, `cool`, `hologram`, `neon`) resurrected by the loop.
-- [ ] **Resolve Task Checkbox Tap Latency (`TaskList.tsx`):**
-  * Eliminate the network round-trip blocking spinner in `TaskList.tsx:46`. 
-  * Implement an optimistic update in `handleToggle` (render immediately, await in the background, roll back state on API failure).
-- [ ] **Optimize ScrollView Render Latency (`todos.tsx`):**
-  * Address slow render performance caused by nested `.map()` rendering on a plain `ScrollView`.
-  * Step 1: Wrap `TodoRow` in `React.memo` and `useCallback` the row handlers.
-  * Step 2: Use `useMemo` to cache `grouped` and `overdueCount` date calculations.
-  * Step 3: Lazy-evaluate modals by conditional rendering `{editorOpen && <TodoEditor ... />}`.
-- [ ] **Fix Floating Navigation Layout Collisions:**
-  * Symptom: "Start Workout" button on the Workout screen and equivalent action CTAs (Itinerary, Study Plan) render underneath the absolute capsule navigation bar, blocking user access.
-  * Task 1: Audit target files (`workout/[reelId].tsx`, etc.) to verify bottom padding parameters.
-  * Task 2: Inject `useSafeAreaInsets` offsets to ensure container list footers dynamically scale past the floating bar height.
-- [ ] **Fix Workout Plan Bottom Clearance:**
-  * Add `/workout/` prefix-match to `HIDE_ON` in `TabBar.tsx` to hide the capsule navigation bar on the plan screen.
-- [ ] **Clean Up Legacy Group 1 Tokens:**
-  * Patch `theme.ts`'s `setScheme` loop to run on type-safe keys, adding `haze` and removing deleted legacy tokens.
-- [ ] **Optimize To-Do List Click Latency:**
-  * Symptom: Tapping a checkbox or navigating to the to-do list causes a noticeable rendering delay.
-  * Task: Audit state dispatches, FlatList rendering loops, and look for missing memoization or redundant calculations.
-- [ ] **Light Mode Visual Sanity Check:**
-  * Symptom: The new gradient elements (like the background haze) look visually unappealing or degrade contrast when `schemePref` is toggled to light.
-  * Task: Ensure the root haze wrapper gracefully collapses to a solid white canvas in light mode to maintain contrast integrity.
+> **Audited 2026-08-09 against the working tree** (sub-agent, evidence-checked —
+> not trusted from checkbox state). Most of this section was written twice: the
+> to-do latency, haze, and setScheme items each appeared as two entries. Shipped
+> in PR #39 (`da00e8a`).
+
+- [x] **Optimize To-Do List Interaction Latency** — `TodoRow` is `memo(...)` (`todos.tsx:104`), row handlers `useCallback` (`todos.tsx:257,336,350,433,434`), `grouped`/`overdueCount` `useMemo` (`todos.tsx:440,451`). *(Duplicate of "Optimize To-Do List Click Latency" below.)*
+- [x] **Light Scheme Haze Sanity Check** — `hazeFor(p, s)` returns four copies of `p.background` in light and the chromatic ramp in dark (`theme.ts:186-190`), called from both the `gradients` literal (`theme.ts:226`) and `applyScheme` (`theme.ts:306`). Verified at runtime: light computes `linear-gradient(rgb(255,255,255) ×4)`. *(Duplicate of "Light Mode Visual Sanity Check" below.)*
+- [x] **Fix setScheme Runtime Key Mapping** — `Record` cast gone; each key assigned by name (`theme.ts:298-305`); `gradients.haze = hazeFor(p, s)` (`theme.ts:306`); the legacy keys survive only in the removal comments. *(Duplicate of "Clean Up Legacy Group 1 Tokens" below.)*
+- [x] **Resolve Task Checkbox Tap Latency (`TaskList.tsx`)** — `onUpdate({ ...task, completed: next })` fires before `await api.toggleTask`, with rollback on catch (`TaskList.tsx:154-163`); `toggling` spinner state deleted.
+- [~] **Optimize ScrollView Render Latency (`todos.tsx`)** — Steps 1 and 2 done. **Step 3 solved differently on purpose:** `{editorOpen && <TodoEditor/>}` would unmount the sheet on close and eat its `<Modal animationType="fade">` exit animation, so `TodoEditor`/`TodoSettingsSheet` are memoized and kept mounted with stable callback props instead (`TodoEditor.tsx:353`, `TodoSettingsSheet.tsx:178`). Same win, no UX regression. Still open: no virtualization (`ScrollView` + nested `.map`) — deliberately deferred until the memo work is measured, since at 10–40 rows it may buy nothing.
+- [x] **Fix Floating Navigation Layout Collisions** — `/workout/` in `HIDE_ON` (`TabBar.tsx:33`); footer uses `useSafeAreaInsets` (`workout/[reelId].tsx:39,152`). ⚠️ Task 1's "Itinerary" and "Study Plan" screens **do not exist**: itinerary is a section inside `reel/[id].tsx` (whose container already clears the bar), and "Study Plan" has no code at all — the only match in `mobile/` is marketing copy in `OnboardingModal.tsx:63`. Nothing else to clear.
+- [x] **Fix Workout Plan Bottom Clearance** — `HIDE_ON = ['/save', '/pro', '/workout/']` (`TabBar.tsx:33,79`); hardcoded `110` replaced by `FOOTER_HEIGHT` (`workout/[reelId].tsx:28,166`).
+- [x] **Clean Up Legacy Group 1 Tokens** — duplicate of "Fix setScheme Runtime Key Mapping"; same evidence.
+- [x] **Optimize To-Do List Click Latency** — duplicate of "Optimize To-Do List Interaction Latency"; same evidence.
+- [x] **Light Mode Visual Sanity Check** — duplicate of "Light Scheme Haze Sanity Check"; same evidence.
+- [x] **Remove stale dead theme keys (`refactor/stale-theme-cleanup`, 2026-08-09)** — deleted the seven retired compat aliases from `colors` (`hologram`, `neonPink`, `neonCyan`, `neonViolet`, `glassBg`, `glassBorder`, `glassBorderLight`) and their `applyScheme` re-point lines. Grep confirmed **zero readers outside `theme.ts`** — they were kept alive only by their own re-theme statements.
+- [x] **Name the last stale hardcoded number** — `todos.tsx` scroll padding `+ 92` is now `BOTTOM_BAR_CLEARANCE`, beside the existing `UNDO_ABOVE_BAR = 74`.
+- [n/a] **"Stale HMR cache assumptions"** — no code artifact exists. Grep for `HMR`/`hot reload`/`fast refresh` across the repo returns only `package-lock.json` integrity-hash false positives. This referred to a stale *browser console buffer* observed during development, not to anything in the codebase.
 - [x] **Fix Workout Plan Rest-Time Contrast (Bug 1)** — root cause was NOT the plan screen (`workout/[reelId].tsx` rest tag was already on `textTertiary`/`textSecondary` and fine). It was `workout/session/[reelId].tsx` `restCount`, the 110px countdown, styled `colors.onAction` — which **is** the page background in both schemes, so it rendered near-black on the dark canvas and white-on-white in light. Now `colors.textPrimary`.
 - [x] **Fix Navigation Tab Active Indicator Collision (Bug 2)** — ⚠️ **the prescribed fix was for a bug that didn't exist.** `TabBar` already exact-matched the root (`pathname === '/' || pathname === '/index'`); there was no `startsWith('/')` collision. The real cause: Home and Library **share** the route `/` and are distinguished by a session flag, so `usePathname()` never changes between them — and `TabBar` emitted `libraryState` for the route to consume but **never subscribed to it itself**, so nothing re-rendered the bar. Fixed by subscribing (`useEffect(() => onUi('libraryState', bumpActive), [])`). The `/`-exact guard was also applied to `HIDE_ON` defensively, but it is a no-op today — `HIDE_ON` contains no `/` entry.
 - [x] **Remove Library Header Search Option (Feature Change 3)** — `<TextInput>` search row deleted from `app/index.tsx`, replaced by memoized `RollingTagline` over `LIBRARY_CAPABILITIES` (module-level so the memo holds). Style keeps the old 42px footprint so the grid doesn't shift. Orphaned `Search`/`XCircle`/`TextInput` imports removed.
 - [ ] **Follow-up to Feature 3 — strip the dead search plumbing.** `app/index.tsx` still carries `search`/`searchResults`/`searching` state, the debounce effect, `searchEverywhere()`, and the `inSearchMode` empty states ("No matches", "Search all categories") — all now unreachable, ~50 lines. Left in place deliberately so the decision stays easy to reverse. **Also note: this removed the only entry point to the server-side smart search** (`app/services/search.py` — tokenizing, synonyms, category matching, relevance ranking). That backend feature is now unreachable from the app.
 - [x] **Implement Ask Screen Focus Hand-Off (Feature Change 4)** — Home card now renders an animated, high-emphasis `ASK YOUR LIBRARY` (MotiView fade/rise, no loop) instead of the static save count; `ask.tsx` focuses its input via a ref on a 350 ms timer rather than `autoFocus`, because focusing mid-push-transition is the case where iOS shows a caret but never raises the keyboard.
+- [ ] **make sure the mockreel tiles been shown in both light and dark modes** - Make the mockreel run on login page for dark and light modes.
 
 
 
