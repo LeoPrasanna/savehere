@@ -10,7 +10,7 @@ import { api, WorkoutExercise, WorkoutPlan } from '../../../services/api';
 import { Pressable } from '../../../components/Pressable';
 import { FloatingHomeButton, goHome } from '../../../components/HomeButton';
 import { Disclaimer } from '../../../components/Disclaimer';
-import { colors, spacing, font, radius, gradients, shadow, themed } from '../../../constants/theme';
+import { colors, spacing, font, radius, gradients, hazeLocations, shadow, themed } from '../../../constants/theme';
 
 type Phase = 'loading' | 'ready' | 'exercise' | 'rest' | 'complete';
 
@@ -142,7 +142,7 @@ export default function WorkoutSessionScreen() {
       <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
         <FloatingHomeButton top={insets.top + spacing.xs} />
         <View style={styles.readyHeader}>
-          <LinearGradient colors={gradients.vibrant} style={styles.readyIcon}>
+          <LinearGradient colors={gradients.primary} style={styles.readyIcon}>
             <Icon name="barbell" size={30} color={colors.onAction} />
           </LinearGradient>
           <Text style={styles.readyTitle}>{plan.workout_name}</Text>
@@ -211,10 +211,14 @@ export default function WorkoutSessionScreen() {
   if (phase === 'rest') {
     const motivation = MOTIVATION[Math.floor(Math.random() * MOTIVATION.length)];
     return (
-      <LinearGradient colors={['#15131C', '#1A2740', '#15131C']} style={[styles.center, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={gradients.haze}
+        locations={hazeLocations}
+        style={[styles.center, { paddingTop: insets.top }]}
+      >
         <View style={styles.topProgress}>
           <View style={[styles.topProgressFillStatic, { width: `${progressPct}%` as any }]}>
-            <LinearGradient colors={gradients.cool} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1 }} />
+            <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1 }} />
           </View>
         </View>
 
@@ -229,7 +233,7 @@ export default function WorkoutSessionScreen() {
             <Animated.View style={[styles.restBarFillWrap, {
               width: restProgress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
             }]}>
-              <LinearGradient colors={gradients.cool} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, borderRadius: radius.full }} />
+              <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, borderRadius: radius.full }} />
             </Animated.View>
           </View>
 
@@ -373,7 +377,11 @@ const styles = themed(() => StyleSheet.create({
   // Rest
   restLabel: { color: colors.accentLight, fontSize: font.sm, letterSpacing: 6, fontWeight: '800' },
   motivation: { color: colors.textSecondary, fontSize: font.md, fontStyle: 'italic' },
-  restCount: { color: colors.onAction, fontSize: 110, fontWeight: '900', lineHeight: 116 },
+  // `colors.onAction` IS the page background in both schemes, so this rendered
+  // near-black on the dark canvas and white-on-white in light — the countdown
+  // was invisible either way. It sits on the haze backdrop, so it takes the
+  // normal ink like every other text element on this screen.
+  restCount: { color: colors.textPrimary, fontSize: 110, fontWeight: '900', lineHeight: 116 },
   restUnit: { color: colors.textSecondary, fontSize: font.sm, letterSpacing: 4, fontWeight: '700', marginTop: -spacing.sm },
   restBarTrack: { width: '80%', height: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: radius.full, overflow: 'hidden', marginTop: spacing.md },
   restBarFillWrap: { height: '100%' },

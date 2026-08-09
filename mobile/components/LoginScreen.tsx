@@ -16,7 +16,7 @@ import * as haptics from '../services/haptics';
 
 import { Label, Body, Wordmark, GhostButton, FilledButton, Rule } from './kit';
 import { MockReel, MOCK_REEL_H } from './MockReel';
-import { colors, spacing, font, radius, tracking, typeface, themed } from '../constants/theme';
+import { colors, spacing, font, radius, tracking, typeface, themed, gradients, hazeLocations } from '../constants/theme';
 
 /**
  * Apple and Google are mocked. Say so out loud rather than no-op.
@@ -304,6 +304,13 @@ export function LoginScreen() {
         <ReelWallBackdrop />
         {/* Flat wash over the whole wall — keeps it as atmosphere. */}
         <View style={[styles.scrim, { pointerEvents: 'none' }]} />
+        {/* Nocturnal Dimension haze. Sits ABOVE the wash but BELOW the bottom
+            ramp below, so the ramp keeps doing its legibility job unchanged. */}
+        <LinearGradient
+          colors={gradients.haze}
+          locations={hazeLocations}
+          style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
+        />
         {/* Bottom ramp, on top of the flat wash. The controls and the legal
             text sit in the lower third, and a uniform scrim was leaving them
             competing with the moving tiles behind. This drives the bottom of

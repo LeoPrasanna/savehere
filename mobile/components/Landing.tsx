@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { MotiView } from 'moti';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../services/api';
@@ -173,9 +174,20 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
           accessibilityRole="button"
           accessibilityLabel={stage === 'ready' ? 'Ask your library' : 'Paste a link to save'}
         >
-          <Text style={styles.composerText}>
-            {stage === 'ready' ? `Ask your ${total} saves` : 'Paste a link'}
-          </Text>
+          {stage === 'ready' ? (
+            // High-emphasis and animated — this is the card's whole purpose, and
+            // a static save count read as a label rather than an invitation.
+            <MotiView
+              from={{ opacity: 0.55, translateY: 3 }}
+              animate={{ opacity: 1, translateY: 0 }}
+              transition={{ type: 'timing', duration: 320, loop: false }}
+              style={{ flex: 1 }}
+            >
+              <Text style={styles.composerAsk}>ASK YOUR LIBRARY</Text>
+            </MotiView>
+          ) : (
+            <Text style={styles.composerText}>Paste a link</Text>
+          )}
           <Icon
             name={stage === 'ready' ? 'arrow-forward' : 'copy'}
             size={15}
@@ -256,5 +268,12 @@ const styles = themed(() => StyleSheet.create({
     color: colors.textSecondary,
     fontFamily: typeface.body,
     fontSize: font.md,
+  },
+  composerAsk: {
+    color: colors.textPrimary,
+    fontFamily: typeface.display,
+    fontSize: font.md,
+    fontWeight: '800',
+    letterSpacing: tracking.label,
   },
 }));

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, ScrollView, StyleSheet,
   ActivityIndicator, KeyboardAvoidingView, Platform,
@@ -27,6 +27,19 @@ export default function AskScreen() {
   const [streamingText, setStreamingText] = useState('');   // grows token-by-token
   const [error, setError] = useState('');
   const [focused, setFocused] = useState(false);
+
+  /**
+   * Open the keyboard on arrival — you came here to type a question.
+   *
+   * A timer rather than `autoFocus`: the screen transition is still animating on
+   * mount, and focusing mid-transition is the case where iOS shows the caret but
+   * never raises the keyboard. 350ms clears the push animation.
+   */
+  const inputRef = useRef<TextInput>(null);
+  useEffect(() => {
+    const t = setTimeout(() => inputRef.current?.focus(), 350);
+    return () => clearTimeout(t);
+  }, []);
   // Save count gate: the entry points already hide Ask below the threshold, but a
   // deep link / back-navigation could still land here, so guard the screen too.
   // null = still checking (don't flash the locked state before we know).
@@ -93,6 +106,7 @@ export default function AskScreen() {
           <View style={styles.field}>
             <View style={styles.fieldRow}>
               <TextInput
+                ref={inputRef}
                 style={styles.input}
                 placeholder="e.g. what was that high-protein recipe?"
                 placeholderTextColor={colors.textTertiary}

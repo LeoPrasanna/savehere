@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { View, Text, StyleSheet, Modal, TextInput, ScrollView, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api, Todo, TodoPriority } from '../services/api';
@@ -59,7 +59,7 @@ interface Props {
   defaultPriority?: TodoPriority;
 }
 
-export function TodoEditor({
+function TodoEditorImpl({
   visible, onClose, onSaved, onOptimistic, onFailed, reelId, defaultTitle, defaultDescription, editing,
   defaultPriority = 'medium',
 }: Props) {
@@ -345,3 +345,9 @@ const styles = themed(() => StyleSheet.create({
   saveBtnOff: { opacity: 0.45 },
   saveText: { color: colors.onAction, fontSize: font.md, fontWeight: '800' },
 }));
+
+/** Memoized: the sheet stays MOUNTED while closed so <Modal animationType="fade">
+ *  keeps its exit animation, but its body (ScrollView, date presets, priority
+ *  list) no longer re-evaluates every time the todos screen re-renders.
+ *  Requires stable handler props — see the useCallbacks in app/todos.tsx. */
+export const TodoEditor = memo(TodoEditorImpl);

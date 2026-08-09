@@ -76,31 +76,39 @@ interface Palette {
  * Preserving an accessibility bug is not preserving a signature trait.
  */
 const PALETTES: Record<ColorScheme, Palette> = {
+  // ── "Nocturnal Dimension" ────────────────────────────────────────────────
+  // Sources: Suno (surfaces, ink, pink), Vapi (accent orange). See
+  // docs/DESIGN_PROPOSAL.md. Ratios below are measured against `background`
+  // #101012 — NOT the old #000000, which is why several values moved.
   dark: {
-    background: '#000000',     // Void. Absolute — never a near-black.
-    surface: '#000000',
-    card: '#0B0B0B',           // the tile floor behind a loading photograph
-    cardElevated: '#111111',
-    border: 'rgba(248,248,248,0.12)',
-    borderLight: 'rgba(248,248,248,0.22)',
-    accent: '#F8F8F8',         // there is no accent hue — "accent" IS the ink
-    accentDark: '#D4D4D4',
-    accentLight: '#FFFFFF',
-    textPrimary: '#F8F8F8',    // 19.8:1
-    textSecondary: '#A8A8A8',  //  8.6:1
-    textTertiary: '#787878',   //  4.8:1 — #707070 measured 4.24 and was cut
-    onAccent: '#000000',       // inverted button: salt fill, void text
+    background: '#101012',     // Suno Pitch Black. Warm-lean, not absolute void.
+    surface: '#101012',
+    card: '#17171A',           // Suno Void Black — the floor behind a photograph
+    cardElevated: '#1E1E22',   // derived: card +1 step
+    border: 'rgba(247,244,239,0.10)',
+    borderLight: 'rgba(247,244,239,0.20)',
+    accent: '#E96B34',         // Vapi Orange. 6.0:1 — the one CTA hue.
+    accentDark: '#C95524',     // derived: accent darkened for pressed states
+    accentLight: '#FD429C',    // Suno Vivid Pink — gradient stop ONLY, never a fill
+    textPrimary: '#F7F4EF',    // Suno Ghost White — 17.4:1
+    textSecondary: '#A3A3A3',  // Suno Muted Steel —  7.6:1
+    textTertiary: '#7E7E7E',   //  4.7:1 — was #787878, which measures 4.33 on
+                               //  #101012 and would have shipped below AA
+    onAccent: '#101012',       // dark text on the orange fill — 6.0:1
     tagBg: 'transparent',      // tags are tracked type, not chips
-    tagText: '#787878',
-    danger: '#F8F8F8',         // destructive reads by INVERSION + wording
-    success: '#F8F8F8',
-    warning: '#F8F8F8',
+    tagText: '#7E7E7E',
+    danger: '#E05561',         // DERIVED, not a source token: neither Suno nor
+                               // Vapi ships a red. Suno Vivid Pink #FD429C
+                               // rotated 337°→355° and desaturated 98%→69%.
+                               // 5.5:1. Colour carries meaning here.
+    success: '#F7F4EF',        // still monochrome — reads by wording
+    warning: '#F7F4EF',        // still monochrome — reads by wording
     scrimMid: 'rgba(0,0,0,0)',
     scrimBottom: 'rgba(0,0,0,0.82)',
-    ghostLine: 'rgba(248,248,248,0.12)',
-    veil: 'rgba(248,248,248,0.45)',
-    tabBarTop: 'rgba(46,46,46,0.96)',
-    tabBarBottom: 'rgba(12,12,12,0.96)',
+    ghostLine: 'rgba(247,244,239,0.10)',
+    veil: 'rgba(247,244,239,0.45)',
+    tabBarTop: 'rgba(30,30,34,0.94)',
+    tabBarBottom: 'rgba(16,16,18,0.94)',
   },
   light: {
     background: '#FFFFFF',     // Arctic White (entire studios)
@@ -118,7 +126,11 @@ const PALETTES: Record<ColorScheme, Palette> = {
     onAccent: '#FFFFFF',
     tagBg: 'transparent',
     tagText: '#6E6E6E',
-    danger: '#000000',
+    // Light stays monochrome — Nocturnal Dimension is a dark-scheme identity.
+    // `danger` is the one exception: the meaning rule has to hold in both
+    // schemes, and #E05561 measures 3.5:1 on white, so light uses a darkened
+    // crimson (6.1:1) instead of the dark-scheme value.
+    danger: '#B3323E',
     success: '#000000',
     warning: '#000000',
     scrimMid: 'rgba(0,0,0,0)',
@@ -168,30 +180,60 @@ export const colors = {
   glassBorderLight: PALETTES.dark.borderLight as string,
 };
 
+type Ramp4 = readonly [string, string, string, string];
+
 /**
- * ⚠️ Gradients are FLAT on purpose — except `scrim`.
+ * The haze stops. DARK ONLY carries hue — in light the ramp collapses to four
+ * copies of the canvas, i.e. a flat fill, because a dark chromatic wash over a
+ * white UI breaks both the look and the contrast gates. See CONTEXT.md §4
+ * "Monochrome light-scheme integrity". Called from both the initial `gradients`
+ * literal and `applyScheme`, so the stops exist in exactly one place.
+ */
+function hazeFor(p: Palette, s: ColorScheme): Ramp4 {
+  return s === 'dark'
+    ? [p.background, 'rgba(253,66,156,0.10)', 'rgba(233,107,52,0.14)', p.background]
+    : [p.background, p.background, p.background, p.background];
+}
+
+/**
+ * ⚠️ Gradients are FLAT on purpose — except `scrim` and `haze`.
  *
  * Julia Krantz: "Never introduce gradients, overlays, or tinted backgrounds."
  * A gradient on every primary action is also the single most recognisable
- * "an agent made this" signature. Both stops of every ramp below are the same
- * colour, so the ~20 <LinearGradient> call sites keep their component and
- * render a solid fill.
+ * "an agent made this" signature. Both stops of `primary` and `success` are the
+ * same colour, so their call sites keep the component and render a solid fill.
  *
- * `scrim` keeps real stops: it is an image treatment that makes overlay text
- * legible over an unknown photograph, not decoration on a control.
+ * `scrim` and `haze` keep real stops. `scrim` is an image treatment that makes
+ * overlay text legible over an unknown photograph; `haze` is the screen-root
+ * atmosphere. Neither is decoration on a control — and no control may use them.
+ *
+ * ⚠️ Primary actions stay the CREAM INVERSION, not the orange accent (owner,
+ * 2026-08-09, "Option B"). Fifteen orange buttons is how one accent becomes
+ * wallpaper. `colors.accent` is reserved for active tabs, filter chips, and the
+ * centre FAB.
+ *
+ * Removed 2026-08-09 — `vibrant`, `sunset`, `cool` (three names for the exact
+ * same flat ink, left over from the retired per-feature rainbow: sunset=
+ * itinerary, cool=recipe, vibrant=workout — meaning that colour no longer
+ * carries); `surface`, `hologram`, `neon`, `darkSurface` (zero call sites).
  */
 export const gradients = {
   primary: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
-  vibrant: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
-  sunset: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
-  cool: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
   success: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
-  surface: [PALETTES.dark.card, PALETTES.dark.card] as const,
   scrim: ['transparent', PALETTES.dark.scrimMid, PALETTES.dark.scrimBottom] as const,
-  hologram: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
-  neon: [PALETTES.dark.textPrimary, PALETTES.dark.textPrimary] as const,
-  darkSurface: [PALETTES.dark.background, PALETTES.dark.background] as const,
+
+  /**
+   * The ONE real ramp besides `scrim`. Full-bleed atmospheric haze for the
+   * home canvas — Suno's amber/magenta glow, no blur anywhere, so web and
+   * Android cost the same single GPU draw as iOS. Render it once at the root
+   * of the screen with `pointerEvents="none"`, never per-card.
+   * Stops pair with `hazeLocations`.
+   */
+  haze: hazeFor(PALETTES.dark, 'dark'),
 };
+
+/** Stop positions for `gradients.haze`. */
+export const hazeLocations = [0, 0.45, 0.78, 1] as const;
 
 /**
  * Platform identity is a WORDMARK, not a colour.
@@ -202,14 +244,20 @@ export const gradients = {
  * loudest thing on a screen full of thumbnails and would fight every one of
  * them. Julia Krantz's rule holds — no colour in the UI layer.
  */
+// Read from the palette rather than repeating hex. These were hardcoded
+// '#F8F8F8'/'#0B0B0B' and silently drifted when the canvas moved to Nocturnal
+// Dimension — the placeholder sat a step darker than every card around it.
+const INK = PALETTES.dark.textPrimary;
+const CARD = PALETTES.dark.card;
+
 export const platformMeta: Record<string, { color: string; gradient: readonly [string, string]; icon: string; label: string }> = {
-  youtube:   { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'logo-youtube',   label: 'YouTube' },
-  instagram: { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'logo-instagram', label: 'Instagram' },
-  tiktok:    { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'logo-tiktok',    label: 'TikTok' },
-  linkedin:  { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'logo-linkedin',  label: 'LinkedIn' },
-  facebook:  { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'logo-facebook',  label: 'Facebook' },
-  twitter:   { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'logo-twitter',   label: 'X' },
-  unknown:   { color: '#F8F8F8', gradient: ['#0B0B0B', '#0B0B0B'], icon: 'globe-outline',  label: 'Web' },
+  youtube:   { color: INK, gradient: [CARD, CARD], icon: 'logo-youtube',   label: 'YouTube' },
+  instagram: { color: INK, gradient: [CARD, CARD], icon: 'logo-instagram', label: 'Instagram' },
+  tiktok:    { color: INK, gradient: [CARD, CARD], icon: 'logo-tiktok',    label: 'TikTok' },
+  linkedin:  { color: INK, gradient: [CARD, CARD], icon: 'logo-linkedin',  label: 'LinkedIn' },
+  facebook:  { color: INK, gradient: [CARD, CARD], icon: 'logo-facebook',  label: 'Facebook' },
+  twitter:   { color: INK, gradient: [CARD, CARD], icon: 'logo-twitter',   label: 'X' },
+  unknown:   { color: INK, gradient: [CARD, CARD], icon: 'globe-outline',  label: 'Web' },
 };
 
 /**
@@ -261,13 +309,14 @@ function applyScheme(s: ColorScheme) {
   colors.glassBg = p.card;
   colors.glassBorder = p.ghostLine;
   colors.glassBorderLight = p.borderLight;
-  const g = gradients as Record<string, readonly string[]>;
-  for (const k of ['primary', 'vibrant', 'sunset', 'cool', 'success', 'hologram', 'neon']) {
-    g[k] = [p.textPrimary, p.textPrimary];
-  }
-  g.surface = [p.card, p.card];
-  g.darkSurface = [p.background, p.background];
-  g.scrim = ['transparent', p.scrimMid, p.scrimBottom];
+  // No cast. The compiler checks these key names, so deleting a gradient can
+  // never again leave a silent dangling reference here (the old loop still
+  // named `vibrant`/`sunset`/`cool`/`hologram`/`neon`/`surface`/`darkSurface`
+  // long after they were removed, and resurrected them on every scheme switch).
+  gradients.primary = [p.textPrimary, p.textPrimary];
+  gradients.success = [p.textPrimary, p.textPrimary];
+  gradients.scrim = ['transparent', p.scrimMid, p.scrimBottom];
+  gradients.haze = hazeFor(p, s);
   glass.card.backgroundColor = p.card;
   glass.card.borderColor = p.ghostLine;
   glass.cardElevated.backgroundColor = p.cardElevated;
@@ -423,7 +472,8 @@ export const radius = {
   sm: 8,
   md: 12,
   lg: 16,
-  xl: 20,
+  /** Dimension's card radius (24). Was 20 before Nocturnal Dimension. */
+  xl: 24,
   /** Pill. Buttons, chips, the tab bar. */
   full: 999,
   /** A true circle. Category bubbles, tab-bar slots, auth buttons, avatars.

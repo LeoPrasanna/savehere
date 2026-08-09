@@ -22,6 +22,11 @@ const TYPE_COLOR: Record<string, string> = themed(() => ({
   flexibility: '#3DD68C',
 }));
 
+/** Height the pinned "Start Workout" footer occupies, so the scroll content can
+ *  clear it. The bar itself is hidden on this route (TabBar `HIDE_ON`), so this
+ *  is the only bottom chrome the content has to reserve for. */
+const FOOTER_HEIGHT = 110;
+
 const DIFFICULTY_COLOR: Record<string, string> = {
   beginner: '#3DD68C',
   intermediate: '#FFB84D',
@@ -86,7 +91,7 @@ export default function WorkoutPlanScreen() {
     <View style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {/* Gradient header */}
-        <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
+        <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.header}>
           <View style={styles.headerIcon}>
             <Icon name="barbell" size={22} color={colors.onAction} />
           </View>
@@ -158,7 +163,7 @@ export default function WorkoutPlanScreen() {
 
 const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.md, paddingBottom: 110, gap: spacing.sm },
+  content: { padding: spacing.md, paddingBottom: FOOTER_HEIGHT, gap: spacing.sm },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background, gap: spacing.md },
   errorText: { color: colors.textSecondary, fontSize: font.md },
 

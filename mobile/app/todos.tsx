@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useMemo, useRef, useEffect, memo } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, RefreshControl, Modal } from 'react-native';
 import { useRouter, useFocusEffect, useNavigation } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -92,12 +92,18 @@ function StatTile({ label, value, tint }: { label: string; value: number; tint?:
   );
 }
 
-function TodoRow({ todo, onToggle, onEdit, onOpenReel, onDelete }: {
+/**
+ * Memoized. The handlers take the todo instead of closing over it, so the
+ * screen can pass ONE stable reference per action to every row — with
+ * per-row arrows (`onToggle={() => toggle(t)}`) every row's props changed
+ * identity on every render and memo would have been decorative.
+ */
+const TodoRow = memo(function TodoRow({ todo, onToggle, onEdit, onOpenReel, onDelete }: {
   todo: Todo;
-  onToggle: () => void;
-  onEdit: () => void;
-  onOpenReel: () => void;
-  onDelete: () => void;
+  onToggle: (todo: Todo) => void;
+  onEdit: (todo: Todo) => void;
+  onOpenReel: (todo: Todo) => void;
+  onDelete: (todo: Todo) => void;
 }) {
   const overdue = bucketOf(todo.due_date) === 'overdue' && !todo.completed;
   const done = todo.completed;
@@ -109,7 +115,7 @@ function TodoRow({ todo, onToggle, onEdit, onOpenReel, onDelete }: {
       transition={{ type: 'timing', duration: 260 }}
       style={[styles.row, done && styles.rowDone]}
     >
-      <Pressable onPress={onToggle} scaleTo={0.85} hitSlop={8} style={styles.check}>
+      <Pressable onPress={() => onToggle(todo)} scaleTo={0.85} hitSlop={8} style={styles.check}>
         <View style={[styles.checkBox, done && styles.checkBoxOn]}>
           <AnimatePresence>
             {done && (
@@ -142,7 +148,7 @@ function TodoRow({ todo, onToggle, onEdit, onOpenReel, onDelete }: {
         </AnimatePresence>
       </Pressable>
 
-      <Pressable style={styles.rowBody} onPress={onEdit} scaleTo={0.99}>
+      <Pressable style={styles.rowBody} onPress={() => onEdit(todo)} scaleTo={0.99}>
         <Text style={[styles.rowTitle, todo.completed && styles.rowTitleDone]} numberOfLines={2}>
           {todo.title}
         </Text>
@@ -157,7 +163,7 @@ function TodoRow({ todo, onToggle, onEdit, onOpenReel, onDelete }: {
           ]} />
           <Text style={[styles.meta, overdue && styles.metaOverdue]}>{formatDue(todo.due_date)}</Text>
           {todo.reel_id && (
-            <Pressable onPress={onOpenReel} scaleTo={0.94} hitSlop={6} style={styles.sourceChip}>
+            <Pressable onPress={() => onOpenReel(todo)} scaleTo={0.94} hitSlop={6} style={styles.sourceChip}>
               <Icon name="play" size={9} color={colors.accentLight} />
               <Text style={styles.sourceText}>View save</Text>
             </Pressable>
@@ -165,12 +171,12 @@ function TodoRow({ todo, onToggle, onEdit, onOpenReel, onDelete }: {
         </View>
       </Pressable>
 
-      <Pressable onPress={onDelete} scaleTo={0.85} hitSlop={8} style={styles.del}>
+      <Pressable onPress={() => onDelete(todo)} scaleTo={0.85} hitSlop={8} style={styles.del}>
         <Icon name="trash" size={15} color={colors.textTertiary} />
       </Pressable>
     </MotiView>
   );
-}
+});
 
 export default function TodosScreen() {
   const router = useRouter();
@@ -245,7 +251,7 @@ export default function TodosScreen() {
     if (settingsReady) load();
   }, [load, navigation, settingsReady]));
 
-  const toggle = async (todo: Todo) => {
+  const toggle = useCallback(async (todo: Todo) => {
     const next = !todo.completed;
     // Optimistic, and the item STAYS in place while checked — tapping again is
     // the undo. It drops off the list on the next load, which is the natural
@@ -292,7 +298,7 @@ export default function TodosScreen() {
       });
       setError(e?.message || "Couldn't update that.");
     }
-  };
+  }, [settings.askDeleteSaveOnDone]);
 
   /** "Yes, delete the saved card." The task itself survives — the server
    *  unlinks it rather than cascading, so the record of what you did remains. */
@@ -338,7 +344,7 @@ export default function TodosScreen() {
   // Anything still in the grace window when the screen goes away gets committed.
   useEffect(() => flushPending, [flushPending]);
 
-  const remove = (todo: Todo) => {
+  const remove = useCallback((todo: Todo) => {
     // A second delete inside the window commits the first — one undo slot keeps
     // the interaction honest instead of stacking toasts nobody reads.
     flushPending();
@@ -361,7 +367,7 @@ export default function TodosScreen() {
       setUndoFor(null);
     }, UNDO_MS);
     pending.current = { todo, timer };
-  };
+  }, [flushPending, commitDelete]);
 
   const undoDelete = () => {
     if (!pending.current) return;
@@ -389,10 +395,10 @@ export default function TodosScreen() {
   };
 
   /** A brand-new task, shown before the server has confirmed it. */
-  const onOptimistic = (draft: Todo) => {
+  const onOptimistic = useCallback((draft: Todo) => {
     setTodos(ts => [...ts, draft]);
     setStats(s => s && { ...s, total: s.total + 1, open: s.open + 1 });
-  };
+  }, []);
 
   /**
    * The server's version of a task, replacing the draft if there was one.
@@ -404,30 +410,45 @@ export default function TodosScreen() {
    * immediately; only its position WITHIN a section waits for the next natural
    * refresh, which nobody notices.
    */
-  const onSaved = (saved: Todo, replaces?: string) => {
+  const onSaved = useCallback((saved: Todo, replaces?: string) => {
     setTodos(ts => [...ts.filter(t => t.id !== saved.id && t.id !== replaces), saved]);
-  };
+  }, []);
 
   /** The create failed after the sheet closed. Take the draft back out and say why. */
-  const onFailed = (draftId: string, message: string) => {
+  const onFailed = useCallback((draftId: string, message: string) => {
     setTodos(ts => ts.filter(t => t.id !== draftId));
     setStats(s => s && { ...s, total: Math.max(0, s.total - 1), open: Math.max(0, s.open - 1) });
     setError(message);
-  };
+  }, []);
+
+  // Stable so the memoized sheets below actually skip re-rendering. An inline
+  // arrow here would defeat their memo on every parent render.
+  const closeEditor = useCallback(() => { setEditorOpen(false); setEditing(null); }, []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
   const openNew = () => { setEditing(null); setEditorOpen(true); };
-  const openEdit = (t: Todo) => { setEditing(t); setEditorOpen(true); };
+  const openEdit = useCallback((t: Todo) => { setEditing(t); setEditorOpen(true); }, []);
+  const openReel = useCallback((t: Todo) => { router.push(`/reel/${t.reel_id}`); }, [router]);
 
-  const order = settings.somedayFirst
-    ? [SECTIONS[3], SECTIONS[0], SECTIONS[1], SECTIONS[2]]
-    : SECTIONS;
-  const grouped = order
-    .map(s => ({ ...s, items: todos.filter(t => bucketOf(t.due_date) === s.key) }))
-    .filter(s => s.items.length > 0);
+  // Memoized: these ran on every render, and each pass calls bucketOf() —
+  // which parses a date — once per todo per section plus once more for the
+  // overdue count. That is ~5N date parses on the JS thread before commit,
+  // fired by anything that re-rendered the screen, including a checkbox tap.
+  const grouped = useMemo(() => {
+    const order = settings.somedayFirst
+      ? [SECTIONS[3], SECTIONS[0], SECTIONS[1], SECTIONS[2]]
+      : SECTIONS;
+    return order
+      .map(s => ({ ...s, items: todos.filter(t => bucketOf(t.due_date) === s.key) }))
+      .filter(s => s.items.length > 0);
+  }, [todos, settings.somedayFirst]);
 
   // Computed here, not server-side: "overdue" depends on the DEVICE's calendar
   // day, and a UTC-derived count would disagree with the sections below it.
-  const overdueCount = todos.filter(t => !t.completed && bucketOf(t.due_date) === 'overdue').length;
+  const overdueCount = useMemo(
+    () => todos.filter(t => !t.completed && bucketOf(t.due_date) === 'overdue').length,
+    [todos],
+  );
 
   if (loading) {
     return <View style={styles.center}><ActivityIndicator color={colors.accent} size="large" /></View>;
@@ -536,10 +557,10 @@ export default function TodosScreen() {
                 <TodoRow
                   key={t.id}
                   todo={t}
-                  onToggle={() => toggle(t)}
-                  onEdit={() => openEdit(t)}
-                  onOpenReel={() => router.push(`/reel/${t.reel_id}`)}
-                  onDelete={() => remove(t)}
+                  onToggle={toggle}
+                  onEdit={openEdit}
+                  onOpenReel={openReel}
+                  onDelete={remove}
                 />
               ))}
             </MotiView>
@@ -590,7 +611,7 @@ export default function TodosScreen() {
         visible={editorOpen}
         editing={editing}
         defaultPriority={settings.defaultPriority}
-        onClose={() => { setEditorOpen(false); setEditing(null); }}
+        onClose={closeEditor}
         onOptimistic={onOptimistic}
         onFailed={onFailed}
         onSaved={onSaved}
@@ -601,7 +622,7 @@ export default function TodosScreen() {
         visible={settingsOpen}
         settings={settings}
         onChange={updateSettings}
-        onClose={() => setSettingsOpen(false)}
+        onClose={closeSettings}
       />
 
       {/* ── Done → keep or delete the save it came from ────────────────────

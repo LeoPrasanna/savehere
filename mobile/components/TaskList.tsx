@@ -1,5 +1,5 @@
 import { View, Text, StyleSheet, ActivityIndicator, Animated, TextInput, Platform, Alert } from 'react-native';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback, memo } from 'react';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from './Icon';
 import { Task, api } from '../services/api';
@@ -15,8 +15,119 @@ interface Props {
   kind?: 'steps' | 'tasks';
 }
 
+// Module-level: they close over nothing, so keeping them out of the component
+// means the handlers below can be useCallback'd without listing them as deps.
+const confirmDialog = (msg: string): Promise<boolean> =>
+  new Promise(resolve => {
+    if (Platform.OS === 'web') return resolve(window.confirm(msg));
+    Alert.alert('', msg, [
+      { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+      { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
+    ]);
+  });
+
+const notify = (msg: string) => {
+  if (Platform.OS === 'web') window.alert(msg);
+  else Alert.alert('', msg);
+};
+
+interface RowProps {
+  task: Task;
+  index: number;
+  isSteps: boolean;
+  noun: string;
+  editing: boolean;
+  /** Empty string unless THIS row is being edited — otherwise every keystroke
+   *  would change every row's props and defeat the memo. */
+  editText: string;
+  savingEdit: boolean;
+  removing: boolean;
+  onToggle: (task: Task) => void;
+  onStartEdit: (task: Task) => void;
+  onSaveEdit: (task: Task, text: string) => void;
+  onCancelEdit: () => void;
+  onChangeEditText: (text: string) => void;
+  onDelete: (task: Task) => void;
+}
+
+/**
+ * Memoized row. Was an inline `.map` body with `onPress={() => handleToggle(task)}`
+ * per row, so ticking one checkbox reconciled every row in the list. The handlers
+ * take the task instead of closing over it, which lets the parent pass one stable
+ * reference to all rows.
+ */
+const TaskRow = memo(function TaskRow({
+  task, index, isSteps, noun, editing, editText, savingEdit, removing,
+  onToggle, onStartEdit, onSaveEdit, onCancelEdit, onChangeEditText, onDelete,
+}: RowProps) {
+  return (
+    <View style={[styles.row, task.completed && !editing && styles.rowDone]}>
+      <Pressable
+        style={[styles.check, isSteps && !task.completed && styles.checkStep, task.completed && styles.checkDone]}
+        onPress={() => onToggle(task)}
+        scaleTo={0.9}
+        disabled={editing}
+      >
+        {task.completed
+          ? <Icon name="checkmark" size={15} color={colors.onAction} />
+          : isSteps
+            ? <Text style={styles.stepNum}>{index + 1}</Text>
+            : null}
+      </Pressable>
+
+      <Icon name={task.emoji} size={18} color={colors.accentLight} />
+
+      {editing ? (
+        <TextInput
+          style={styles.editInput}
+          value={editText}
+          onChangeText={onChangeEditText}
+          autoFocus
+          multiline
+          placeholder={`Edit ${noun}…`}
+          placeholderTextColor={colors.textSecondary}
+          onSubmitEditing={() => onSaveEdit(task, editText)}
+        />
+      ) : (
+        <Pressable style={styles.taskText} onPress={() => onToggle(task)} scaleTo={0.99}>
+          <Text style={[styles.text, task.completed && styles.textDone]} numberOfLines={4}>
+            {task.text}
+          </Text>
+          {task.estimated_minutes ? (
+            <View style={styles.timeRow}>
+              <Icon name="time-outline" size={11} color={colors.textTertiary} />
+              <Text style={styles.time}>~{task.estimated_minutes} min</Text>
+            </View>
+          ) : null}
+        </Pressable>
+      )}
+
+      <View style={styles.rowActions}>
+        {editing ? (
+          <>
+            <Pressable style={styles.iconBtn} onPress={() => onSaveEdit(task, editText)} hitSlop={6} scaleTo={0.85} disabled={savingEdit}>
+              {savingEdit ? <ActivityIndicator size="small" color={colors.success} /> : <Icon name="checkmark" size={16} color={colors.success} />}
+            </Pressable>
+            <Pressable style={styles.iconBtn} onPress={onCancelEdit} hitSlop={6} scaleTo={0.85}>
+              <Icon name="close" size={16} color={colors.textTertiary} />
+            </Pressable>
+          </>
+        ) : (
+          <>
+            <Pressable style={styles.iconBtn} onPress={() => onStartEdit(task)} hitSlop={6} scaleTo={0.85}>
+              <Icon name="create" size={15} color={colors.textTertiary} />
+            </Pressable>
+            <Pressable style={styles.iconBtn} onPress={() => onDelete(task)} hitSlop={6} scaleTo={0.85} disabled={removing}>
+              {removing ? <ActivityIndicator size="small" color={colors.danger} /> : <Icon name="trash-outline" size={15} color={colors.danger} />}
+            </Pressable>
+          </>
+        )}
+      </View>
+    </View>
+  );
+});
+
 export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tasks' }: Props) {
-  const [toggling, setToggling] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
@@ -31,34 +142,34 @@ export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tas
 
   const fill = useRef(new Animated.Value(progress)).current;
   useEffect(() => {
-    Animated.spring(fill, { toValue: progress, useNativeDriver: false, speed: 12, bounciness: 8 }).start();
+    Animated.spring(fill, { toValue: progress, useNativeDriver: true, speed: 12, bounciness: 8 }).start();
   }, [progress]);
 
-  const confirm = (msg: string): Promise<boolean> =>
-    new Promise(resolve => {
-      if (Platform.OS === 'web') return resolve(window.confirm(msg));
-      Alert.alert('', msg, [
-        { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
-        { text: 'Delete', style: 'destructive', onPress: () => resolve(true) },
-      ]);
-    });
-
-  const handleToggle = async (task: Task) => {
-    if (editingId === task.id) return;
-    setToggling(task.id);
+  /**
+   * Optimistic. The checkbox used to show a spinner for the whole round-trip,
+   * which is what made a tap feel slow — the work was never heavy, the UI just
+   * waited on the network. Paint first, reconcile with the server's row after,
+   * roll back to the pre-tap task if the call fails.
+   */
+  const handleToggle = useCallback(async (task: Task) => {
+    const next = !task.completed;
+    onUpdate({ ...task, completed: next });
     try {
-      const updated = await api.toggleTask(task.id, !task.completed);
-      onUpdate(updated);
-    } finally {
-      setToggling(null);
+      onUpdate(await api.toggleTask(task.id, next));
+    } catch (e: any) {
+      onUpdate(task);
+      notify(e?.message || `Could not update that ${noun}. Please try again.`);
     }
-  };
+  }, [onUpdate, noun]);
 
-  const startEdit = (task: Task) => { setEditingId(task.id); setEditText(task.text); };
-  const cancelEdit = () => { setEditingId(null); setEditText(''); };
+  const startEdit = useCallback((task: Task) => { setEditingId(task.id); setEditText(task.text); }, []);
+  const cancelEdit = useCallback(() => { setEditingId(null); setEditText(''); }, []);
 
-  const saveEdit = async (task: Task) => {
-    const text = editText.trim();
+  // Takes the text from the row rather than reading `editText` from scope —
+  // otherwise this handler's identity changed on every keystroke and re-rendered
+  // every row while typing, which is the thing the memo is meant to prevent.
+  const saveEdit = useCallback(async (task: Task, raw: string) => {
+    const text = raw.trim();
     if (!text || text === task.text) return cancelEdit();
     setSavingEdit(true);
     try {
@@ -68,10 +179,10 @@ export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tas
     } finally {
       setSavingEdit(false);
     }
-  };
+  }, [onUpdate, cancelEdit]);
 
-  const handleDelete = async (task: Task) => {
-    if (!(await confirm(`Delete this ${noun}?`))) return;
+  const handleDelete = useCallback(async (task: Task) => {
+    if (!(await confirmDialog(`Delete this ${noun}?`))) return;
     setRemoving(task.id);
     try {
       await api.deleteTask(task.id);
@@ -79,7 +190,7 @@ export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tas
     } finally {
       setRemoving(null);
     }
-  };
+  }, [noun, onDelete]);
 
   const handleAdd = async () => {
     const text = newText.trim();
@@ -98,7 +209,7 @@ export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tas
     <View style={styles.container}>
       <View style={styles.progressRow}>
         <View style={styles.progressBar}>
-          <Animated.View style={[styles.progressFillWrap, { width: fill.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) }]}>
+          <Animated.View style={[styles.progressFillWrap, { transform: [{ scaleX: fill }] }]}>
             <LinearGradient colors={gradients.success} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.progressFill} />
           </Animated.View>
         </View>
@@ -108,71 +219,23 @@ export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tas
       {tasks.map((task, i) => {
         const editing = editingId === task.id;
         return (
-          <View key={task.id} style={[styles.row, task.completed && !editing && styles.rowDone]}>
-            <Pressable
-              style={[styles.check, isSteps && !task.completed && styles.checkStep, task.completed && styles.checkDone]}
-              onPress={() => handleToggle(task)}
-              scaleTo={0.9}
-              disabled={editing}
-            >
-              {toggling === task.id
-                ? <ActivityIndicator size="small" color={task.completed ? colors.onAction : colors.textPrimary} />
-                : task.completed
-                  ? <Icon name="checkmark" size={15} color={colors.onAction} />
-                  : isSteps
-                    ? <Text style={styles.stepNum}>{i + 1}</Text>
-                    : null}
-            </Pressable>
-
-            <Icon name={task.emoji} size={18} color={colors.accentLight} />
-
-            {editing ? (
-              <TextInput
-                style={styles.editInput}
-                value={editText}
-                onChangeText={setEditText}
-                autoFocus
-                multiline
-                placeholder={`Edit ${noun}…`}
-                placeholderTextColor={colors.textSecondary}
-                onSubmitEditing={() => saveEdit(task)}
-              />
-            ) : (
-              <Pressable style={styles.taskText} onPress={() => handleToggle(task)} scaleTo={0.99}>
-                <Text style={[styles.text, task.completed && styles.textDone]} numberOfLines={4}>
-                  {task.text}
-                </Text>
-                {task.estimated_minutes ? (
-                  <View style={styles.timeRow}>
-                    <Icon name="time-outline" size={11} color={colors.textTertiary} />
-                    <Text style={styles.time}>~{task.estimated_minutes} min</Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            )}
-
-            <View style={styles.rowActions}>
-              {editing ? (
-                <>
-                  <Pressable style={styles.iconBtn} onPress={() => saveEdit(task)} hitSlop={6} scaleTo={0.85} disabled={savingEdit}>
-                    {savingEdit ? <ActivityIndicator size="small" color={colors.success} /> : <Icon name="checkmark" size={16} color={colors.success} />}
-                  </Pressable>
-                  <Pressable style={styles.iconBtn} onPress={cancelEdit} hitSlop={6} scaleTo={0.85}>
-                    <Icon name="close" size={16} color={colors.textTertiary} />
-                  </Pressable>
-                </>
-              ) : (
-                <>
-                  <Pressable style={styles.iconBtn} onPress={() => startEdit(task)} hitSlop={6} scaleTo={0.85}>
-                    <Icon name="create" size={15} color={colors.textTertiary} />
-                  </Pressable>
-                  <Pressable style={styles.iconBtn} onPress={() => handleDelete(task)} hitSlop={6} scaleTo={0.85} disabled={removing === task.id}>
-                    {removing === task.id ? <ActivityIndicator size="small" color={colors.danger} /> : <Icon name="trash-outline" size={15} color={colors.danger} />}
-                  </Pressable>
-                </>
-              )}
-            </View>
-          </View>
+          <TaskRow
+            key={task.id}
+            task={task}
+            index={i}
+            isSteps={isSteps}
+            noun={noun}
+            editing={editing}
+            editText={editing ? editText : ''}
+            savingEdit={editing && savingEdit}
+            removing={removing === task.id}
+            onToggle={handleToggle}
+            onStartEdit={startEdit}
+            onSaveEdit={saveEdit}
+            onCancelEdit={cancelEdit}
+            onChangeEditText={setEditText}
+            onDelete={handleDelete}
+          />
         );
       })}
 
@@ -199,7 +262,10 @@ const styles = themed(() => StyleSheet.create({
   container: { gap: spacing.sm },
   progressRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
   progressBar: { flex: 1, height: 8, backgroundColor: colors.border, borderRadius: radius.full, overflow: 'hidden' },
-  progressFillWrap: { height: '100%' },
+  // Full width + scaleX from the left edge, so the bar animates on the NATIVE
+  // driver. Animating `width` cannot use it and ran the spring on the JS thread,
+  // competing with the re-render that triggered it.
+  progressFillWrap: { height: '100%', width: '100%', transformOrigin: 'left' },
   progressFill: { flex: 1, borderRadius: radius.full },
   progressText: { color: colors.success, fontSize: font.xs, fontWeight: '800', width: 40, textAlign: 'right' },
 
