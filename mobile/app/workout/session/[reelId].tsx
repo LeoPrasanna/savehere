@@ -377,7 +377,11 @@ const styles = themed(() => StyleSheet.create({
   // Rest
   restLabel: { color: colors.accentLight, fontSize: font.sm, letterSpacing: 6, fontWeight: '800' },
   motivation: { color: colors.textSecondary, fontSize: font.md, fontStyle: 'italic' },
-  restCount: { color: colors.onAction, fontSize: 110, fontWeight: '900', lineHeight: 116 },
+  // `colors.onAction` IS the page background in both schemes, so this rendered
+  // near-black on the dark canvas and white-on-white in light — the countdown
+  // was invisible either way. It sits on the haze backdrop, so it takes the
+  // normal ink like every other text element on this screen.
+  restCount: { color: colors.textPrimary, fontSize: 110, fontWeight: '900', lineHeight: 116 },
   restUnit: { color: colors.textSecondary, fontSize: font.sm, letterSpacing: 4, fontWeight: '700', marginTop: -spacing.sm },
   restBarTrack: { width: '80%', height: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: radius.full, overflow: 'hidden', marginTop: spacing.md },
   restBarFillWrap: { height: '100%' },

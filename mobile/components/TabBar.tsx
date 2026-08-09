@@ -1,3 +1,4 @@
+import { useEffect, useReducer } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, usePathname } from 'expo-router';
@@ -6,7 +7,7 @@ import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import * as haptics from '../services/haptics';
 import { markEnteredLibrary, clearEnteredLibrary, hasEnteredLibrary } from '../services/sessionFlags';
-import { emitUi } from '../services/uiBus';
+import { emitUi, onUi } from '../services/uiBus';
 import { colors, spacing, radius, themed } from '../constants/theme';
 
 /**
@@ -64,7 +65,18 @@ export function TabBar() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
 
-  if (HIDE_ON.some(p => pathname.startsWith(p))) return null;
+  // Home and Library share the route `/` and are told apart by a session flag,
+  // NOT by the pathname — so `usePathname()` never changes between them and
+  // nothing re-rendered this bar when the flag flipped. That, not a prefix
+  // matcher, is why the indicator stuck on Home: the bar emitted `libraryState`
+  // for the route to consume but never listened to it itself.
+  const [, bumpActive] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => onUi('libraryState', bumpActive), []);
+
+  // `/` is matched EXACTLY — a prefix test would make every route a "hide"
+  // route. The rest stay prefix matches so `/workout/<id>` and `/workout/session`
+  // are both covered by the one `/workout/` entry.
+  if (HIDE_ON.some(p => (p === '/' ? pathname === '/' : pathname.startsWith(p)))) return null;
 
   // "Which tab am I on" is not purely the pathname: `/` renders EITHER the
   // landing or the library depending on a session flag, so Home and Library

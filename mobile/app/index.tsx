@@ -1,11 +1,10 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, ScrollView, StyleSheet, ActivityIndicator,
-  RefreshControl, TextInput, useWindowDimensions, Platform,
+  RefreshControl, useWindowDimensions, Platform,
   KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Search, XCircle } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, Reel } from '../services/api';
 import { ReelCard, aspectFor } from '../components/ReelCard';
@@ -19,10 +18,22 @@ import { onUi, emitUi } from '../services/uiBus';
 import { ASK_MIN_REELS } from '../constants/limits';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { LinearGradient } from 'expo-linear-gradient';
+import { RollingTagline } from '../components/RollingTagline';
 import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, GRID_GAP, themed, gradients, hazeLocations } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
 const PAGE = 24;
+
+/** Module-level so the reference is stable — RollingTagline is memoized and an
+ *  inline array would defeat that on every render. */
+const LIBRARY_CAPABILITIES = [
+  'Summarize any reel you save',
+  'Extract cooking recipes, step by step',
+  'Build guided workouts with rest timers',
+  'Turn a tutorial into a checklist you can tick off',
+  'Ask your library — answered from your own saves',
+  'Rediscover saves you forgot you had',
+];
 
 export default function HomeScreen() {
   const router = useRouter();
@@ -244,24 +255,15 @@ export default function HomeScreen() {
         </Pressable>
       </View>
 
-      {/* Search moved UP from the bottom edge: the floating tab bar owns that
-          space now, and stacking a docked search bar under it left ~120px of
-          permanent chrome over the grid. */}
-      <View style={styles.searchRow}>
-        <Search size={15} color={colors.textTertiary} strokeWidth={1.35} />
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search your saves"
-          placeholderTextColor={colors.textTertiary}
-          value={search}
-          onChangeText={setSearch}
-        />
-        {search.length > 0 && (
-          <Pressable onPress={() => setSearch('')} hitSlop={8} accessibilityLabel="Clear search">
-            <XCircle size={15} color={colors.textTertiary} strokeWidth={1.35} />
-          </Pressable>
-        )}
-      </View>
+      {/* The search field used to sit here. Replaced (owner, 2026-08-09) with a
+          rolling list of what the library can actually do for a save. */}
+      <RollingTagline
+        compact
+        shuffle
+        lines={LIBRARY_CAPABILITIES}
+        style={styles.capabilityRoll}
+        numberOfLines={1}
+      />
       <Rule />
 
       {/* ── Category filter ──────────────────────────────────────────────────
@@ -487,10 +489,9 @@ const styles = themed(() => StyleSheet.create({
   emptyText: { textAlign: 'center', maxWidth: 380 },
   emptyCta: { marginTop: spacing.sm, alignSelf: 'stretch', maxWidth: 320 },
 
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
+  // Keeps the exact footprint the search row occupied, so the grid below does
+  // not shift.
+  capabilityRoll: {
     marginHorizontal: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.ghostLine,

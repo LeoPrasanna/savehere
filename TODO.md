@@ -826,18 +826,11 @@ code has been modified yet.
 - [ ] **Light Mode Visual Sanity Check:**
   * Symptom: The new gradient elements (like the background haze) look visually unappealing or degrade contrast when `schemePref` is toggled to light.
   * Task: Ensure the root haze wrapper gracefully collapses to a solid white canvas in light mode to maintain contrast integrity.
-- [ ] **Fix Workout Plan Rest-Time Contrast (Bug 1):**
-  * Symptom: Rest-time text color is unreadable in dark mode and invisible in light mode.
-  * Task: Retarget rest text elements in the workout detail layout to `colors.textSecondary` or `colors.textTertiary` (which was bumped to `#7E7E7E` specifically to hit 4.7:1 AA against our new base) [23].
-- [ ] **Fix Navigation Tab Active Indicator Collision (Bug 2):**
-  * Symptom: Tab indicator remains stuck on Home when navigating between Home and Library.
-  * Task: Modify the active checker in `mobile/components/TabBar.tsx` to exact-match `/` (`p === '/' ? pathname === '/' : pathname.startsWith(p)`), resolving prefix wildcard collisions [24].
-- [ ] **Remove Library Header Search Option (Feature Change 3):**
-  * Task 1: Completely delete the `<TextInput>` search bar from the top of the Library grid page.
-  * Task 2: In its place, render our memoized `RollingTagline.tsx` component to scroll vertical text explaining what the user can do (e.g., "Summarize any reel", "Extract cooking recipes", "Build guided workouts") [25].
-- [ ] **Implement Ask Screen Focus Hand-Off (Feature Change 4):**
-  * Task 1: Replace "Ask your <saves> saves" static caption on the Home card with an animating, high-emphasis `"ASK YOUR LIBRARY"` text block [24].
-  * Task 2: Configure the input element in `mobile/app/ask.tsx` to automatically call `.focus()` on transition mount with a small timer offset to ensure the keyboard opens immediately.
+- [x] **Fix Workout Plan Rest-Time Contrast (Bug 1)** — root cause was NOT the plan screen (`workout/[reelId].tsx` rest tag was already on `textTertiary`/`textSecondary` and fine). It was `workout/session/[reelId].tsx` `restCount`, the 110px countdown, styled `colors.onAction` — which **is** the page background in both schemes, so it rendered near-black on the dark canvas and white-on-white in light. Now `colors.textPrimary`.
+- [x] **Fix Navigation Tab Active Indicator Collision (Bug 2)** — ⚠️ **the prescribed fix was for a bug that didn't exist.** `TabBar` already exact-matched the root (`pathname === '/' || pathname === '/index'`); there was no `startsWith('/')` collision. The real cause: Home and Library **share** the route `/` and are distinguished by a session flag, so `usePathname()` never changes between them — and `TabBar` emitted `libraryState` for the route to consume but **never subscribed to it itself**, so nothing re-rendered the bar. Fixed by subscribing (`useEffect(() => onUi('libraryState', bumpActive), [])`). The `/`-exact guard was also applied to `HIDE_ON` defensively, but it is a no-op today — `HIDE_ON` contains no `/` entry.
+- [x] **Remove Library Header Search Option (Feature Change 3)** — `<TextInput>` search row deleted from `app/index.tsx`, replaced by memoized `RollingTagline` over `LIBRARY_CAPABILITIES` (module-level so the memo holds). Style keeps the old 42px footprint so the grid doesn't shift. Orphaned `Search`/`XCircle`/`TextInput` imports removed.
+- [ ] **Follow-up to Feature 3 — strip the dead search plumbing.** `app/index.tsx` still carries `search`/`searchResults`/`searching` state, the debounce effect, `searchEverywhere()`, and the `inSearchMode` empty states ("No matches", "Search all categories") — all now unreachable, ~50 lines. Left in place deliberately so the decision stays easy to reverse. **Also note: this removed the only entry point to the server-side smart search** (`app/services/search.py` — tokenizing, synonyms, category matching, relevance ranking). That backend feature is now unreachable from the app.
+- [x] **Implement Ask Screen Focus Hand-Off (Feature Change 4)** — Home card now renders an animated, high-emphasis `ASK YOUR LIBRARY` (MotiView fade/rise, no loop) instead of the static save count; `ask.tsx` focuses its input via a ref on a 350 ms timer rather than `autoFocus`, because focusing mid-push-transition is the case where iOS shows a caret but never raises the keyboard.
 
 
 
