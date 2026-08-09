@@ -25,8 +25,11 @@ import { colors, spacing, radius, themed } from '../constants/theme';
  * else it stays put (owner direction: "consistent on all pages").
  */
 
-/** Routes that own their whole surface and must not be overlaid. */
-const HIDE_ON = ['/save', '/pro', '/workout/session'];
+/** Routes that own their whole surface and must not be overlaid.
+ *  Matched with `startsWith`, so `/workout/` covers both the plan screen and
+ *  the session — the plan screen pins its own "Start Workout" CTA to the
+ *  bottom, which the floating bar sat directly on top of. */
+const HIDE_ON = ['/save', '/pro', '/workout/'];
 
 /**
  * How much room the bar occupies ABOVE the safe-area inset — pill height

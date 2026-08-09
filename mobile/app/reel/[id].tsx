@@ -363,7 +363,7 @@ export default function ReelDetailScreen() {
             <Icon name="play" size={44} color="rgba(255,255,255,0.9)" />
           </LinearGradient>
         )}
-        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.88)']} style={styles.heroScrim} />
+        <LinearGradient colors={gradients.scrim} style={styles.heroScrim} />
 
         {/* Platform is a WORDMARK, not a coloured badge — `platform.color` is
             now the ink tone for every platform (see constants/theme.ts), so a
@@ -605,7 +605,7 @@ export default function ReelDetailScreen() {
                 onPress={handleGenerateItinerary}
                 disabled={generatingItin || itinRegensLeft <= 0}
               >
-                <LinearGradient colors={gradients.sunset} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
+                <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
                   {generatingItin
                     ? <ActivityIndicator size="small" color={colors.onAction} />
                     : <Icon name="travel" size={20} color={colors.onAction} />}
@@ -693,7 +693,7 @@ export default function ReelDetailScreen() {
                   onPress={hasWorkout ? () => router.push(`/workout/${id}`) : () => openModal(setWorkoutModal)}
                   disabled={generatingWorkout || (!hasWorkout && workoutLimitReached)}
                 >
-                  <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
+                  <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
                     {generatingWorkout
                       ? <ActivityIndicator size="small" color={colors.onAction} />
                       : <Icon name="barbell" size={20} color={colors.onAction} />}
@@ -715,7 +715,7 @@ export default function ReelDetailScreen() {
 
             {showTasksAction && !actionLocked && (
               <Pressable style={styles.actionBtnWrap} onPress={handleGenerateTasks} disabled={generatingTasks}>
-                <LinearGradient colors={gradients.cool} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
+                <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.actionBtn}>
                   {generatingTasks
                     ? <ActivityIndicator size="small" color={colors.onAction} />
                     : <Icon name={isCooking ? 'restaurant' : 'list'} size={20} color={colors.onAction} />}
@@ -814,7 +814,7 @@ export default function ReelDetailScreen() {
                 style={styles.modalBtnWrap}
                 onPress={() => { setWorkoutModal(false); handleGenerateWorkout(); }}
               >
-                <LinearGradient colors={gradients.vibrant} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.modalBtn}>
+                <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.modalBtn}>
                   <Text style={styles.modalBtnText}>Got it — build it</Text>
                 </LinearGradient>
               </Pressable>

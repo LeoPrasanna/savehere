@@ -16,7 +16,6 @@ interface Props {
 }
 
 export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tasks' }: Props) {
-  const [toggling, setToggling] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
@@ -43,14 +42,26 @@ export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tas
       ]);
     });
 
+  const notify = (msg: string) => {
+    if (Platform.OS === 'web') window.alert(msg);
+    else Alert.alert('', msg);
+  };
+
+  /**
+   * Optimistic. The checkbox used to show a spinner for the whole round-trip,
+   * which is what made a tap feel slow — the work was never heavy, the UI just
+   * waited on the network. Paint first, reconcile with the server's row after,
+   * roll back to the pre-tap task if the call fails.
+   */
   const handleToggle = async (task: Task) => {
     if (editingId === task.id) return;
-    setToggling(task.id);
+    const next = !task.completed;
+    onUpdate({ ...task, completed: next });
     try {
-      const updated = await api.toggleTask(task.id, !task.completed);
-      onUpdate(updated);
-    } finally {
-      setToggling(null);
+      onUpdate(await api.toggleTask(task.id, next));
+    } catch (e: any) {
+      onUpdate(task);
+      notify(e?.message || `Could not update that ${noun}. Please try again.`);
     }
   };
 
@@ -115,13 +126,11 @@ export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tas
               scaleTo={0.9}
               disabled={editing}
             >
-              {toggling === task.id
-                ? <ActivityIndicator size="small" color={task.completed ? colors.onAction : colors.textPrimary} />
-                : task.completed
-                  ? <Icon name="checkmark" size={15} color={colors.onAction} />
-                  : isSteps
-                    ? <Text style={styles.stepNum}>{i + 1}</Text>
-                    : null}
+              {task.completed
+                ? <Icon name="checkmark" size={15} color={colors.onAction} />
+                : isSteps
+                  ? <Text style={styles.stepNum}>{i + 1}</Text>
+                  : null}
             </Pressable>
 
             <Icon name={task.emoji} size={18} color={colors.accentLight} />

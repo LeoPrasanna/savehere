@@ -123,6 +123,52 @@ alert-circle icon in `reel/[id].tsx`), not a `window.alert()`. Locked by
 - **Key win (2026-06-23): the ungated link-preview surface needs a crawler UA.** Instagram/Facebook serve the public `og:` caption (the text that unfurls in iMessage/Slack) **only to recognized preview bots** — a normal browser UA from a server IP gets the login wall. Fetching `_extract_from_page` with UA `facebookexternalhit/1.1` returns the **full caption** (e.g. a whole recipe) even from a datacenter IP, no auth/proxy. So IG/FB **captions are readable** for free; only the video/transcript stays gated. yt-dlp still fails on IG (that's the player API) — the caption comes from the page meta. Implemented in `extractor._PREVIEW_HEADERS`. (Two parser bugs fixed alongside: `_og` catastrophic backtracking on 600 KB minified HTML → scan per-`<meta>`; and missing `DOTALL` dropped multi-line captions.)
 - **Async save (2026-06-23):** `/save` now persists the card with `summary_status='pending'` and returns in ~2 s; a FastAPI BackgroundTask runs Claude (and the slow audio fallback) off the request path, flipping to `ready`/`skipped`/`failed`. Detail screen polls; `/api/reels/{id}/summarize` retries. `EXTRACT_TIMEOUT` cut 50→20 s. **Run uvicorn WITHOUT `--reload`** — the reloader's child process dodges `pkill -f uvicorn`, leaving a zombie holding port 8000 (the recurring "Can't reach the server").
 
+### Visual identity — "Nocturnal Dimension" (2026-08-09, branch `design/nocturnal-dimension`)
+
+Replaces the monochrome ink system, which itself had already replaced (undocumented)
+the "Ember on Ink" identity still written up in [`HANDOFF.md`](HANDOFF.md) §4.5 —
+that section is now marked **RETIRED**. Full spec: [`DESIGN_PROPOSAL.md`](DESIGN_PROPOSAL.md).
+
+- **Where it comes from:** Refero token sets for Suno (surfaces, ink, pink haze),
+  Vapi (accent orange), Dimension (layout rhythm, capsule nav, 24px card radius),
+  Hyper Foundation (accent-glow elevation). Real extracted tokens, not invented.
+- **Canvas moved off absolute black:** `background` `#000000` → `#101012`. Every
+  contrast ratio in `theme.ts` was re-measured against the new base;
+  `textTertiary` had to move `#787878` → `#7E7E7E` because the old value drops to
+  **4.33:1** on `#101012` and would have shipped below AA.
+- **One accent hue again:** `accent` `#F8F8F8` → `#E96B34` (Vapi Orange, 6.0:1).
+  Chosen over Suno's pink specifically because it sits ~4 hue-degrees from the
+  retired ember `#FF6B3D`, so the change reads as continuity. `accentLight`
+  `#FD429C` is a **gradient stop only** — never a fill.
+- **`danger` now carries hue** (`#E05561` dark / `#B3323E` light). ⚠️ **Derived,
+  not sourced** — neither Suno nor Vapi ships a red; it is Suno Vivid Pink
+  rotated 337°→355° and desaturated 98%→69%. `success`/`warning` stay monochrome
+  and read by wording, so orange is still the only *decorative* colour on screen.
+- **`gradients.haze` + `hazeLocations`** are the only real ramp besides `scrim`.
+  Render once at the screen root, `pointerEvents="none"`, never per-card.
+- **No blur, deliberately.** The whole point of this hybrid is that it avoids
+  `expo-blur`/`backdrop-filter`, so Android and web render identically to iOS at
+  the same cost. Do not reintroduce glassmorphism to "finish the look".
+- **No Fraunces.** Owner's call — avoids font-loading latency on SDK 56.
+  `typeface.serif` still resolves to `Inter_600SemiBold`; headers and titles use
+  Inter. Any doc claiming Fraunces is in the app is wrong.
+- **Haze backdrop visibility constraints (2026-08-09):** the `gradients.haze`
+  background wash is visually blocked by full-bleed library-grid thumbnails.
+  Keep haze as an atmospheric layer for **sparse screens only** (login wall,
+  workout rest phase). Do **not** try to solve grid coverage with blur — that
+  reintroduces the `expo-blur`/`backdrop-filter` cost this direction exists to
+  avoid, on web previews and Android alike.
+- **Monochrome light-scheme integrity:** the Nocturnal Dimension colour shifts
+  apply **strictly to the dark scheme**. Light stays flat monochrome so the
+  contrast gates hold, with one exception: the semantic `danger` state
+  (`#B3323E`, 6.1:1 on white).
+- **Not yet built:** capsule tab bar, centre FAB, home haze/pill row. `theme.ts`
+  is the only source file changed so far — see the TODO section
+  "Design Experiment: Refactor Home & Nav to Nocturnal Dimension".
+- **Runtime Scheme Re-Theming & Light Mode Guard (2026-08-09):** The `setScheme` function in `theme.ts` erases key types via `as Record<string, readonly string[]>` casting, which masks stale references and skips runtime re-theming for `haze`. The light scheme must remain strictly flat monochrome to prevent dark/chromatic washes from rendering over a white UI and violating WCAG AA boundaries.
+- **Haze Backdrop Visibility Constraints:** The `gradients.haze` background wash is visually blocked by full-bleed library grid thumbnails. Keep haze as an atmospheric layer for sparse screens only (Login wall, Workout rest phases). Do not use blur overlays due to performance overhead on web previews.
+- **Absolute Navigation Clearance & Hiding Rules (2026-08-09):** Primary screens with pinned bottom CTAs (such as `/save`, `/pro`, and `/workout/`) must hide the absolute capsule navigation bar by registering their paths in TabBar.tsx's `HIDE_ON` array. This keeps the primary view fully interactive without introducing complex padding calculations. All other scrollable screens must clear the floating bar using the unified `TAB_BAR_CLEARANCE = 72` constant.
+
 ## 5. Known gotchas / constraints
 - **Windows dev**; line endings show LF→CRLF warnings (harmless).
 - **YouTube/IG bot-block on datacenter IPs** — extraction fails from the Codespace **and will fail on Railway/Render/Fly** (all datacenter IPs). Needs a residential proxy / managed API in prod — see §4 "Extraction & bot-detection". Biggest prod reliability risk for the core feature.
@@ -142,3 +188,5 @@ alert-circle icon in `reel/[id].tsx`), not a `window.alert()`. Locked by
 6. Pricing/IAP config in App Store Connect (intro offer, offer code, regional prices) — at launch.
 
 See [`TODO.md`](../TODO.md) for the full, categorized checklist.
+## 7. Theme & Layout Constraints
+1.  **Absolute Capsule Navigation Offsets (2026-08-09):** The absolute-positioned capsule bottom navigation bar floats over app screens [4]. All primary CTAs (e.g., "Start Workout", "Create Itinerary", "Study Plan") and list footers must explicitly reserve a bottom offset container padding (e.g., `paddingBottom: insets.bottom + 80`) to remain visible and fully interactive. Never allow content to render underneath the navigation layer.

@@ -18,7 +18,8 @@ import { hasEnteredLibrary, markEnteredLibrary, clearEnteredLibrary } from '../s
 import { onUi, emitUi } from '../services/uiBus';
 import { ASK_MIN_REELS } from '../constants/limits';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
-import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, GRID_GAP, themed } from '../constants/theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, GRID_GAP, themed, gradients, hazeLocations } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
 const PAGE = 24;
@@ -216,6 +217,14 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Nocturnal Dimension haze — the screen-root atmosphere. Rendered ONCE
+          here, never per-card, and non-interactive so it cannot eat a tap.
+          No blur anywhere: this is a single GPU draw on web/Android too. */}
+      <LinearGradient
+        colors={gradients.haze}
+        locations={hazeLocations}
+        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
+      />
       {/* ── Header ───────────────────────────────────────────────────────────
           The wordmark, a count, and three square hairline buttons. No logo
           mark, no gradient, no shadow — the header is metadata about the sheet

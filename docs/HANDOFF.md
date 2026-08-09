@@ -183,7 +183,25 @@ Each prompt is self-contained. Do them one at a time, verify (§3), update TODO.
   resolves the effective limit. New save-like endpoints must check
   `ent.save_limit` the way `/save` does (after dedup, before insert).
 
-## 4.5 UI system (branch `revamp/ui-refresh`) — rules for any UI work
+## 4.5 UI system — ⛔ RETIRED (2026-08-09), kept for history only
+
+> **DO NOT IMPLEMENT FROM THIS SECTION.** The "Ember on Ink" identity described
+> below has not been the live system for some time — it was replaced by a
+> monochrome ink system (undocumented at the time), and as of 2026-08-09 by
+> **"Nocturnal Dimension"**. The concrete errors: `#FF6B3D` is not the accent
+> (`theme.ts` ships `#E96B34`), and **Fraunces is not in the app at all**
+> (`typeface.serif` resolves to `Inter_600SemiBold`).
+>
+> Current spec: [`CONTEXT.md`](CONTEXT.md) §4 "Visual identity — Nocturnal
+> Dimension" and [`DESIGN_PROPOSAL.md`](DESIGN_PROPOSAL.md).
+>
+> The rules below that **still hold** and were carried forward: tokens-only (no
+> hardcoded hex in screens), one accent, content-first (`thumbUrl()`, never
+> cover content in chrome), icons only via `components/Icon.tsx` with the map
+> extended, subtle motion (250–350ms, no loops/shimmer), and the memoized
+> `ReelCard` comparator caveat.
+
+### Historical — the retired "Ember on Ink" brief
 
 The app's identity is **"Ember on Ink"** — warm ink-black surfaces, ONE
 ember-orange accent (`#FF6B3D`), cream text, Fraunces serif for brand moments.

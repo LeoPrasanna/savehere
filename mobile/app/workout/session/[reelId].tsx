@@ -10,7 +10,7 @@ import { api, WorkoutExercise, WorkoutPlan } from '../../../services/api';
 import { Pressable } from '../../../components/Pressable';
 import { FloatingHomeButton, goHome } from '../../../components/HomeButton';
 import { Disclaimer } from '../../../components/Disclaimer';
-import { colors, spacing, font, radius, gradients, shadow, themed } from '../../../constants/theme';
+import { colors, spacing, font, radius, gradients, hazeLocations, shadow, themed } from '../../../constants/theme';
 
 type Phase = 'loading' | 'ready' | 'exercise' | 'rest' | 'complete';
 
@@ -142,7 +142,7 @@ export default function WorkoutSessionScreen() {
       <View style={[styles.screen, { paddingTop: insets.top + spacing.lg }]}>
         <FloatingHomeButton top={insets.top + spacing.xs} />
         <View style={styles.readyHeader}>
-          <LinearGradient colors={gradients.vibrant} style={styles.readyIcon}>
+          <LinearGradient colors={gradients.primary} style={styles.readyIcon}>
             <Icon name="barbell" size={30} color={colors.onAction} />
           </LinearGradient>
           <Text style={styles.readyTitle}>{plan.workout_name}</Text>
@@ -211,10 +211,14 @@ export default function WorkoutSessionScreen() {
   if (phase === 'rest') {
     const motivation = MOTIVATION[Math.floor(Math.random() * MOTIVATION.length)];
     return (
-      <LinearGradient colors={['#15131C', '#1A2740', '#15131C']} style={[styles.center, { paddingTop: insets.top }]}>
+      <LinearGradient
+        colors={gradients.haze}
+        locations={hazeLocations}
+        style={[styles.center, { paddingTop: insets.top }]}
+      >
         <View style={styles.topProgress}>
           <View style={[styles.topProgressFillStatic, { width: `${progressPct}%` as any }]}>
-            <LinearGradient colors={gradients.cool} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1 }} />
+            <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1 }} />
           </View>
         </View>
 
@@ -229,7 +233,7 @@ export default function WorkoutSessionScreen() {
             <Animated.View style={[styles.restBarFillWrap, {
               width: restProgress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }),
             }]}>
-              <LinearGradient colors={gradients.cool} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, borderRadius: radius.full }} />
+              <LinearGradient colors={gradients.primary} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={{ flex: 1, borderRadius: radius.full }} />
             </Animated.View>
           </View>
 

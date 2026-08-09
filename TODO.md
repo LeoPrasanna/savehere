@@ -757,3 +757,74 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
 - [x] UI/UX redesign — gradient theme, Ionicons, entrance/press animations, glowing FAB
 - [x] Animated bot progress on the save screen (honest step labels retained)
 - [x] Fixed card delete — sibling overlay so the X deletes instead of opening the reel
+
+---
+
+## Design Experiment: Refactor Home & Nav to Nocturnal Dimension
+
+> ⚠️ **Temporary section — experiment, not a commitment.** Delete this section
+> and `docs/DESIGN_PROPOSAL.md` together if the direction is rejected.
+> Started 2026-08-09. Owner suspended the UI rules in `docs/HANDOFF.md` §4.5
+> for this experiment.
+
+Full spec: [`docs/DESIGN_PROPOSAL.md`](docs/DESIGN_PROPOSAL.md). No application
+code has been modified yet.
+
+- [x] **Refero research + token extraction** — Suno, Vapi, Dimension, Hyper Foundation. Real token sets, nothing invented.
+- [x] **Draft the visual spec** — colours, type, spacing/radius, home hierarchy, capsule nav parameters.
+- [x] **DECIDED: `danger` becomes a real red** (owner, 2026-08-09). `#E05561` dark / `#B3323E` light. ⚠️ **Derived, not sourced** — neither Suno nor Vapi ships a red; it is Suno Vivid Pink `#FD429C` rotated 337°→355°, desaturated 98%→69%. `success`/`warning` stay monochrome.
+- [x] **DECIDED: `docs/HANDOFF.md` §4.5 marked ⛔ RETIRED**, with the rules that still hold (tokens-only, content-first, Icon.tsx map, subtle motion, ReelCard comparator) listed explicitly so they don't get lost with the dead brief.
+- [x] ~~**Re-introduce Fraunces**~~ — **DROPPED** (owner, 2026-08-09): avoids font-loading latency on SDK 56. Headers and titles use `Inter_600SemiBold`; `typeface.serif` is unchanged.
+- [x] ~~**Generate the grain asset**~~ — **DROPPED** (owner, 2026-08-09): the haze gradient carries it alone.
+- [x] **Applied palette + radius changes** in `mobile/constants/theme.ts` — key names unchanged, so every screen compiles untouched. `radius.xl` 20→24, new `gradients.haze` + `hazeLocations`. `npm run typecheck` and `npx expo export --platform web` both pass.
+- [x] **Audited all 24 `<LinearGradient>` call sites** (sub-agent, isolated context). 16 flat `gradients.*`, 1 `scrim`, 5 theme-derived arrays, 2 hardcoded.
+- [x] **DECIDED: Option B — primary actions keep the cream inversion** (owner, 2026-08-09). `colors.accent` orange is reserved for active tabs, filter chips, and the centre FAB. Rationale: 15 orange buttons is how one accent becomes wallpaper.
+- [x] **Collapsed the retired rainbow tokens** — `gradients.vibrant`/`sunset`/`cool` deleted (three names for identical flat ink; sunset=itinerary, cool=recipe, vibrant=workout — meaning colour no longer carries). 8 call sites retargeted to `gradients.primary`.
+- [x] **Deleted 4 dead gradients** — `surface`, `hologram`, `neon`, `darkSurface`. Zero call sites, verified by grep before removal.
+- [x] **Fixed both hardcoded ramps** — `reel/[id].tsx:366` `['transparent','rgba(0,0,0,0.88)']` → `gradients.scrim`; `workout/session/[reelId].tsx:214` `['#15131C','#1A2740','#15131C']` → `gradients.haze` (was dark-only and would not follow `setScheme`).
+- [x] **Fixed the `platformMeta` drift** — was hardcoding `#F8F8F8`/`#0B0B0B`; now reads `PALETTES.dark.textPrimary`/`.card` so it can't silently desync from the palette again. This was a regression introduced by the palette swap, not pre-existing.
+- [x] **Landed all 3 `gradients.haze` adoptions** — workout rest backdrop, LoginScreen (layered above the wash, below the bottom ramp so legibility is untouched), and the library-grid screen root (`app/index.tsx`, `pointerEvents="none"`).
+- [x] **Verified in the browser** — `npm run typecheck` clean; dark scheme renders on `#101012`; haze confirmed painting at 989×963 with all 4 stops at the right locations; every `ReelCard` scrim now resolves through the token.
+- [ ] ⚠️ **The haze is effectively invisible on the library grid.** It renders correctly but sits *behind* a full-bleed thumbnail mosaic, so almost none of it is ever on screen. It reads only on the workout rest screen and the login wall, which are mostly empty. Either accept it as atmosphere for sparse screens only, raise the stop opacities (currently 10%/14%), or move it above the grid at very low alpha. Owner's call — do not "fix" by adding blur.
+- [ ] **`Landing.tsx` has no haze.** `app/index.tsx:214` early-returns `<Landing/>` before the patched root, so the editorial hero screen is untouched. `DESIGN_PROPOSAL.md` §4 specs the library grid, not the hero — decide whether the hero should get it too.
+- [ ] **Capsule tab bar + centre FAB still unbuilt** — `components/TabBar.tsx` currently renders a pill bar off `colors.tabBarTop`/`tabBarBottom`. The FAB, active-tab orange dot, and filter-chip accent are where Option B says the orange actually earns its place.
+- [ ] **Build the capsule tab bar + centre FAB** in `app/(tabs)/_layout.tsx`.
+- [ ] **Home screen**: haze gradient root, Fraunces greeting, filter pill row.
+- [ ] **Verify on web + Android** — the whole point of this hybrid is no `expo-blur`. Confirm the gradient costs nothing on scroll before calling it done.
+- [ ] **Contrast audit** — `#F7F4EF` on `#101012` and `#101012` on `#E96B34` both need re-measuring; the current palette's ratios are documented in `theme.ts` comments and must not regress.
+
+## Active Refactoring & Optimization Backlog
+- [ ] **Optimize To-Do List Interaction Latency:**
+  * Symptom: Clicking a To-Do item triggers noticeable rendering delays before updating the state.
+  * Task: Audit the FlatList item rendering or state-dispatch loops. Introduce memoization via `React.memo` or verify if parent-level re-renders are bottlenecking the click lifecycle.
+- [ ] **Light Scheme Haze Sanity Check:**
+  * Symptom: Gradient elements evaluated during the revamp render poorly when `schemePref` is toggled to light.
+  * Task: Ensure the root haze wrapper gracefully falls back to a solid light surface background when the light theme is active.
+- [ ] **Fix setScheme Runtime Key Mapping:**
+  * Resolve type erasure at `theme.ts:302` by dropping the `Record` cast. 
+  * Add `haze` to the re-theme loop (resolving to flat light surface in light mode, chromatic gradient in dark mode). 
+  * Delete the five dead keys (`vibrant`, `sunset`, `cool`, `hologram`, `neon`) resurrected by the loop.
+- [ ] **Resolve Task Checkbox Tap Latency (`TaskList.tsx`):**
+  * Eliminate the network round-trip blocking spinner in `TaskList.tsx:46`. 
+  * Implement an optimistic update in `handleToggle` (render immediately, await in the background, roll back state on API failure).
+- [ ] **Optimize ScrollView Render Latency (`todos.tsx`):**
+  * Address slow render performance caused by nested `.map()` rendering on a plain `ScrollView`.
+  * Step 1: Wrap `TodoRow` in `React.memo` and `useCallback` the row handlers.
+  * Step 2: Use `useMemo` to cache `grouped` and `overdueCount` date calculations.
+  * Step 3: Lazy-evaluate modals by conditional rendering `{editorOpen && <TodoEditor ... />}`.
+- [ ] **Fix Floating Navigation Layout Collisions:**
+  * Symptom: "Start Workout" button on the Workout screen and equivalent action CTAs (Itinerary, Study Plan) render underneath the absolute capsule navigation bar, blocking user access.
+  * Task 1: Audit target files (`workout/[reelId].tsx`, etc.) to verify bottom padding parameters.
+  * Task 2: Inject `useSafeAreaInsets` offsets to ensure container list footers dynamically scale past the floating bar height.
+- [ ] **Fix Workout Plan Bottom Clearance:**
+  * Add `/workout/` prefix-match to `HIDE_ON` in `TabBar.tsx` to hide the capsule navigation bar on the plan screen.
+- [ ] **Clean Up Legacy Group 1 Tokens:**
+  * Patch `theme.ts`'s `setScheme` loop to run on type-safe keys, adding `haze` and removing deleted legacy tokens.
+- [ ] **Optimize To-Do List Click Latency:**
+  * Symptom: Tapping a checkbox or navigating to the to-do list causes a noticeable rendering delay.
+  * Task: Audit state dispatches, FlatList rendering loops, and look for missing memoization or redundant calculations.
+- [ ] **Light Mode Visual Sanity Check:**
+  * Symptom: The new gradient elements (like the background haze) look visually unappealing or degrade contrast when `schemePref` is toggled to light.
+  * Task: Ensure the root haze wrapper gracefully collapses to a solid white canvas in light mode to maintain contrast integrity.
+
+
