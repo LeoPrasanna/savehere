@@ -649,8 +649,18 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
 - [ ] **Ask-my-Library unlocks at 5 saves (decided 2026-07-20 — saves, not logins)** — gate Ask until the library holds ≥5 saves: an ask over a near-empty library wastes an AI action and gives a weak first answer. Login-count was rejected (mobile sessions persist for weeks — "logins" are rare, arbitrary events). Client shows a locked state with progress ("Save 3 more to unlock Ask"); server already exposes the total (`/api/reels` `total`). UX gate, not a security gate — client-side is acceptable (bypassing it only wastes the user's own quota).
 - [~] **"Trip Itinerary" for travel reels (Pro-only — decided 2026-07-20)** — **backend DONE (2026-07-20):** `POST/GET /api/reels/{id}/itinerary` (`routes/workout.py`) + `extract_itinerary` (`services/workout_extractor.py`, Haiku) + `itinerary` JSON column & `itinerary_count` cap (3, like workouts) on `ReelDB`. Gate order: ownership → sensitive → `category=="travel"` (422 otherwise) → Pro gate (403) → cap (429) → content check → `charge_ai_action` → Claude. Grounding: facts (places/prices/timings) extracted-only; day GROUPING may be inferred but is flagged `structure_estimated` (the itinerary analog of workout's `is_estimated`); model reply defensively normalized (size caps, junk dropped) before storing; a failed regeneration never destroys an existing plan. Locked by `tests/test_itinerary.py` (9 cases). **Remaining = mobile:** "Trip Itinerary" button on travel detail screens rendering `days[]`/`tips[]`, with the Pro-locked upsell state for free tier.
 - [x] **Pagination / infinite scroll** — `/api/reels` takes `limit`/`offset` + returns full `total`; library grid loads 24/page via FlatList `onEndReached`. Counts (header, Landing, ProfilePanel) use `total`.
-- [x] **Server-side search** — `GET /api/reels/search?q=` searches title+tags+summary+notes across the full library. Library screen debounces 400ms and swaps to server results; infinite scroll disabled during search.
-- [x] **Smart search (no AI cost)** — search now tokenizes the query and drops filler ("any videos on Fitness" → "fitness"), matches **category** (the old LIKE search never did — the root cause of "Fitness finds nothing but chestwork works"), expands high-precision synonyms (gym/workout ↔ fitness, recipe ↔ cooking, …), keeps prefix type-ahead, and ranks by relevance (`backend/app/services/search.py` + `tests/test_smart_search.py`). Deliberately NOT Claude-backed: search fires per keystroke and would drain the daily AI quota. Embeddings remain the semantic upgrade path.
+- [n/a] ~~**Server-side search**~~ — shipped, then **DELETED 2026-08-10** (owner). The
+  library header search field was removed in PR #39, leaving the endpoint with no
+  reachable caller; rather than carry a CI-tested feature no user could hit, the whole
+  vertical came out. See the removal entry in the Active Refactoring backlog.
+- [n/a] ~~**Smart search (no AI cost)**~~ — **DELETED 2026-08-10** with the rest of the search
+  vertical. Kept here for the reasoning, which outlives the code: it tokenized the query and
+  dropped filler ("any videos on Fitness" → "fitness"), matched **category** (the old LIKE
+  search never did — the root cause of "Fitness finds nothing but chestwork works"), expanded
+  synonyms (gym/workout ↔ fitness, recipe ↔ cooking) and ranked by relevance. It was
+  deliberately **not** Claude-backed because search fires per keystroke and would have drained
+  the daily AI quota — that constraint still applies to any replacement. Embeddings remain the
+  semantic upgrade path if search ever returns.
 - [x] **Tap-to-watch + link-open (web false-alert fixed)** — the detail-screen hero thumbnail (with a "Watch" chip) and the source-URL row open the original post via `mobile/services/openLink.ts`. **Root cause found + fixed (verified with a real click in-browser):** react-native-web's `Pressable` dispatches `onPress` asynchronously, so the user-activation gesture is gone by the time `window.open()` runs — it returns `null` for a genuinely-real click, and the old `if (!win) throw` fired a false "couldn't open this link" alert on every working tap (which auto-dismissed when the new tab stole focus). Web now uses an **anchor-element click** (`<a target=_blank rel=noopener>`), which opens reliably and hands back no null to misread; no cross-origin `win.opener=null` (throws in some browsers). Trade-off: web can't detect a genuinely-blocked open, but a false popup on every success was the real bug, and true failures (deleted/private post) open a tab showing the platform's own error — undetectable client-side anyway. **Native keeps the honest failure popup** (`canOpenURL` is a real signal there).
 - [x] **Workout expectation modal** — before the FIRST "Build Workout", a modal sets expectations: generic template inspired by the reel, not personalized coaching; beginners scale down at their own pace; every set/rep/rest editable afterwards. Includes the fitness disclaimer chip.
 - [x] **Modal ghost-click fix (web)** — the workout/category modals used a close-on-press overlay with a plain View card: on web a double-click's second click (or any click on the card body) bubbled to the overlay and closed the modal instantly. Fixed in `reel/[id].tsx`: card presses `stopPropagation`, overlay presses within 350 ms of opening are ignored; deliberate outside-clicks still close (verified live with scripted clicks).
@@ -694,7 +704,9 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
 
 ## Backend — Polish
 
-- [x] **Pagination on list endpoint** — `GET /api/reels` now accepts `?limit=N&offset=N`; server also has `GET /api/reels/search?q=` for full-library search.
+- [x] **Pagination on list endpoint** — `GET /api/reels` accepts `?limit=N&offset=N`, plus
+  `?category=`, `?tag=` and `?platform=` filters. *(The sibling `GET /api/reels/search?q=`
+  was deleted 2026-08-10 — see "Server-side search".)*
 - [x] **Structured logging** — `logging` configured in `main.py`; extraction/save/cache paths log with levels. *(TODO: add per-request IDs.)*
 - [x] **Error monitoring** — Sentry (`sentry-sdk[fastapi]`) wired in `main.py`, guarded by `SENTRY_DSN` (no DSN = no-op, so local/CI untouched). 10% trace sampling, `send_default_pii=False`. ⚠️ Owner action: create a Sentry project, set `SENTRY_DSN` in the Render dashboard to arm it.
 - [x] **Background summary (instant save)** — `POST /save` returns as soon as metadata is extracted; the Claude summary runs in a FastAPI `BackgroundTask` (`summary_status`: pending→ready/skipped/failed). **Durability:** orphaned `pending` summaries (in-process task lost on restart/cold-start) are re-enqueued on startup (`recover_pending_summaries`, capped at 25); the detail screen polls and offers a manual retry if it stalls past ~60s.
@@ -736,7 +748,8 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
 - [~] **Supabase Row Level Security** — `backend/scripts/enable_rls.sql` is ready (deny-all: enables + FORCEs RLS on every app table, no client policies, since the mobile app only uses Supabase for auth and all data flows through the FastAPI service-role connection). ⚠️ Owner action: run it against the Supabase project once the Postgres migration above lands, and verify with the anon-key curl check in the script's comments.
 - [~] **CI/CD pipeline** — GitHub Actions: backend pytest runs on push/PR (`.github/workflows/ci.yml`); **mobile `npm run typecheck` now runs on push/PR touching `mobile/`** (`.github/workflows/mobile-ci.yml`, `npm ci` + `tsc --noEmit`) — closes the gap where the `launch-prep/ui-revamp` branch shipped an `app/index.tsx` that didn't even parse. Each workflow is path-scoped so a mobile-only change doesn't run the Python suite and vice versa. TODO: EAS build on merge to main.
 - [x] **Three standing test accounts (trial / free / pro)** — **DONE (2026-07-21):** owner created the accounts, `scripts/dev_seed_tiers.py` stamps all three in one command (`python scripts/dev_seed_tiers.py`). It resolves email→Supabase id, writes the pro JWT claim for `protieruser@gmail.com`, and pre-seeds the local `profiles` clock for `freetieruser` (expired→free) and `trailtieruser` (fresh→trial; note the "trail" spelling as created), clearing each day's AI counter so a flipped tier isn't instantly over cap. Verified all three resolve to the intended tier (30/3/100 AI). SQLite-guarded; needs `SUPABASE_*` in `.env`. Deliberately **not** an in-app switcher: `scripts/set_tier.py`'s own docstring rejects that ("a forgotten temporary admin endpoint is a standing self-upgrade hole"). ⚠️ pro needs a sign-out/in (JWT caches tier ≤1h); trial/free apply on the next request. Also available: `scripts/dev_tier.py status|expire|trial|resetquota` for one-offs.
-- [~] **Unit tests** — `backend/tests/` (pytest, **190 tests across 19 files** as of 2026-07-20; newest: `test_feature_gating.py`, `test_itinerary.py`, `test_billing.py`, `test_action_log.py`): `normalize_url`, `detect_platform`, `_parse_vtt`, `_og` (+ backtracking-hang regression guard), `_extract_jsonld`, `_weak_title`, `_to_response` coercion, the per-IP rate limiter, the per-user daily AI quota (atomic charge, zero-limit kill-switch, tier resolution from `app_metadata`, + wired-into-`/api/ask` integration, no real Claude call), task source disclaimers, DB-backed list/pagination/search + per-user-isolation endpoint tests (in-memory SQLite + TestClient), JWT auth verification, and mock-based `extract_tasks` cooking-fallback tests, smart-search ranking (`test_smart_search.py`), and sensitive-content containment (`test_sensitive.py`). Fixed a daily flake: `test_quota.py` asserted on local `date.today()` while the quota keys rows on the UTC day — failed every run between 00:00 and 05:30 IST; now uses `_utc_today()`. Run with `python -m pytest tests/ -q` from `backend/`. **CI:** `.github/workflows/ci.yml` runs the suite on every push/PR touching `backend/`. TODO: mock-based test for `summarizer.summarize`.
+- [~] **Unit tests** — `backend/tests/` (pytest, **228 tests as of 2026-08-10**, after the search
+  vertical's 12 cases were removed with it and `test_search_api.py` became `test_reels_api.py`; newest: `test_feature_gating.py`, `test_itinerary.py`, `test_billing.py`, `test_action_log.py`): `normalize_url`, `detect_platform`, `_parse_vtt`, `_og` (+ backtracking-hang regression guard), `_extract_jsonld`, `_weak_title`, `_to_response` coercion, the per-IP rate limiter, the per-user daily AI quota (atomic charge, zero-limit kill-switch, tier resolution from `app_metadata`, + wired-into-`/api/ask` integration, no real Claude call), task source disclaimers, DB-backed list/pagination/search + per-user-isolation endpoint tests (in-memory SQLite + TestClient), JWT auth verification, and mock-based `extract_tasks` cooking-fallback tests, smart-search ranking (`test_smart_search.py`), and sensitive-content containment (`test_sensitive.py`). Fixed a daily flake: `test_quota.py` asserted on local `date.today()` while the quota keys rows on the UTC day — failed every run between 00:00 and 05:30 IST; now uses `_utc_today()`. Run with `python -m pytest tests/ -q` from `backend/`. **CI:** `.github/workflows/ci.yml` runs the suite on every push/PR touching `backend/`. TODO: mock-based test for `summarizer.summarize`.
 
 ---
 
@@ -861,14 +874,26 @@ code has been modified yet.
   **Verified:** typecheck clean, `expo export --platform web` clean, library exercised live
   against the real 66-save dev account (grid, category switching, empty-category state and
   its recovery button).
-- [ ] ⚠️ **DECIDE: give search a home, or delete the whole vertical.** With the header field
-  gone there is **no search entry point anywhere in the app**, so `backend/app/services/search.py`
-  (tokenizing, stopwords, synonym groups, category matching, relevance ranking),
-  `GET /api/reels/search` and `tests/test_smart_search.py` are code that runs in CI and can
-  never be reached by a user. `mobile/services/api.ts::searchReels()` was **kept on purpose**
-  as the seam — it now has zero callers and is the one line to wire a new entry point back to.
-  Half-keeping it is the worst of the three options: either search gets a surface (a header
-  icon that expands, or a tab) or that backend vertical comes out. Owner's call.
+- [x] **DECIDED + DONE: the search vertical is deleted (owner, 2026-08-10).** Not disabled,
+  not feature-flagged — removed, because an unreachable feature that still runs in CI is a
+  maintenance bill with no user on the other end. Gone: `backend/app/services/search.py`
+  (157 lines: tokenizing, stopwords, synonym groups, category matching, relevance ranking),
+  `GET /api/reels/search` in `routes/reels.py`, `backend/tests/test_smart_search.py`,
+  `mobile/services/api.ts::searchReels()`, and the 11-case `TestSearch` class.
+  **Kept deliberately:** `tests/test_search_api.py` was renamed to **`test_reels_api.py`** —
+  most of it was never about search (pagination, `?tag=`, `?platform=`, per-user isolation)
+  and a file named for a deleted feature is how the next reader gets misled.
+  ⚠️ **The one isolation case that died with it was replaced, not dropped.**
+  `test_search_does_not_cross_users` proved a query surface can't leak across users; the
+  `?tag=` filter is now the only surface that matches rows in **Python rather than SQL** —
+  precisely where a `user_id` filter can go missing unnoticed — so the replacement asserts
+  isolation there, using the two reels both seeded with the "cooking" tag.
+  Removal notes sit at all three sites (route, api.ts, the library header comment) pointing
+  at git; if search ever comes back at a scale that justifies it, **embeddings, not the
+  lexical ranker** — that was always documented as the pre-scale step.
+  **Verified:** `python -m pytest tests/ -q` → **228 passed**; typecheck and
+  `expo export --platform web` clean. README, `docs/CONTEXT.md` and the older TODO entries
+  no longer advertise a feature the app doesn't have.
 - [x] **Implement Ask Screen Focus Hand-Off (Feature Change 4)** — Home card now renders an animated, high-emphasis `ASK YOUR LIBRARY` (MotiView fade/rise, no loop) instead of the static save count; `ask.tsx` focuses its input via a ref on a 350 ms timer rather than `autoFocus`, because focusing mid-push-transition is the case where iOS shows a caret but never raises the keyboard.
 - [x] **MockReel tiles now render in BOTH schemes (2026-08-10)** — the wall was
   always mounted and always drifting in both; what was missing was the *scenes*.

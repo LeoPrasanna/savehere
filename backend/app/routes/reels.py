@@ -13,7 +13,6 @@ from app.routes.models.reel import (
     ClientMetadataRequest,
 )
 from app.services import extractor, transcriber, summarizer
-from app.services import search as smart_search
 from app.ratelimit import rate_limit
 from app.quota import charge_ai_action
 from app.entitlements import entitlements_for
@@ -319,27 +318,13 @@ def list_reels(
     return ReelListResponse(total=total, items=[_to_response(r) for r in page])
 
 
-@router.get("/search", response_model=ReelListResponse)
-def search_reels(q: str = "", limit: int = 24, offset: int = 0,
-                 user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Smart full-library search: tokenized query, category + synonym matching,
-    relevance-ranked (see services/search.py). Scored in Python over the user's
-    own reels — fine at personal-library scale; embeddings are the scale step."""
-    q = q.strip()
-    if not q:
-        return ReelListResponse(total=0, items=[])
-    limit = max(1, min(limit, 100))
-    offset = max(0, offset)
-    rows = (
-        db.query(ReelDB)
-        .filter(ReelDB.user_id == user.id)
-        .order_by(ReelDB.created_at.desc())
-        .all()
-    )
-    ranked = smart_search.rank(q, rows)
-    total = len(ranked)
-    page = ranked[offset:offset + limit]
-    return ReelListResponse(total=total, items=[_to_response(r) for r in page])
+# ⚠️ `GET /search` lived here until 2026-08-10, backed by services/search.py
+# (tokenizing, stopwords, synonym groups, category matching, relevance ranking).
+# It was deleted with the module: the mobile header search field was removed in
+# PR #39, which left the whole vertical with no reachable caller — code running
+# in CI that no user could ever hit. Recover it from git if search comes back;
+# at that point reconsider embeddings rather than restoring the lexical ranker,
+# which was always documented as the pre-scale step.
 
 
 @router.get("/{reel_id}", response_model=ReelResponse)

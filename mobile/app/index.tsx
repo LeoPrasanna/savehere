@@ -182,12 +182,12 @@ export default function HomeScreen() {
 
       {/* The search field used to sit here. Replaced (owner, 2026-08-09) with a
           rolling list of what the library can actually do for a save.
-          ⚠️ There is now NO search entry point anywhere in the app, so the
-          server's smart search — `backend/app/services/search.py`,
-          `GET /api/reels/search`, `tests/test_smart_search.py` — is unreachable
-          from the client. `api.searchReels()` is kept as the seam to wire a new
-          entry point back to; it has no other caller. Either give search a home
-          or delete that whole vertical. See TODO.md. */}
+          ⚠️ There is NO search anywhere in the app any more, client or server:
+          the owner deleted the vertical on 2026-08-10 rather than carry an
+          unreachable feature (`services/search.py`, `GET /api/reels/search`,
+          `api.searchReels()` and their tests are all gone — recover from git if
+          search returns). Category bubbles are the only way to narrow the grid.
+          If search comes back at scale, embeddings, not the lexical ranker. */}
       <RollingTagline
         compact
         shuffle

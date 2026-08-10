@@ -40,7 +40,7 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 
 ### Find & rediscover
 
-- 🔍 **Smart search** across titles, tags, summaries, and notes — category-aware with synonym expansion ("any videos on Fitness" works), and **zero AI cost** by design since search fires per keystroke
+- 🗂️ **Category filtering** across the library — fifteen categories assigned by the summarizer, filterable from the grid. *(A category-aware smart search shipped and was removed in Aug 2026 once the UI entry point went; narrowing is by category today.)*
 - 🧭 **Rediscover** — resurfaces older saves so they don't get forgotten
 - 💬 **Ask your library** — natural-language questions answered from your own saves, with sources, **streamed token-by-token** (first words in ~1.4 s instead of a 3 s wall of silence)
 
@@ -200,7 +200,6 @@ All `/api/*` routes require a Supabase `Bearer` token and are scoped to the call
 | --- | --- | --- |
 | `POST` | `/api/reels/save` | Save a URL — returns instantly; extraction + summary run in the background |
 | `GET` | `/api/reels` | List saved reels (category filter, `limit`/`offset`, returns `total`) |
-| `GET` | `/api/reels/search?q=` | Smart search — category-aware, synonyms, ranked (no AI cost) |
 | `GET` | `/api/reels/{id}` | Get a single reel |
 | `POST` | `/api/reels/{id}/summarize` | Run/retry the first summary |
 | `POST` | `/api/reels/{id}/resummarize` | Re-run the AI summary (notes are folded in) |
@@ -248,7 +247,7 @@ Every AI feature spends Claude tokens, so spend is bounded in four independent l
 3. **Per-reel caps** — recipes/tasks generate once (then you edit by hand), workouts ×3, itineraries ×3.
 4. **Per-IP burst guard** — an anti-loop layer beneath the quota, proxy-aware (`X-Forwarded-For` is read from the right past `TRUSTED_PROXY_HOPS`, so a client can't forge it).
 
-Plus: **retrieval, not dumping** — ask sends only the most relevant saves to the model; **smart search is deliberately non-AI** (it fires per keystroke); and a **hard monthly cap** is set in the Anthropic console as the last-resort ceiling.
+Plus: **retrieval, not dumping** — ask sends only the most relevant saves to the model; and a **hard monthly cap** is set in the Anthropic console as the last-resort ceiling.
 
 > ⚠️ Two paths are **not** yet capped: the optional Whisper audio fallback and the (future) residential extraction proxy. Both are usage-priced with no per-user ceiling — see [TODO.md](TODO.md) before enabling either.
 
@@ -283,7 +282,7 @@ python scripts/set_tier.py <user-id> pro         # → pro — then sign out and
 
 ## 🗺️ Roadmap
 
-**Built:** auth + per-user scoping, the tier system (trial/free/pro) with server-side feature gating, per-user AI quota, smart search, ask streaming, trip itineraries, sensitive-content containment.
+**Built:** auth + per-user scoping, the tier system (trial/free/pro) with server-side feature gating, per-user AI quota, ask streaming, trip itineraries, sensitive-content containment.
 
 **Next, in dependency order:**
 
