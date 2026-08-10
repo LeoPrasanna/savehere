@@ -1106,3 +1106,40 @@ code has been modified yet.
   dashboard, bottom bar all unmount). Asana's two loading screens in the reference set
   both keep their chrome and swap only the list region — a bigger perceived-speed win than
   the mascot, and it would make the handoff free rather than merely cheap.
+- [x] **Avatar picker load time — measured, root-caused, fixed (2026-08-10)**
+  ⚠️ **My previous answer here was wrong and the owner was right to push back.** The note
+  said `fadeDuration={0}` was "the whole speed fix" and there was "no download to
+  optimise". Measured in the browser instead of assumed:
+  **before — 23 requests done after 18 s wall, median 12.4 s each, for 110 KB total;
+  a single 1 KB avatar fetched alone took 10.9 s while the grid loaded.**
+  That is not bandwidth and not decode. Mounting all 92 cells fires 92 asset requests at
+  once, which saturates the Metro dev server (and on web the browser only opens ~6
+  connections per host, so the rest queue). These ARE network fetches on web — in dev and
+  in an exported build alike.
+  **Fix: stop asking for all of them at once.** `app/profile.tsx` mounts images in waves
+  of 24 every 250 ms; cells past the frontier still render their frame so nothing
+  reflows, and the currently-selected avatar always mounts wherever it sits so your own
+  face is never an empty box.
+  **After, measured the same way: 35 avatars painted at 1 s** (vs. essentially nothing for
+  12+ s), 41 at 3 s, 48 at 6 s, 60 at 10 s. `requests === painted` at every checkpoint, so
+  nothing is stalling. The full set now takes marginally longer end-to-end; what the user
+  can see arrives ~12× sooner, which is what "loads faster" means here.
+  ponytail: still a plain grid, not a virtualized list — a nested vertical FlatList inside
+  the page's vertical ScrollView breaks virtualization and warns, so it would have been
+  ceremony for no gain. If the set passes ~200, restructure so the grid owns its own
+  scroller, then FlatList + numColumns is right.
+- [x] **Thumbs-up moved from the loader to the daily goal (owner, 2026-08-10)**
+  The two-handed thumbs-up now fires in `components/TodoGoalBar.tsx` when the user
+  **crosses** their daily goal, not when a fetch returns. Reasoning, which the research
+  supports: no task app in the reference set (Todoist Zero, Apple Books' Daily Goal, Opal,
+  Drops) celebrates a network response — every celebration is attached to something the
+  person did. And this screen already owns a real reward gesture in the task tick, so
+  spending a bigger version of it on a page load taught the user the gesture meant nothing.
+  ⚠️ **It fires on the CROSSING, not on `hit` being true.** `wasHit` starts `undefined`, so
+  re-opening the screen with the goal already met is correctly not an achievement. Holds
+  1.8 s beside the count, springs in with the same `damping:11 / stiffness:220` as the tick,
+  right hand mirrored with `scaleX:-1`, and degrades to opacity-only under reduce-motion.
+  The `goal <= 0` early return moved BELOW the hooks — above them it would change hook
+  order the moment the goal was switched off in settings.
+  `MascotLoader` lost its `done` phase entirely and is now loading-only: bob, caption, and
+  the cold-start line. **Do not reintroduce a completion beat there.**
