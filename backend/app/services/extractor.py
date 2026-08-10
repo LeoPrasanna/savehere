@@ -4,10 +4,15 @@ import re
 from app.config import settings
 import os
 import json
+import random
+import shutil
 import tempfile
+import threading
+import time
 import logging
 from html import unescape
 from typing import Optional
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +27,9 @@ _BROWSER_HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/125.0.0.0 Safari/537.36"
     ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate",
 }
 
 # Link-preview crawler UA. Instagram/Facebook only serve the public og: caption
@@ -31,8 +38,119 @@ _BROWSER_HEADERS = {
 # surface": it works without auth and carries the full caption text.
 _PREVIEW_HEADERS = {
     "User-Agent": "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "gzip, deflate",
 }
+
+# Complete, self-consistent header sets, tried in order. Rotating only the UA
+# string while every other header stays identical is a WEAKER signal than not
+# rotating at all: real clients send a coherent set, and a preview-crawler UA
+# with no Accept header is an obvious scraper. Each entry below is a real client
+# that Instagram/Facebook/LinkedIn serve the ungated og: surface to.
+#
+# ⚠️ Known ceiling: httpx's TLS ClientHello has a JA3 fingerprint that matches no
+# real browser and no real crawler, so a host doing TLS fingerprinting sees the
+# contradiction no matter what headers we send. Fixing that needs curl_cffi or
+# tls-client (a new dependency + a rewrite of every fetch).
+# ponytail: headers-only until logs actually show fingerprint-level blocking.
+_IDENTITIES = (
+    _PREVIEW_HEADERS,
+    {
+        "User-Agent": "Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)",
+        "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate",
+    },
+    {
+        "User-Agent": "Twitterbot/1.0",
+        "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "gzip, deflate",
+    },
+)
+
+# Optional outbound proxy for every extraction fetch (yt-dlp + httpx).
+#
+# COSTS NOTHING WHEN UNSET, which is the default: _PROXY is None, no proxy
+# argument is passed anywhere, and behaviour is byte-for-byte what it was. It is
+# a seam, not a subscription. Point it at a residential/mobile proxy only if and
+# when datacenter-IP blocking actually costs more than the proxy does — see
+# docs/CONTEXT.md § "Extraction & bot-detection".
+_PROXY = settings.EXTRACTOR_PROXY_URL or None
+
+# One pooled client instead of a fresh throwaway per httpx.get(). Buys connection
+# reuse (no TLS handshake per caption fetch) and, more importantly, a cookie jar:
+# TikTok sets msToken/ttwid on first contact and expects them back, so a stateless
+# request reads as a scraper regardless of headers.
+_http = httpx.Client(
+    follow_redirects=True,
+    max_redirects=3,
+    timeout=8.0,
+    proxy=_PROXY,
+    limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+)
+
+# Per-host concurrency + jitter. Eight simultaneous byte-identical requests to one
+# host from one IP is the detectable pattern — not the volume. Serialising to two
+# with a short random delay costs a few hundred ms and removes the signature.
+_HOST_CONCURRENCY = 2
+_host_gate: dict[str, threading.Semaphore] = {}
+_gate_lock = threading.Lock()
+
+
+def _gate(host: str) -> threading.Semaphore:
+    with _gate_lock:
+        return _host_gate.setdefault(host, threading.Semaphore(_HOST_CONCURRENCY))
+
+
+# Per-platform circuit breaker. Once a platform is refusing us, further attempts
+# make it worse AND delay every queued save behind them. Open the circuit, let the
+# save degrade to a link-only bookmark immediately, and let one probe re-close it.
+# Exposed via /health/extract so a block shows up on a dashboard instead of in
+# user complaints.
+_BREAKER_THRESHOLD = 5
+_BREAKER_COOLDOWN = 600
+_breaker: dict[str, dict] = {}
+_breaker_lock = threading.Lock()
+
+
+def _circuit_open_locked(platform: str) -> bool:
+    """Caller must already hold _breaker_lock. Split out because threading.Lock
+    is not reentrant — breaker_state() needs this check while holding the lock."""
+    b = _breaker.get(platform)
+    if not b or b["fails"] < _BREAKER_THRESHOLD:
+        return False
+    if time.monotonic() - b["opened"] > _BREAKER_COOLDOWN:
+        b["fails"] = 0              # half-open: let a single probe through
+        return False
+    return True
+
+
+def circuit_open(platform: str) -> bool:
+    with _breaker_lock:
+        return _circuit_open_locked(platform)
+
+
+def record_result(platform: str, ok: bool) -> None:
+    with _breaker_lock:
+        b = _breaker.setdefault(platform, {"fails": 0, "opened": 0.0})
+        if ok:
+            b["fails"] = 0
+        else:
+            b["fails"] += 1
+            if b["fails"] == _BREAKER_THRESHOLD:
+                b["opened"] = time.monotonic()
+                logger.error(f"[BREAKER] {platform} circuit OPEN after {b['fails']} failures")
+
+
+def breaker_state() -> dict:
+    """Snapshot for /health/extract."""
+    with _breaker_lock:
+        return {
+            p: {"fails": b["fails"], "open": _circuit_open_locked(p)}
+            for p, b in _breaker.items()
+        }
 
 
 _STRIP_PARAMS = {
@@ -109,8 +227,62 @@ def _parse_vtt(vtt: str) -> str:
     return ' '.join(seen).strip()
 
 
-def _get_captions(info: dict) -> str:
-    """Download and parse VTT captions from yt-dlp info for any language."""
+_VTT_TS = re.compile(r'(?:(\d+):)?(\d{2}):(\d{2})[.,](\d{3})\s*-->')
+
+
+def _vtt_cue_starts(vtt: str) -> list[float]:
+    """Cue start times, in seconds.
+
+    Deliberately a SECOND pass rather than a new return value from _parse_vtt:
+    that function's string contract is pinned by tests and used elsewhere, and a
+    regex sweep over a caption file is microseconds. Two passes, zero churn.
+
+    These timings are the only pacing signal a text-only pipeline gets. Gaps
+    between cues are silence, and silence inside a 30-second reel is a visual
+    beat — a text card, a reveal, a demo. Without them the summarizer cannot
+    tell a talking-head explainer from a caption-driven listicle, because both
+    arrive as the same flat wall of text.
+    """
+    starts: list[float] = []
+    for m in _VTT_TS.finditer(vtt):
+        h, mm, ss, ms = m.group(1) or 0, m.group(2), m.group(3), m.group(4)
+        starts.append(int(h) * 3600 + int(mm) * 60 + int(ss) + int(ms) / 1000)
+    return starts
+
+
+def pacing_hint(duration: int, transcript: str, cue_starts: list[float]) -> str:
+    """One line of derived structure for the summarizer prompt.
+
+    Pure function of data we already hold — no extra fetch, no extra cost. It
+    encodes the difference between formats that are indistinguishable as plain
+    text: 45 seconds carrying 20 spoken words is on-screen-text content; 45
+    seconds carrying 160 is a talking head.
+    """
+    if not duration or duration <= 0:
+        return ""
+    bits = [f"{duration}s"]
+    words = len(transcript.split()) if transcript else 0
+    if words:
+        wpm = words / (duration / 60)
+        bits.append(f"~{int(wpm)} spoken words/min")
+        if wpm < 60:
+            bits.append("sparse narration — likely carried by on-screen text or a visual demo")
+    else:
+        bits.append("no speech transcript — visual or text-overlay content")
+    gaps = [b - a for a, b in zip(cue_starts, cue_starts[1:]) if b - a > 2.5]
+    if gaps:
+        bits.append(f"{len(gaps)} silent gap(s) over 2.5s (visual beats)")
+    if cue_starts and cue_starts[0] > 3:
+        bits.append(f"speech starts at {cue_starts[0]:.0f}s — cold visual open")
+    return "; ".join(bits)
+
+
+def _get_captions(info: dict) -> tuple[str, list[float]]:
+    """Download and parse VTT captions from yt-dlp info for any language.
+
+    Returns (text, cue_start_times). The timings feed pacing_hint(); see there
+    for why a text-only pipeline needs them.
+    """
     auto = info.get('automatic_captions') or {}
     manual = info.get('subtitles') or {}
 
@@ -136,7 +308,7 @@ def _get_captions(info: dict) -> str:
         if not vtt_url:
             continue
         try:
-            resp = httpx.get(vtt_url, timeout=_CAPTION_TIMEOUT, follow_redirects=True, headers=_BROWSER_HEADERS)
+            resp = _http.get(vtt_url, timeout=_CAPTION_TIMEOUT, headers=_BROWSER_HEADERS)
         except Exception:
             continue
         # YouTube rate-limits the timedtext endpoint per-IP. Once we hit 429 every
@@ -148,8 +320,8 @@ def _get_captions(info: dict) -> str:
         if resp.status_code == 200:
             parsed = _parse_vtt(resp.text)
             if len(parsed) > 30:
-                return parsed
-    return ''
+                return parsed, _vtt_cue_starts(resp.text)
+    return '', []
 
 
 def _og(html: str, prop: str) -> str:
@@ -205,12 +377,11 @@ def _youtube_oembed(url: str) -> dict:
     behind the player-API bot-block, so it still answers from datacenter IPs when
     full extraction is refused — our free graceful-degradation path for YouTube."""
     try:
-        resp = httpx.get(
+        resp = _http.get(
             "https://www.youtube.com/oembed",
             params={"url": url, "format": "json"},
             headers=_BROWSER_HEADERS,
             timeout=8,
-            follow_redirects=True,
         )
         if resp.status_code == 200:
             d = resp.json()
@@ -224,16 +395,37 @@ def _youtube_oembed(url: str) -> dict:
     return {}
 
 
+def _fetch_page(url: str) -> Optional[str]:
+    """Fetch a page's HTML through the pooled client, trying each crawler identity
+    in turn, serialised per host with a little jitter.
+
+    The gate + jitter matter as much as the headers: eight byte-identical
+    requests arriving at one host simultaneously from one IP is the detectable
+    pattern, independent of how convincing any single request looks.
+    """
+    host = urlparse(url).hostname or ""
+    with _gate(host):
+        time.sleep(random.uniform(0.15, 0.6))
+        for ident in _IDENTITIES:
+            try:
+                resp = _http.get(url, headers=ident)
+            except Exception:
+                continue
+            if resp.status_code == 200 and len(resp.text) > 500:
+                return resp.text[:_MAX_PAGE_PARSE_BYTES]
+            if resp.status_code in (403, 429):
+                logger.warning(
+                    f"[FETCH] {resp.status_code} from {host} as "
+                    f"{ident['User-Agent'].split('/')[0]}"
+                )
+    return None
+
+
 def _extract_from_page(url: str) -> dict:
     """Fetch text from a page via JSON-LD (full body) then Open Graph meta tags.
     Best-effort — returns empty fields on failure."""
-    try:
-        # Bounded client: a login-walled page (e.g. Instagram) can otherwise send us
-        # down a slow redirect chain and hang the whole save. Cap redirects + timeout.
-        with httpx.Client(follow_redirects=True, max_redirects=3, timeout=8.0, headers=_PREVIEW_HEADERS) as client:
-            resp = client.get(url)
-        page = resp.text[:_MAX_PAGE_PARSE_BYTES]
-    except Exception:
+    page = _fetch_page(url)
+    if not page:
         return {}
 
     ld = _extract_jsonld(page)
@@ -263,6 +455,15 @@ def _extract_from_page(url: str) -> dict:
         "title": clean_title,
         "description": description,
         "image": image,
+        # Meta auto-generates og:image:alt from its OWN image classifier, and it
+        # routinely includes OCR'd on-screen text:
+        #   "May be an image of 2 people, food and text that says 'CHICKEN 65'"
+        # That is the closest thing to a keyframe description obtainable without
+        # downloading a single frame — and it is in bytes we already fetched and
+        # parsed. (This is the property whose loose substring match used to
+        # masquerade as og:image; that bug was fixed above by exact-matching the
+        # property name, but the value itself was never captured until now.)
+        "image_alt": _og(page, 'image:alt'),
     }
 
 
@@ -275,6 +476,9 @@ _BASE_YDL_OPTS = {
     "extractor_retries": 1,
     "noplaylist": True,
     "ignoreerrors": False,
+    # Absent entirely unless EXTRACTOR_PROXY_URL is set, so the default deploy is
+    # byte-for-byte unchanged and costs nothing.
+    **({"proxy": _PROXY} if _PROXY else {}),
 }
 
 
@@ -311,7 +515,7 @@ def _youtube_data_api(url: str) -> dict:
     if not vid:
         return {}
     try:
-        r = httpx.get(
+        r = _http.get(
             "https://www.googleapis.com/youtube/v3/videos",
             params={"id": vid, "part": "snippet", "key": settings.YOUTUBE_API_KEY},
             timeout=8,
@@ -380,8 +584,54 @@ def _pick_thumbnail(info: dict, platform: str) -> str:
     return best
 
 
+_HASHTAG = re.compile(r'#\w+')
+
+
+def _build_meta(info: dict, duration: int, transcript: str,
+                cue_starts: list[float], caption: str) -> dict:
+    """Structural signals about the parts of the video we cannot watch.
+
+    Every field here is derived from data already in hand — no extra request, no
+    extra token cost beyond a few lines of prompt. This is what lets a text-only
+    pipeline reason about visual content instead of guessing.
+    """
+    meta: dict = {}
+    pacing = pacing_hint(duration, transcript, cue_starts)
+    if pacing:
+        meta["pacing"] = pacing
+    # yt-dlp resolves these for music-matched content. On TikTok/IG the audio IS
+    # the format convention — a trending sound identifies the genre (comedic
+    # fail, transformation, storytime) more reliably than any caption does.
+    track, artist = info.get("track"), info.get("artist")
+    if track:
+        meta["track"] = f"{track} — {artist}" if artist else str(track)
+    w, h = info.get("width") or 0, info.get("height") or 0
+    if w and h:
+        # 9:16 is native short-form. A 16:9 upload is repurposed long-form, where
+        # the caption is usually a summary rather than the content itself.
+        meta["aspect"] = "vertical (native short-form)" if h > w else "landscape (repurposed long-form)"
+    tags = _HASHTAG.findall(caption or "")
+    if tags:
+        # The creator's own taxonomy. Passing it explicitly beats making the model
+        # re-derive topic labels from hashtag soup buried in the caption body.
+        meta["hashtags"] = " ".join(tags[:15])
+    return meta
+
+
 def extract_info(url: str) -> dict:
     platform = detect_platform(url)
+
+    # Circuit open: this platform is actively refusing us. Skip straight to the
+    # degraded result instead of spending 20s discovering that again and delaying
+    # every queued save behind it.
+    if circuit_open(platform):
+        logger.info(f"[EXTRACT] {platform} circuit open — skipping fetch for {url}")
+        return {
+            "title": "", "caption": "", "transcript": "", "best_text": "",
+            "thumbnail_url": "", "duration": 0, "platform": platform,
+            "uploader": "", "needs_audio": False, "extracted": False,
+            "blocked": True, "meta": {},
+        }
 
     attempts = _youtube_attempts() if platform == "youtube" else [_BASE_YDL_OPTS]
 
@@ -402,9 +652,10 @@ def extract_info(url: str) -> dict:
     if ydl_info:
         title = ydl_info.get("title") or ""
         description = ydl_info.get("description") or ""
-        transcript = _get_captions(ydl_info)
+        transcript, cue_starts = _get_captions(ydl_info)
         best_text = transcript or description
         thumb = _pick_thumbnail(ydl_info, platform)
+        duration = int(ydl_info.get("duration") or 0)
         # yt-dlp with process=False can return a truthy but EMPTY shell for gated
         # platforms — notably Facebook reels yield a dict with no title, thumbnail
         # or text. Trusting it here short-circuits the public-og: fallback below,
@@ -412,18 +663,20 @@ def extract_info(url: str) -> dict:
         # take this path when yt-dlp actually produced something; otherwise fall
         # through to the page-meta / oEmbed fallbacks.
         if title or thumb or best_text.strip():
+            record_result(platform, True)
             return {
                 "title": title,
                 "caption": description,
                 "transcript": transcript,
                 "best_text": best_text,
                 "thumbnail_url": thumb,
-                "duration": int(ydl_info.get("duration") or 0),
+                "duration": duration,
                 "platform": platform,
                 "uploader": ydl_info.get("uploader") or "",
                 "needs_audio": not best_text or len(best_text.strip()) < 40,
                 # Only "extracted" (cacheable / not junk) if we actually got something.
                 "extracted": bool((best_text or "").strip()) or bool(thumb),
+                "meta": _build_meta(ydl_info, duration, transcript, cue_starts, description),
             }
         logger.info(f"[EXTRACT] yt-dlp returned an empty shell for {url} — using page-meta fallback")
 
@@ -455,6 +708,7 @@ def extract_info(url: str) -> dict:
         thumb = thumb or api.get("thumbnail") or ""
         uploader = uploader or api.get("uploader") or ""
 
+        record_result(platform, bool(title or thumb))
         return {
             "title": title or "YouTube Short",
             "caption": description,
@@ -470,29 +724,42 @@ def extract_info(url: str) -> dict:
             "login_required": not (title or thumb),
             # Cache the bookmark-grade result so re-saving is instant.
             "extracted": bool(title or thumb),
+            "meta": {},
         }
 
     # All platforms fall back to public page meta. The facebookexternalhit UA serves
     # the ungated link-preview surface — for LinkedIn this returns the FULL post body
     # via JSON-LD (~2.5k chars in practice), so no paid scraper is needed.
-    meta = _extract_from_page(url)
-    title = meta.get("title") or ""
-    description = meta.get("description") or ""
+    page_meta = _extract_from_page(url)
+    title = page_meta.get("title") or ""
+    description = page_meta.get("description") or ""
     best_text = description
+    image_alt = (page_meta.get("image_alt") or "").strip()
 
+    structural: dict = {}
+    if image_alt:
+        structural["image_alt"] = image_alt
+    tags = _HASHTAG.findall(description or "")
+    if tags:
+        structural["hashtags"] = " ".join(tags[:15])
+
+    record_result(platform, bool(best_text or title or page_meta.get("image")))
     return {
         "title": title or f"{platform.capitalize()} Post",
         "caption": description,
         "transcript": "",
         "best_text": best_text,
-        "thumbnail_url": meta.get("image") or "",
+        "thumbnail_url": page_meta.get("image") or "",
         "duration": 0,
         "platform": platform,
         "uploader": "",
         "needs_audio": False,
         "login_required": not best_text,
         # Cache page extractions that actually yielded text (e.g. LinkedIn via JSON-LD).
-        "extracted": len((best_text or "").strip()) >= 50,
+        # image_alt counts: a post with no caption but a machine description of the
+        # image is still summarizable, which is exactly the login-walled IG case.
+        "extracted": len((best_text or "").strip()) >= 50 or len(image_alt) >= 50,
+        "meta": structural,
     }
 
 
@@ -501,8 +768,33 @@ def extract_info(url: str) -> dict:
 _MAX_AUDIO_BYTES = 50 * 1024 * 1024  # 50 MB
 
 
+def cleanup_audio(path: str) -> None:
+    """Remove a temp audio file and the directory download_audio made for it.
+
+    Safe to call twice, and safe to call on a path that is already gone.
+    """
+    if not path:
+        return
+    shutil.rmtree(os.path.dirname(path), ignore_errors=True)
+
+
 def download_audio(url: str) -> Optional[str]:
-    """Download audio to a temp mp3 file. Returns file path or None on failure."""
+    """Download audio to a temp mp3 file. Returns file path or None on failure.
+
+    On EVERY failure path this cleans up its own temp directory, and on success
+    the caller owns cleanup via cleanup_audio().
+
+    The previous contract delegated all cleanup to transcriber.transcribe()'s
+    `finally` block — which is never reached, because transcribe() returns early
+    when OPENAI_API_KEY is unset. An unconfigured deploy therefore leaked one
+    temp directory per login-walled reel, permanently, until the disk filled.
+    Two other paths leaked too: an exception here (mkdtemp already ran), and a
+    download that produced no audio.mp3.
+
+    ⚠️ `max_filesize` is compared against yt-dlp's REPORTED filesize. Fragmented
+    HLS/DASH streams — what Instagram and TikTok serve — frequently report none,
+    and the cap is then silently skipped. Treat it as advisory, not a guarantee.
+    """
     tmp_dir = tempfile.mkdtemp()
     output_path = os.path.join(tmp_dir, "audio.%(ext)s")
 
@@ -518,12 +810,17 @@ def download_audio(url: str) -> Optional[str]:
             "preferredcodec": "mp3",
             "preferredquality": "96",
         }],
+        **({"proxy": _PROXY} if _PROXY else {}),
     }
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             ydl.download([url])
         audio_file = os.path.join(tmp_dir, "audio.mp3")
-        return audio_file if os.path.exists(audio_file) else None
-    except Exception:
-        return None
+        if os.path.exists(audio_file):
+            return audio_file
+        logger.info(f"[AUDIO] no audio.mp3 produced for {url}")
+    except Exception as e:
+        logger.info(f"[AUDIO] download failed for {url}: {type(e).__name__}: {e}")
+    shutil.rmtree(tmp_dir, ignore_errors=True)
+    return None

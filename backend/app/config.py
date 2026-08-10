@@ -13,6 +13,17 @@ class Settings:
     # not), so without this every YouTube save degrades to a link-only bookmark.
     # Unset = the fallback is skipped and behaviour is exactly as before.
     YOUTUBE_API_KEY: str = os.getenv("YOUTUBE_API_KEY", "")
+    # Optional outbound proxy for ALL extraction traffic (yt-dlp + httpx page and
+    # caption fetches). Empty by default, which is a true no-op: no proxy argument
+    # is passed anywhere and behaviour is identical to before this existed.
+    #
+    # 💸 The variable is free; the service behind it is not. Leaving it unset
+    # costs nothing. Setting it to a residential/mobile proxy URL is a usage-priced
+    # line item (~$2-8/GB) and should only happen once datacenter-IP blocking
+    # measurably costs more than the proxy does — see docs/CONTEXT.md
+    # § "Extraction & bot-detection". Never point this at a free public proxy
+    # list: they are slower than being blocked and can read the traffic.
+    EXTRACTOR_PROXY_URL: str = os.getenv("EXTRACTOR_PROXY_URL", "")
     SUPABASE_URL: str = os.getenv("SUPABASE_URL", "")
     # New "Publishable" key (sb_publishable_...). Safe to share. Falls back to the
     # older SUPABASE_ANON_KEY name if that's what's set.

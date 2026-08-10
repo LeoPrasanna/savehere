@@ -1,12 +1,14 @@
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import uuid
 import re
+import threading
 import time
 import logging
 from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
+from concurrent.futures import ThreadPoolExecutor
 
+from app.config import settings
 from app.database import get_db, SessionLocal, ReelDB, ExtractionCacheDB, TaskDB, WorkoutExerciseDB, TodoDB
 from app.routes.models.reel import (
     ReelSaveRequest, ReelNotesRequest, ReelCategoryRequest, ReelResponse, ReelListResponse,
@@ -27,13 +29,66 @@ ALLOWED_CATEGORIES = {
     "fashion", "beauty", "travel", "business", "news", "health", "finance", "other",
 }
 
-# Bigger pool so a few slow extractions can't starve every other save. A hung
-# yt-dlp thread can't be killed, so the real protection is keeping extraction
-# fast/bounded (see extractor.py); this just widens the safety margin.
-_executor = ThreadPoolExecutor(max_workers=8)
-EXTRACT_TIMEOUT = 20      # hard ceiling for a single extraction (seconds) — keep the
-                          # save snappy; a slower platform degrades to a link-only save.
+# Every background extraction/summary runs here, and ONLY here.
+#
+# ⚠️ Why this is not a FastAPI BackgroundTask any more. Starlette runs a sync
+# BackgroundTask via run_in_threadpool, i.e. on anyio's default 40-token pool —
+# the very same pool every `def` route handler draws from. A save therefore held
+# one of those 40 tokens for its whole 20s+ chain while ALSO occupying a worker
+# here, so ~40 concurrent saves starved the entire API: list, detail, health and
+# thumbnails all stopped responding until extractions drained. Submitting
+# straight to our own pool keeps request handling and background work on
+# separate budgets, so a burst of saves degrades save latency and nothing else.
+_executor = ThreadPoolExecutor(max_workers=8, thread_name_prefix="extract")
 CACHE_TTL_DAYS = 14       # re-extract if the cached entry is older than this
+
+
+def _enqueue(fn, *args) -> None:
+    """Run `fn` off the request path without holding an anyio threadpool token.
+
+    Single dispatch point on purpose: it is the seam tests patch to run the chain
+    inline, and the one place to swap in a real queue if saves ever need to be
+    durable rather than best-effort.
+    """
+    try:
+        _executor.submit(fn, *args)
+    except RuntimeError:                    # interpreter shutting down
+        logger.warning("[ENQUEUE] executor unavailable — reel left pending for recovery")
+
+
+# A FAILED extraction is worth remembering for minutes, not for the 14-day
+# success TTL. _is_cacheable() correctly refuses to cache text-less results (that
+# fix stopped a blocked IP poisoning a URL for a fortnight) — but the flip side is
+# that a currently-blocked URL is re-attempted by every user who saves it. One
+# trending reel then becomes a hundred requests against a host that is already
+# refusing us, which is precisely how a soft rate-limit escalates to a hard IP
+# ban. This is the missing half of that fix.
+#
+# Deliberately in-memory: losing it on restart is CORRECT (a restart is a fine
+# moment to retry), and it must never be mistaken for a cache hit by save_reel().
+NEGATIVE_TTL = 900        # seconds
+_negative: dict[str, float] = {}
+_negative_lock = threading.Lock()
+
+
+def _recently_failed(url: str) -> bool:
+    with _negative_lock:
+        if _negative.get(url, 0) > time.monotonic():
+            return True
+        _negative.pop(url, None)
+        return False
+
+
+def _mark_failed(url: str) -> None:
+    with _negative_lock:
+        if len(_negative) > 2000:
+            now = time.monotonic()
+            # ponytail: O(n) sweep, but n is capped at 2k so it is microseconds.
+            # Revisit only if this ever needs to hold six figures of URLs.
+            for k, v in list(_negative.items()):
+                if v <= now:
+                    _negative.pop(k, None)
+        _negative[url] = time.monotonic() + NEGATIVE_TTL
 
 # Throttle cache pruning so we don't scan/delete on every save.
 _PRUNE_INTERVAL = 3600    # seconds between prune attempts
@@ -59,7 +114,7 @@ def _get_owned_reel_or_404(reel_id: str, user: AuthUser, db: Session) -> ReelDB:
 
 
 @router.post("/save", response_model=ReelResponse, dependencies=[Depends(rate_limit(20, 60, "save"))])
-def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
+def save_reel(body: ReelSaveRequest,
               user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """Instant save: the card is persisted and returned in one DB round-trip.
 
@@ -122,7 +177,7 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
         db.commit()
         db.refresh(reel)
         if should_summarize:
-            background_tasks.add_task(_summarize_reel, reel.id)
+            _enqueue(_summarize_reel, reel.id)
         logger.info(f"[SAVE] success (cached) platform={reel.platform} id={reel.id}")
         return _to_response(reel)
 
@@ -147,7 +202,7 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
     db.add(reel)
     db.commit()
     db.refresh(reel)
-    background_tasks.add_task(_extract_and_summarize, reel.id, user)
+    _enqueue(_extract_and_summarize, reel.id, user)
     logger.info(f"[SAVE] accepted (async extract) platform={platform} id={reel.id}")
     return _to_response(reel)
 
@@ -242,17 +297,35 @@ def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
             logger.info(f"[EXTRACT-BG] {reel_id} already has a summary — skipping re-extraction")
             return
 
+        if _recently_failed(reel.url):
+            # This URL failed within the negative-cache window. Retrying now would
+            # add load to a host that is already refusing us and would fail the
+            # same way. Leave the card pending so recovery retries it later.
+            logger.info(f"[EXTRACT-BG] {reel_id} skipped — {reel.url} failed recently")
+            return
+
+        # Called directly, NOT via _executor.submit(). We are already running ON
+        # that pool, so submitting back into it deadlocks once the pool is full.
+        # The old future.result(timeout=EXTRACT_TIMEOUT) also never bounded the
+        # work — it only freed the waiter, while the yt-dlp thread kept running
+        # and held its worker forever. Real bounds are per-operation:
+        # socket_timeout/retries in _BASE_YDL_OPTS plus explicit httpx timeouts.
         try:
-            future = _executor.submit(extractor.extract_info, reel.url)
-            info = future.result(timeout=EXTRACT_TIMEOUT)
+            info = extractor.extract_info(reel.url)
         except Exception as e:
             logger.error(f"[EXTRACT-BG] failed for {reel_id} ({reel.url}): {type(e).__name__}: {e}")
+            _mark_failed(reel.url)
             # Keep the bookmark: clean label, honest 'failed' so the UI offers retry.
             kind = "Reel" if "/reel" in reel.url.lower() else "Post"
             reel.title = reel.title or f"{(reel.platform or 'web').capitalize()} {kind}"
             reel.summary_status = "failed"
             db.commit()
             return
+
+        if not (info.get("best_text") or "").strip() and not info.get("thumbnail_url"):
+            # Nothing usable came back — almost always a live block. Remember it
+            # briefly so the next hundred saves of this URL don't pile on.
+            _mark_failed(reel.url)
 
         # Only cache an extraction that actually carries content. `extracted` is
         # True as soon as a title or thumbnail comes back, so caching on that alone
@@ -291,17 +364,36 @@ def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
             logger.info(f"[EXTRACT-BG] {reel_id} filled — no summary needed")
             return
 
+        # Re-read before spending anything. The guard at the top of this function
+        # ran BEFORE extraction; the client-metadata endpoint routinely lands a
+        # full summary during the 2-20s we were away (the app posts it about a
+        # second after /save). Without this re-check the non-destructive fill
+        # above resets summary_status to 'pending' and we charge the user a
+        # second AI action and make a second Claude call for a reel that is
+        # already summarized — a real double-spend on a very common timing.
+        db.refresh(reel)
+        if reel.summary:
+            reel.summary_status = "ready"
+            db.commit()
+            logger.info(f"[EXTRACT-BG] {reel_id} summarized concurrently — not re-charging")
+            return
+
         if user is not None and not _try_charge(db, user, reel.title or reel.url):
             # Extraction already ran and is FREE — the card keeps its title and
             # thumbnail. Only the paid step is skipped.
             reel.summary_status = QUOTA_STATUS
             db.commit()
             return
+        meta = info.get("meta") or {}
     finally:
         db.close()
 
-    # Own session inside; commits the summary result.
-    _summarize_reel(reel_id)
+    # Own session inside; commits the summary result. `meta` is passed in memory
+    # rather than persisted: it is only available on a fresh extraction, and the
+    # summary runs immediately afterwards.
+    # ponytail: re-summarize and cache-hit saves get no pacing hint. Add a JSON
+    # `meta` column on ReelDB + ExtractionCacheDB if that quality gap shows up.
+    _summarize_reel(reel_id, meta=meta)
 
 
 @router.get("", response_model=ReelListResponse)
@@ -377,11 +469,22 @@ def resummarize_reel(reel_id: str, user: AuthUser = Depends(get_current_user), d
     # Per-user daily AI budget (shared across all AI actions). Charged before the call.
     charge_ai_action(db, user, action="resummarize", label=reel.title or reel.url)
 
-    ai = summarizer.summarize(
-        platform=reel.platform,
-        title=reel.title or "",
-        text=source_text,
-    )
+    try:
+        ai = summarizer.summarize(
+            platform=reel.platform,
+            title=reel.title or "",
+            text=source_text,
+        )
+    except Exception as e:
+        # summarize() now raises on a truncated or unparseable response instead
+        # of quietly returning an empty summary. That is the right signal, but it
+        # must not reach the client as a stack trace: the charge already happened
+        # and the user needs a sentence they can act on.
+        logger.error(f"[RESUMMARIZE] {reel.id} failed: {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="The summarizer is having trouble right now. Please try again in a moment.",
+        )
 
     if not ai["summary"]:
         # Message depends on WHY it's empty: if the user already added notes and
@@ -703,11 +806,15 @@ def _to_response(reel: ReelDB) -> ReelResponse:
     )
 
 
-def _summarize_reel(reel_id: str) -> None:
+def _summarize_reel(reel_id: str, meta: dict | None = None) -> None:
     """Background worker: turn a saved reel's raw_text (or audio) into a summary,
     tags and category. Runs off the request path so saving feels instant. Opens
     its own DB session (the request's session is already closed). Fail-safe: any
-    error leaves the reel in 'failed' so the UI can offer a retry."""
+    error leaves the reel in 'failed' so the UI can offer a retry.
+
+    `meta` carries structural signals about the parts of the video we cannot see
+    (pacing, platform image description, audio track). Optional: callers that did
+    not just run an extraction pass nothing and the prompt simply omits them."""
     db = SessionLocal()
     try:
         reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
@@ -716,8 +823,15 @@ def _summarize_reel(reel_id: str) -> None:
 
         text = (reel.raw_text or "").strip()
 
-        # Audio transcription fallback — the slow path, now off the request.
-        if len(text) < 50:
+        # Audio transcription fallback — the slow path, off the request.
+        #
+        # Gated on the API key: without it transcribe() returns "" immediately,
+        # so downloading first was pure waste — bandwidth, ffmpeg CPU, and (until
+        # download_audio/cleanup_audio took ownership) a permanently orphaned
+        # temp directory per reel, because the cleanup used to live in a `finally`
+        # that the early return skipped.
+        if len(text) < 50 and settings.OPENAI_API_KEY:
+            audio_path = None
             try:
                 audio_path = extractor.download_audio(reel.url)
                 if audio_path:
@@ -727,6 +841,9 @@ def _summarize_reel(reel_id: str) -> None:
                         reel.raw_text = text
             except Exception as e:
                 logger.warning(f"[SUMMARIZE] audio fallback failed for {reel_id}: {e}")
+            finally:
+                if audio_path:
+                    extractor.cleanup_audio(audio_path)
 
         if len(text) < 50:
             reel.summary, reel.tags = [], []
@@ -735,7 +852,8 @@ def _summarize_reel(reel_id: str) -> None:
             logger.info(f"[SUMMARIZE] {reel_id} skipped — no extractable text")
             return
 
-        ai = summarizer.summarize(platform=reel.platform, title=reel.title or "", text=text)
+        ai = summarizer.summarize(platform=reel.platform, title=reel.title or "",
+                                  text=text, meta=meta)
         reel.summary = ai["summary"]
         reel.tags = ai["tags"]
         # Same latch as resummarize: model may set the flag, never clear it.

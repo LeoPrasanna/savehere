@@ -78,7 +78,7 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 - Per-user daily AI quota (the real cost ceiling) + per-reel AI caps + per-IP burst guard
 - Usage drill-down — see exactly what today's AI actions were spent on
 - `/health` and `/health/extract` self-test endpoints; image proxy for CDN-blocked thumbnails
-- Backend test suite — **256 pytest tests** across 24 files
+- Backend test suite — **250 pytest tests** across 24 files
 
 ---
 
@@ -149,8 +149,9 @@ Copy `.env.example` → `.env`. Only `ANTHROPIC_API_KEY` is required to run loca
 | `SUPABASE_SERVICE_ROLE_KEY` | For auth | **Backend only — never expose.** Admin ops: account deletion, tier writes |
 | `SUPABASE_JWKS_URL` | No | Defaults to `$SUPABASE_URL/auth/v1/.well-known/jwks.json` |
 | `DATABASE_URL` | Prod | Postgres URL. **Unset = SQLite** — must be set in prod or Render's ephemeral disk loses the DB on every redeploy |
-| `OPENAI_API_KEY` | No | Whisper audio fallback (needs ffmpeg). ⚠️ Currently **uncapped** — see [TODO.md](TODO.md) before enabling |
-| `APIFY_API_KEY` | No | Optional managed-scraper fallback |
+| `OPENAI_API_KEY` | No | Whisper audio fallback (needs ffmpeg). ⚠️ Currently **uncapped** — see [TODO.md](TODO.md) before enabling. Unset = the audio download is skipped entirely, not just the transcription |
+| `APIFY_API_KEY` | No | Carried in config but **not referenced anywhere in the code** — no managed-scraper fallback is implemented |
+| `EXTRACTOR_PROXY_URL` | No | Outbound proxy for all extraction traffic (yt-dlp + httpx). **Unset = free and a true no-op:** no proxy argument is passed anywhere and behaviour is identical. 💸 Setting it to a residential/mobile proxy is usage-priced (~$2–8/GB) with **no ceiling in code** — add the per-user proxy cap in [TODO.md](TODO.md) first. Never point it at a free public proxy list |
 | `SENTRY_DSN` | No | Error monitoring; empty = disabled |
 | `REVENUECAT_WEBHOOK_TOKEN` | Launch | Shared secret for the billing webhook (fail-closed when unset) |
 | `TRUSTED_PROXY_HOPS` | No | Trusted reverse proxies in front (default `1`; `0` = never trust `X-Forwarded-For`) |
@@ -176,7 +177,7 @@ savehere/
 │   │   ├── routes/                # reels, workout (tasks/recipes/workouts/itineraries), ask, todos, account, billing
 │   │   └── services/              # extractor, summarizer, workout_extractor, librarian, search, transcriber
 │   ├── scripts/                   # set_tier.py, dev_tier.py, enable_rls.sql
-│   └── tests/                     # pytest suite (256 tests)
+│   └── tests/                     # pytest suite (250 tests)
 ├── mobile/                        # Expo Router app
 │   ├── app/                       # library, save, reel detail, ask, rediscover, todos, help, pro, workout
 │   ├── components/                # kit.tsx (design primitives), ReelCard, TaskList, TodoEditor, Landing, Icon, …
@@ -256,7 +257,7 @@ Plus: **retrieval, not dumping** — ask sends only the most relevant saves to t
 ## 🧪 Testing
 
 ```bash
-cd backend && python -m pytest tests/ -q     # 256 tests across 24 files
+cd backend && python -m pytest tests/ -q     # 250 tests across 24 files
 cd mobile  && npm run typecheck              # mobile type check (uses --stack-size=16000)
 cd mobile  && npx expo export --platform web # validate the web build
 ```
