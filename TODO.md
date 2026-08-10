@@ -793,11 +793,32 @@ code has been modified yet.
 - [x] **Fixed the `platformMeta` drift** — was hardcoding `#F8F8F8`/`#0B0B0B`; now reads `PALETTES.dark.textPrimary`/`.card` so it can't silently desync from the palette again. This was a regression introduced by the palette swap, not pre-existing.
 - [x] **Landed all 3 `gradients.haze` adoptions** — workout rest backdrop, LoginScreen (layered above the wash, below the bottom ramp so legibility is untouched), and the library-grid screen root (`app/index.tsx`, `pointerEvents="none"`).
 - [x] **Verified in the browser** — `npm run typecheck` clean; dark scheme renders on `#101012`; haze confirmed painting at 989×963 with all 4 stops at the right locations; every `ReelCard` scrim now resolves through the token.
-- [ ] ⚠️ **The haze is effectively invisible on the library grid.** It renders correctly but sits *behind* a full-bleed thumbnail mosaic, so almost none of it is ever on screen. It reads only on the workout rest screen and the login wall, which are mostly empty. Either accept it as atmosphere for sparse screens only, raise the stop opacities (currently 10%/14%), or move it above the grid at very low alpha. Owner's call — do not "fix" by adding blur.
-- [ ] **`Landing.tsx` has no haze.** `app/index.tsx:214` early-returns `<Landing/>` before the patched root, so the editorial hero screen is untouched. `DESIGN_PROPOSAL.md` §4 specs the library grid, not the hero — decide whether the hero should get it too.
-- [ ] **Capsule tab bar + centre FAB still unbuilt** — `components/TabBar.tsx` currently renders a pill bar off `colors.tabBarTop`/`tabBarBottom`. The FAB, active-tab orange dot, and filter-chip accent are where Option B says the orange actually earns its place.
-- [ ] **Build the capsule tab bar + centre FAB** in `app/(tabs)/_layout.tsx`.
-- [ ] **Home screen**: haze gradient root, Fraunces greeting, filter pill row.
+- [x] **DECIDED: haze is atmosphere for SPARSE SCREENS ONLY** (owner, 2026-08-10). It stays
+  behind the library grid's full-bleed thumbnails and stays effectively invisible there —
+  that is accepted, not a defect: on the grid the pictures ARE the colour, which was the
+  governing rule of the whole direction. Stop opacities (10%/14%) are NOT being raised and
+  the layer is NOT moving above the tiles; both would put a cast over user photography.
+  No code change. And still: do not "fix" this with blur.
+- [x] **`Landing.tsx` now has the haze** (owner, 2026-08-10). It early-returned before the
+  patched root in `app/index.tsx`, so the editorial hero was the one sparse screen without
+  it — the exact conditions (two text blocks, one control, empty canvas) where it works on
+  the login wall. One `LinearGradient` at the screen root, `pointerEvents: 'none'` so it
+  can't eat the composer's tap. **Verified in the browser:** all four stops resolve
+  (`#101012` → pink 10% @45% → orange 14% @78% → `#101012`), hero and sub stay legible.
+  In light `hazeFor()` still collapses to a flat canvas fill, so it paints nothing there —
+  same behaviour as `app/index.tsx`, deliberately not special-cased.
+- [x] **CLOSED: capsule tab bar + centre FAB — not doing it** (owner, 2026-08-10).
+  ⚠️ **The instruction was unbuildable as written.** It said to build the bar in
+  `app/(tabs)/_layout.tsx`; **there is no `app/(tabs)/` directory and never was.**
+  `components/TabBar.tsx` is a custom bar rendered at the ROOT, above the router, and that
+  is load-bearing: Home and Library **share the route `/`** and are told apart by a session
+  flag, which expo-router's `Tabs` cannot express. Migrating would have meant splitting them
+  into two real routes and re-breaking the active-indicator bug fixed in PR #39. The pill
+  bar already ships with five tabs and a centre Save, so the restyle was closed in favour of
+  the launch blockers. **Consequence to accept:** `colors.accent` orange now has no home in
+  the nav — Option B reserved it for "active tabs, filter chips and the centre FAB", and
+  none of those are built, so the app is effectively still achromatic outside `danger`.
+- [ ] **Home screen**: Fraunces greeting, filter pill row. *(Haze root: done above.)*
 - [ ] **Verify on web + Android** — the whole point of this hybrid is no `expo-blur`. Confirm the gradient costs nothing on scroll before calling it done.
 - [ ] **Contrast audit** — `#F7F4EF` on `#101012` and `#101012` on `#E96B34` both need re-measuring; the current palette's ratios are documented in `theme.ts` comments and must not regress.
 

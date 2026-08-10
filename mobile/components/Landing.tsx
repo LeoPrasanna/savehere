@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { Label, Wordmark } from './kit';
-import { colors, spacing, font, tracking, typeface, radius, themed } from '../constants/theme';
+import { colors, spacing, font, tracking, typeface, radius, themed, gradients, hazeLocations } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { emitUi } from '../services/uiBus';
 import { ASK_MIN_REELS } from '../constants/limits';
@@ -110,6 +111,19 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
 
   return (
     <View style={styles.screen}>
+      {/* Nocturnal Dimension haze (owner, 2026-08-10). This screen is exactly
+          what the wash was designed for — two text blocks and one control on an
+          otherwise empty canvas, the same conditions under which it reads on the
+          login wall. It is invisible on the library grid because full-bleed
+          thumbnails cover it, and that stays accepted: there the pictures ARE
+          the colour. Rendered ONCE at the root and non-interactive so it cannot
+          eat the composer's tap. `hazeFor()` collapses to a flat canvas fill in
+          light, so this paints nothing there — same deal as app/index.tsx. */}
+      <LinearGradient
+        colors={gradients.haze}
+        locations={hazeLocations}
+        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
+      />
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Wordmark size={22} />
         <Pressable
