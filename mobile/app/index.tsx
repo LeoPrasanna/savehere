@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, ScrollView, StyleSheet, ActivityIndicator,
   RefreshControl, useWindowDimensions, Platform,
-  KeyboardAvoidingView,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,7 +12,7 @@ import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { Landing } from '../components/Landing';
 import { Label, Body, Title, Rule, GhostButton, Wordmark } from '../components/kit';
-import { hasEnteredLibrary, markEnteredLibrary, clearEnteredLibrary } from '../services/sessionFlags';
+import { hasEnteredLibrary, markEnteredLibrary } from '../services/sessionFlags';
 import { onUi, emitUi } from '../services/uiBus';
 import { ASK_MIN_REELS } from '../constants/limits';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
@@ -48,9 +47,6 @@ export default function HomeScreen() {
   const [error, setError] = useState('');
   const [offline, setOffline] = useState(false);
   const [activeCategory, setActiveCategory] = useState('all');
-  const [search, setSearch] = useState('');
-  const [searchResults, setSearchResults] = useState<Reel[] | null>(null);
-  const [searching, setSearching] = useState(false);
   // Session-scoped (services/sessionFlags): remounts don't bounce back to the
   // landing, but a sign-out/sign-in resets it so new users start at Landing.
   const [entered, setEntered] = useState(hasEnteredLibrary());
@@ -108,51 +104,6 @@ export default function HomeScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    const q = search.trim();
-    if (!q) { setSearchResults(null); setSearching(false); return; }
-
-    // Instant feedback: filter what's already loaded so results appear on the
-    // keystroke instead of after debounce + round-trip. The server answer
-    // replaces this a moment later — it searches the WHOLE library (and tolerates
-    // typos), where this only sees the loaded page.
-    // A selected category scopes search to that category; 'all' searches the
-    // whole library. Server search is global, so we scope its result here.
-    const scope = (items: Reel[]) =>
-      activeCategory === 'all'
-        ? items
-        : items.filter(r => (r.category || '').toLowerCase() === activeCategory);
-
-    const local = q.toLowerCase();
-    setSearchResults(
-      scope(reels).filter(r =>
-        (r.title || '').toLowerCase().includes(local) ||
-        (r.category || '').toLowerCase().includes(local) ||
-        (r.tags || []).some(t => t.toLowerCase().includes(local))
-      )
-    );
-    setSearching(true);
-
-    // 250 ms rather than 400: with local results already on screen the debounce
-    // only governs the network call, so it can be tighter without spamming.
-    const timer = setTimeout(async () => {
-      try {
-        const data = await api.searchReels(q);
-        // Ignore a stale response that lost the race to a newer query.
-        setSearch(cur => {
-          if (cur.trim() === q) setSearchResults(scope(data.items));
-          return cur;
-        });
-      } catch {
-        // Keep the local matches rather than blanking the screen on a failed
-        // request — some results beat "no results" when the query did match.
-      } finally {
-        setSearching(false);
-      }
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [search, reels, activeCategory]);
-
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
 
   const hasPending = reels.some(r => r.summary_status === 'pending');
@@ -163,40 +114,16 @@ export default function HomeScreen() {
   }, [entered, hasPending, load]);
 
   const onCategoryChange = (cat: string) => {
-    // Clear the query first. Search is global while a category is a filter, so
-    // leaving a query active meant `displayList` kept returning search results
-    // and the freshly-loaded category was fetched and then ignored — picking a
-    // category simply appeared to do nothing.
-    setSearch('');
-    setSearchResults(null);
-    setSearching(false);
     setActiveCategory(cat);
     setLoading(true);
     load(cat);
   };
 
-  /** Widen an unproductive in-category search to the whole library WITHOUT
-   *  dropping the query (onCategoryChange clears it; this keeps it and re-scopes). */
-  const searchEverywhere = () => {
-    setActiveCategory('all');
-    setLoading(true);
-    load('all');
-  };
-
-  /** Back to the landing view. Must clear the session flag as well as local
-   *  state: `entered` is seeded from that flag on every mount, so without this
-   *  the next remount (opening a reel and coming back, returning from /save)
-   *  silently dropped the user back into the library and Home looked broken. */
-  const goHome = () => {
-    clearEnteredLibrary();
-    setSearch('');
-    setSearchResults(null);
-    setActiveCategory('all');
-    setEntered(false);
-  };
-
-  const inSearchMode = search.trim().length > 0;
-  const displayList = inSearchMode ? (searchResults ?? []) : reels;
+  // ⚠️ A local `goHome()` used to live here for a header Home button that round
+  // five removed. Going home is now the tab bar's job — TabBar.tsx and
+  // HomeButton.tsx both call `clearEnteredLibrary()` and emit `libraryState`,
+  // which the subscription above turns into `setEntered(false)`. Do not add a
+  // second copy of that logic here.
 
   /**
    * Distribute tiles into columns, shortest-column-first.
@@ -212,7 +139,7 @@ export default function HomeScreen() {
     const cols: { reel: Reel; aspect: number; idx: number }[][] =
       Array.from({ length: numColumns }, () => []);
     const heights = new Array(numColumns).fill(0);
-    displayList.forEach((reel, idx) => {
+    reels.forEach((reel, idx) => {
       const aspect = aspectFor(reel);
       let shortest = 0;
       for (let i = 1; i < numColumns; i++) if (heights[i] < heights[shortest]) shortest = i;
@@ -220,7 +147,7 @@ export default function HomeScreen() {
       heights[shortest] += 1 / aspect;   // height in width-units
     });
     return cols;
-  }, [displayList, numColumns]);
+  }, [reels, numColumns]);
 
   if (!entered) {
     return <Landing onEnter={() => { markEnteredLibrary(); setEntered(true); }} />;
@@ -237,12 +164,10 @@ export default function HomeScreen() {
         style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
       />
       {/* ── Header ───────────────────────────────────────────────────────────
-          The wordmark, a count, and three square hairline buttons. No logo
-          mark, no gradient, no shadow — the header is metadata about the sheet
-          below it and speaks in the same small tracked voice. */}
-      {/* Header. Home and Save used to live here as buttons; both are tabs now,
-          so all that remains is identity and the hamburger the owner wants on
-          every page. */}
+          Identity, a count, and the hamburger the owner wants on every page.
+          Home and Save used to live here too; both are tabs now. No logo mark,
+          no gradient, no shadow — the header is metadata about the sheet below
+          it and speaks in the same small tracked voice. */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <View style={styles.brandRow}>
           <Wordmark size={26} />
@@ -256,7 +181,13 @@ export default function HomeScreen() {
       </View>
 
       {/* The search field used to sit here. Replaced (owner, 2026-08-09) with a
-          rolling list of what the library can actually do for a save. */}
+          rolling list of what the library can actually do for a save.
+          ⚠️ There is now NO search entry point anywhere in the app, so the
+          server's smart search — `backend/app/services/search.py`,
+          `GET /api/reels/search`, `tests/test_smart_search.py` — is unreachable
+          from the client. `api.searchReels()` is kept as the seam to wire a new
+          entry point back to; it has no other caller. Either give search a home
+          or delete that whole vertical. See TODO.md. */}
       <RollingTagline
         compact
         shuffle
@@ -314,26 +245,21 @@ export default function HomeScreen() {
           <Body style={styles.emptyText}>{error}</Body>
           <GhostButton label="Retry" onPress={() => { setLoading(true); load(); }} style={styles.emptyCta} />
         </View>
-      ) : searching ? (
-        <ActivityIndicator color={colors.textPrimary} style={styles.loader} size="large" />
-      ) : displayList.length === 0 ? (
+      ) : reels.length === 0 ? (
         <View style={styles.empty}>
-          <Label wide>{inSearchMode ? 'No matches' : 'Empty sheet'}</Label>
+          <Label wide>Empty sheet</Label>
           <Title style={styles.emptyTitle}>
-            {inSearchMode ? 'Nothing found' : 'Nothing saved yet'}
+            {activeCategory === 'all' ? 'Nothing saved yet' : `Nothing in ${activeCategory}`}
           </Title>
           <Body style={styles.emptyText}>
-            {inSearchMode
-              ? (activeCategory !== 'all'
-                  ? `No matches for "${search.trim()}" in ${activeCategory}. It may be filed under a different category.`
-                  : `No results for "${search.trim()}".`)
-              : 'Save your first link and the summary appears in seconds.'}
+            {activeCategory === 'all'
+              ? 'Save your first link and the summary appears in seconds.'
+              : 'Saves you expected here may be filed under a different category.'}
           </Body>
-          {inSearchMode && activeCategory !== 'all' && (
-            <GhostButton label="Search all categories" onPress={searchEverywhere} style={styles.emptyCta} />
-          )}
-          {!inSearchMode && (
+          {activeCategory === 'all' ? (
             <GhostButton label="Save your first link" trailing="→" onPress={() => router.push('/save')} style={styles.emptyCta} />
+          ) : (
+            <GhostButton label="Show all categories" onPress={() => onCategoryChange('all')} style={styles.emptyCta} />
           )}
         </View>
       ) : (
@@ -369,7 +295,7 @@ export default function HomeScreen() {
             // screen-and-a-half of the bottom.
             const nearBottom =
               contentOffset.y + layoutMeasurement.height >= contentSize.height - layoutMeasurement.height * 1.5;
-            if (nearBottom && !inSearchMode) loadMore();
+            if (nearBottom) loadMore();
           }}
           refreshControl={
             <RefreshControl
@@ -422,7 +348,6 @@ const styles = themed(() => StyleSheet.create({
   },
   brandRow: { gap: 2 },
   count: { marginBottom: 2 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   // Square hairline. No fill, no radius, no shadow.
   hBtn: {
     width: 36, height: 36,
@@ -482,8 +407,6 @@ const styles = themed(() => StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
   },
-  loader: { marginTop: spacing.xxl },
-
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { textAlign: 'center' },
   emptyText: { textAlign: 'center', maxWidth: 380 },
@@ -497,14 +420,5 @@ const styles = themed(() => StyleSheet.create({
     borderBottomColor: colors.ghostLine,
     height: 42,
     marginBottom: spacing.sm,
-  },
-  searchInput: {
-    flex: 1,
-    color: colors.textPrimary,
-    fontFamily: typeface.body,
-    fontSize: font.md,
-    // RN-web puts a focus ring on inputs; the system draws focus with the rule
-    // underneath instead.
-    outlineStyle: 'none' as any,
   },
 }));

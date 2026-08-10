@@ -815,7 +815,31 @@ code has been modified yet.
 - [x] **Fix Workout Plan Rest-Time Contrast (Bug 1)** — root cause was NOT the plan screen (`workout/[reelId].tsx` rest tag was already on `textTertiary`/`textSecondary` and fine). It was `workout/session/[reelId].tsx` `restCount`, the 110px countdown, styled `colors.onAction` — which **is** the page background in both schemes, so it rendered near-black on the dark canvas and white-on-white in light. Now `colors.textPrimary`.
 - [x] **Fix Navigation Tab Active Indicator Collision (Bug 2)** — ⚠️ **the prescribed fix was for a bug that didn't exist.** `TabBar` already exact-matched the root (`pathname === '/' || pathname === '/index'`); there was no `startsWith('/')` collision. The real cause: Home and Library **share** the route `/` and are distinguished by a session flag, so `usePathname()` never changes between them — and `TabBar` emitted `libraryState` for the route to consume but **never subscribed to it itself**, so nothing re-rendered the bar. Fixed by subscribing (`useEffect(() => onUi('libraryState', bumpActive), [])`). The `/`-exact guard was also applied to `HIDE_ON` defensively, but it is a no-op today — `HIDE_ON` contains no `/` entry.
 - [x] **Remove Library Header Search Option (Feature Change 3)** — `<TextInput>` search row deleted from `app/index.tsx`, replaced by memoized `RollingTagline` over `LIBRARY_CAPABILITIES` (module-level so the memo holds). Style keeps the old 42px footprint so the grid doesn't shift. Orphaned `Search`/`XCircle`/`TextInput` imports removed.
-- [ ] **Follow-up to Feature 3 — strip the dead search plumbing.** `app/index.tsx` still carries `search`/`searchResults`/`searching` state, the debounce effect, `searchEverywhere()`, and the `inSearchMode` empty states ("No matches", "Search all categories") — all now unreachable, ~50 lines. Left in place deliberately so the decision stays easy to reverse. **Also note: this removed the only entry point to the server-side smart search** (`app/services/search.py` — tokenizing, synonyms, category matching, relevance ranking). That backend feature is now unreachable from the app.
+- [x] **Follow-up to Feature 3 — dead search plumbing stripped (2026-08-10).** `app/index.tsx`
+  lost `search`/`searchResults`/`searching`, the debounce effect, `searchEverywhere()`, the
+  `searching` spinner branch, the `inSearchMode` empty states, the `displayList` alias and
+  the `!inSearchMode` guard on `loadMore` — every one provably unreachable, since no setter
+  ever wrote a non-empty query. Swept alongside it: the unused `KeyboardAvoidingView` import,
+  the `headerActions`/`searchInput`/`loader` styles, and a **local `goHome()` that had been
+  dead since round five** — going home is `TabBar.tsx`/`HomeButton.tsx`'s job now
+  (`clearEnteredLibrary()` + the `libraryState` emit the screen subscribes to); a comment
+  marks the spot so nobody adds a second copy. Net −78 lines.
+  ⚠️ **One behaviour change, deliberate — the dead code was masking a live bug.** Filtering
+  to a category with no saves fell through to the generic empty state and told a user with 66
+  saves "Nothing saved yet", offering "Save your first link". It now reads "Nothing in
+  {category}" with a **Show all categories** button. Verified live by stubbing an empty
+  category response.
+  **Verified:** typecheck clean, `expo export --platform web` clean, library exercised live
+  against the real 66-save dev account (grid, category switching, empty-category state and
+  its recovery button).
+- [ ] ⚠️ **DECIDE: give search a home, or delete the whole vertical.** With the header field
+  gone there is **no search entry point anywhere in the app**, so `backend/app/services/search.py`
+  (tokenizing, stopwords, synonym groups, category matching, relevance ranking),
+  `GET /api/reels/search` and `tests/test_smart_search.py` are code that runs in CI and can
+  never be reached by a user. `mobile/services/api.ts::searchReels()` was **kept on purpose**
+  as the seam — it now has zero callers and is the one line to wire a new entry point back to.
+  Half-keeping it is the worst of the three options: either search gets a surface (a header
+  icon that expands, or a tab) or that backend vertical comes out. Owner's call.
 - [x] **Implement Ask Screen Focus Hand-Off (Feature Change 4)** — Home card now renders an animated, high-emphasis `ASK YOUR LIBRARY` (MotiView fade/rise, no loop) instead of the static save count; `ask.tsx` focuses its input via a ref on a 350 ms timer rather than `autoFocus`, because focusing mid-push-transition is the case where iOS shows a caret but never raises the keyboard.
 - [x] **MockReel tiles now render in BOTH schemes (2026-08-10)** — the wall was
   always mounted and always drifting in both; what was missing was the *scenes*.
@@ -836,6 +860,8 @@ code has been modified yet.
   are what keeps the wordmark legible, and the scenes read without moving them.
   **Verified live** at 375×812 in both schemes: typecheck clean,
   `expo export --platform web` clean.
+- [ ] **Remove ASK YOUR LIBRARY button on landing page** - completely remove the ask you library button, not hide just completely remove along with the code. Once you remove it do a visual verification and code base to confirm the completely removed code.
+- [ ] **Bug: Go Pro is enable even for Pro user for sometime after login** - I have noticed that the GO PRO button is enabled for pro user after loggin in, its remove later after sometime, i belive the code is not properly placed or checking before logging to show that button or not. go ahead test the existing code in sub agent if required and fix the profile panel code. test and verify
 
 
 
