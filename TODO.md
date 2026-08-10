@@ -817,7 +817,25 @@ code has been modified yet.
 - [x] **Remove Library Header Search Option (Feature Change 3)** — `<TextInput>` search row deleted from `app/index.tsx`, replaced by memoized `RollingTagline` over `LIBRARY_CAPABILITIES` (module-level so the memo holds). Style keeps the old 42px footprint so the grid doesn't shift. Orphaned `Search`/`XCircle`/`TextInput` imports removed.
 - [ ] **Follow-up to Feature 3 — strip the dead search plumbing.** `app/index.tsx` still carries `search`/`searchResults`/`searching` state, the debounce effect, `searchEverywhere()`, and the `inSearchMode` empty states ("No matches", "Search all categories") — all now unreachable, ~50 lines. Left in place deliberately so the decision stays easy to reverse. **Also note: this removed the only entry point to the server-side smart search** (`app/services/search.py` — tokenizing, synonyms, category matching, relevance ranking). That backend feature is now unreachable from the app.
 - [x] **Implement Ask Screen Focus Hand-Off (Feature Change 4)** — Home card now renders an animated, high-emphasis `ASK YOUR LIBRARY` (MotiView fade/rise, no loop) instead of the static save count; `ask.tsx` focuses its input via a ref on a 350 ms timer rather than `autoFocus`, because focusing mid-push-transition is the case where iOS shows a caret but never raises the keyboard.
-- [ ] **make sure the mockreel tiles been shown in both light and dark modes** - Make the mockreel run on login page for dark and light modes.
+- [x] **MockReel tiles now render in BOTH schemes (2026-08-10)** — the wall was
+  always mounted and always drifting in both; what was missing was the *scenes*.
+  `MockReel.tsx` declared a scheme-aware `alpha()` ramp and then ignored it in the
+  StyleSheet, hardcoding `rgba(0,0,0,…)` for all 12 scene primitives (plus a white
+  `hSun`). In light that happens to read — black silhouettes on a pale well. In
+  dark it is black on a faintly-lit well under the 0.74 scrim, i.e. nothing: the
+  login wall showed bare card outlines and no compositions at all. Every primitive
+  now goes through `alpha()`, so the vocabulary actually inverts as the docstring
+  always claimed. The `hSun` highlight follows the ink too (bright disc in dark,
+  dark disc in light) rather than being white in both. **The play glyph was broken
+  in BOTH schemes** and is the same class of bug: `borderLeftColor:
+  colors.background` is a knockout, which only works when the well is far from the
+  canvas tone — it never is here, so the arrow was white-on-pale in light and
+  near-black-on-near-black in dark; it is `alpha(0.9)` now. The sheet is built
+  inside `themed()`, so the factory re-runs on `setScheme` and the tiles re-tint
+  live. Scrim opacities (`0.74` dark / `0.42` light) deliberately untouched — they
+  are what keeps the wordmark legible, and the scenes read without moving them.
+  **Verified live** at 375×812 in both schemes: typecheck clean,
+  `expo export --platform web` clean.
 
 
 

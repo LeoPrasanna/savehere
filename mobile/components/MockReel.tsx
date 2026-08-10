@@ -35,6 +35,13 @@ const KINDS: Kind[] = ['portrait', 'horizon', 'topdown', 'product', 'skyline', '
  * Monochrome ramp. Every tone is the ink colour at some opacity over the card,
  * so the whole scene vocabulary inverts with the colour scheme instead of being
  * hardcoded greys that would glow in light mode.
+ *
+ * ⚠️ 2026-08-10: the scene PRIMITIVES below used to ignore this and hardcode
+ * `rgba(0,0,0,…)`, which made the docstring above a lie. In light that reads
+ * (black silhouettes on a pale well); in dark it is black on a faintly-lit well
+ * under a 0.74 scrim — i.e. nothing. The wall had scenes in one scheme only.
+ * Every tone now goes through `alpha()`, and because the sheet is built inside
+ * `themed()` the factory re-runs on `setScheme`, so they re-tint live.
  */
 function alpha(a: number): string {
   return getColorScheme() === 'dark'
@@ -211,8 +218,11 @@ const styles = themed(() => StyleSheet.create({
     width: 0, height: 0,
     borderTopWidth: 5, borderBottomWidth: 5, borderLeftWidth: 9,
     borderTopColor: 'transparent', borderBottomColor: 'transparent',
-    borderLeftColor: colors.background,
-    opacity: 0.85,
+    // Was `colors.background` — a knockout, which only works if the well is far
+    // from the canvas tone. It isn't in either scheme, so the arrow disappeared
+    // (white-on-pale in light, near-black-on-near-black in dark). It is the
+    // brightest ink mark on the card instead.
+    borderLeftColor: alpha(0.9),
   },
 
   reelFoot: { gap: spacing.sm },
@@ -227,25 +237,28 @@ const styles = themed(() => StyleSheet.create({
   // ── Scene primitives ──
   fill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
 
-  pHead: { position: 'absolute', top: '18%', width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.55)' },
-  pBody: { position: 'absolute', top: '46%', width: 46, height: '54%', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: 'rgba(0,0,0,0.55)' },
+  pHead: { position: 'absolute', top: '18%', width: 22, height: 22, borderRadius: 11, backgroundColor: alpha(0.55) },
+  pBody: { position: 'absolute', top: '46%', width: 46, height: '54%', borderTopLeftRadius: 24, borderTopRightRadius: 24, backgroundColor: alpha(0.55) },
 
-  hSun: { position: 'absolute', top: '20%', width: 16, height: 16, borderRadius: 8, backgroundColor: 'rgba(255,255,255,0.5)' },
-  hLine: { position: 'absolute', top: '58%', left: 0, right: 0, height: 1, backgroundColor: 'rgba(0,0,0,0.35)' },
-  hRidge: { position: 'absolute', top: '50%', width: '80%', height: 26, borderTopLeftRadius: 40, borderTopRightRadius: 60, backgroundColor: 'rgba(0,0,0,0.4)' },
+  // The sun is the one HIGHLIGHT in the vocabulary, so it sits above the sky
+  // wash rather than opposite it — a bright disc in dark, a dark one in light.
+  // Hardcoding white made it a glowing dot on a pale sky in light mode.
+  hSun: { position: 'absolute', top: '20%', width: 16, height: 16, borderRadius: 8, backgroundColor: alpha(0.6) },
+  hLine: { position: 'absolute', top: '58%', left: 0, right: 0, height: 1, backgroundColor: alpha(0.35) },
+  hRidge: { position: 'absolute', top: '50%', width: '80%', height: 26, borderTopLeftRadius: 40, borderTopRightRadius: 60, backgroundColor: alpha(0.4) },
 
-  tOuter: { width: 46, height: 46, borderRadius: 23, borderWidth: 2, borderColor: 'rgba(0,0,0,0.4)' },
-  tInner: { position: 'absolute', width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(0,0,0,0.18)' },
-  tSwirl: { position: 'absolute', width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: 'rgba(0,0,0,0.3)', borderRightColor: 'transparent' },
+  tOuter: { width: 46, height: 46, borderRadius: 23, borderWidth: 2, borderColor: alpha(0.4) },
+  tInner: { position: 'absolute', width: 30, height: 30, borderRadius: 15, backgroundColor: alpha(0.18) },
+  tSwirl: { position: 'absolute', width: 18, height: 18, borderRadius: 9, borderWidth: 1.5, borderColor: alpha(0.3), borderRightColor: 'transparent' },
 
-  prShadow: { position: 'absolute', bottom: '22%', width: '52%', height: 5, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.28)' },
-  prBody: { width: 34, height: 40, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.5)' },
-  prChip: { position: 'absolute', top: '30%', right: '22%', width: 12, height: 12, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.35)' },
+  prShadow: { position: 'absolute', bottom: '22%', width: '52%', height: 5, borderRadius: 3, backgroundColor: alpha(0.28) },
+  prBody: { width: 34, height: 40, borderRadius: 8, backgroundColor: alpha(0.5) },
+  prChip: { position: 'absolute', top: '30%', right: '22%', width: 12, height: 12, borderRadius: 3, backgroundColor: alpha(0.35) },
 
   skRow: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '70%', flexDirection: 'row', alignItems: 'flex-end', gap: 3, paddingHorizontal: 4 },
-  skBar: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)' },
+  skBar: { flex: 1, backgroundColor: alpha(0.45) },
 
   tlStack: { width: '74%', gap: 5 },
-  tlBar: { height: 5, backgroundColor: 'rgba(0,0,0,0.45)' },
-  tlRule: { height: 1, marginTop: 3, backgroundColor: 'rgba(0,0,0,0.3)' },
+  tlBar: { height: 5, backgroundColor: alpha(0.45) },
+  tlRule: { height: 1, marginTop: 3, backgroundColor: alpha(0.3) },
 }));
