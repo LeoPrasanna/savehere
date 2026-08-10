@@ -21,9 +21,23 @@ Blueprint apply). See [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) and
 
 ### ⚠️ Open decisions — need the owner, don't guess
 
-1. **Tier caps were discussed but NEVER applied.** Owner proposed Pro **25**/day,
-   Trial **10**/day, Free **3**/day. `config.py` still ships `AI_DAILY_LIMIT=30`
-   (trial), `AI_PRO_DAILY_LIMIT=100`, `AI_FREE_DAILY_LIMIT=3`. Decide, then change.
+1. ✅ **RESOLVED 2026-08-10 — tier caps applied.** Pro **20**/day, Trial **10**/day,
+   Free **3**/day, live in `config.py` (`AI_PRO_DAILY_LIMIT=20`, `AI_DAILY_LIMIT=10`,
+   `AI_FREE_DAILY_LIMIT=3`) and `.env.example`. Trial/free had already been applied
+   on 2026-07-27 — this entry's claim that config "still ships 30/100/3" was stale;
+   only Pro moved (20 → 25 → 15 → **20**, settled same day).
+   ⚠️ **The last move was a deliberate cross-subsidy, not a fix.** 15 was raised to
+   20 to be generous in India; raising the cap makes the INR shortfall *wider*, not
+   narrower, since the cap IS the worst case. Owner accepted that and intends to
+   cover it from US margin, revisiting when the 6-month intro offer expires.
+   ⚠️ **Pro is only 2x the trial's 10/day**, so the upgrade story rests on
+   **feature** gating (ask / tasks / itinerary are Pro-only post-trial), not the cap.
+   First thing to revisit if conversion disappoints.
+   ⚠️ `tests/test_entitlements.py` hardcoded 10/3/20 and broke on the change; it now
+   asserts against `settings.*` because those cases test the tier→limit **mapping**,
+   not the numbers. Retuning a cap should never turn a test red again.
+   ⚠️ Render env vars override these per service — check the dashboard before
+   assuming staging/prod match the code.
 2. **Ask-unlock threshold mismatch.** Code uses `ASK_MIN_REELS = 3`
    (`mobile/components/Landing.tsx`); the 2026-07-20 decision said **5**. It now
    ALSO drives the home screen's state ladder, so the two must be one number.
@@ -32,10 +46,36 @@ Blueprint apply). See [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) and
    gated vs ~7.8% without**; typical freemium conversion is 2–5%, so ungated is
    likely never profitable. Not implemented. Plumbing exists (`failed` → retry is
    already click-to-generate).
-4. **Pricing not set.** Study recommended **₹149/mo · $5.99/mo · €6.99/mo**. ₹99 is
-   underwater — it barely covers a pro user's own AI cost, leaving nothing for the
-   free-tier drag. Pro's 100/day cap is too generous at these price points (~15–25/day
-   suggested). Details in "Pricing & Monetization" below.
+4. ✅ **RESOLVED 2026-08-10 — prices set by the owner, study overridden.**
+   **₹25/week · ₹99/month** (India) and **$1.99/week · $7/month** (everywhere else),
+   stated as a 6-month commitment, paired with Pro = 20 AI/day. Live in
+   `mobile/constants/pricing.ts`.
+   ✅ **Side effect: the inverted INR badge is fixed.** ₹20/wk was ₹86.96/mo — the
+   monthly was the worse deal and `savingPct()` refused to render. At ₹25/wk the
+   monthly saves ~9% (USD ~19%), so both storefronts show a truthful badge.
+   ⚠️ **Accepted knowingly: ₹99 does not cover a maxed INR Pro user.** 20/day at
+   ~$0.004/action is ~$2.43/mo worst case; $7 nets $5.95 after Apple's 15% and
+   clears it ~2.4x, ₹99 nets ~$0.96 and does not (~2.5x underwater). Bounded per
+   user, and the Anthropic console cap is the hard ceiling. ₹99 breaks even at
+   ~8/day.
+   **Watch item:** read the real p50/p95 of `ai_usage.count` for INR Pro users
+   before renewing past 6 months; the fix, if needed, is a storefront-specific tier
+   (`daily_limit_for` already branches on tier), not a price edit.
+   ✅ **"6 months" = an Apple Introductory Offer** (owner, 2026-08-10): **₹99/month
+   for 6 months, then ₹120**. Configured in App Store Connect + RevenueCat, not in
+   code. Apple grants one intro offer per customer per subscription group, so a
+   returning subscriber pays standard price.
+   ✅ **The app-side obligation — disclosure — is now met.** `app/pro.tsx` had
+   "Auto-renews monthly at ₹99 until cancelled" **hardcoded at two sites**, which
+   the offer makes a false statement and an App Store review item (intro price,
+   duration and standard price must all appear on the purchase screen). Both call
+   the new `renewalTerms()` in `constants/pricing.ts`; `Plan` gained `introMonths`,
+   with `wasPrice` doubling as the revert price.
+   ⚠️ **Two intro prices still unset, deliberately not guessed:** the **USD monthly
+   revert price** (₹99→₹120 is a 17.5% discount; the analogue is ~$8.49) and
+   whether the **weekly** plans carry an offer at all. A plan without `introMonths`
+   renders the plain renewal sentence, which is true for a plan with no offer — so
+   the gap is safe, just incomplete. Needed before App Store Connect setup.
 
 ### Recommended next steps, in order
 
@@ -164,7 +204,7 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
 
 ## Security & Cost Control
 
-- [x] **Per-user AI quota (the real cost ceiling + paywall lever)** — worst-case Claude spend is bounded by a **per-user, DB-backed daily quota** (`app/quota.py` + `ai_usage` table; routes call `charge_ai_action(db, user)`), shared across **every** AI action (ask/tasks/workout/(re)summarize) and keyed on the Supabase user id. Replaces the old per-IP 15/day ask cap; survives restarts/redeploys and can't be bypassed by rotating IPs. **Race-safe:** the charge is a single atomic conditional `UPDATE ... WHERE count < limit`, so concurrent calls can't overshoot (correct on SQLite *and* Postgres, multi-instance). **Tier-aware:** `daily_limit_for(user)` reads the tier from the JWT's server-set `app_metadata.tier` claim — `free`→`AI_DAILY_LIMIT` (30), `pro`→`AI_PRO_DAILY_LIMIT` (100, placeholder). ⚠️ Remaining = owner/launch: the RevenueCat/IAP webhook must write `app_metadata.tier="pro"` on purchase + finalize the pro number (no quota code change).
+- [x] **Per-user AI quota (the real cost ceiling + paywall lever)** — worst-case Claude spend is bounded by a **per-user, DB-backed daily quota** (`app/quota.py` + `ai_usage` table; routes call `charge_ai_action(db, user)`), shared across **every** AI action (ask/tasks/workout/(re)summarize) and keyed on the Supabase user id. Replaces the old per-IP 15/day ask cap; survives restarts/redeploys and can't be bypassed by rotating IPs. **Race-safe:** the charge is a single atomic conditional `UPDATE ... WHERE count < limit`, so concurrent calls can't overshoot (correct on SQLite *and* Postgres, multi-instance). **Tier-aware:** `daily_limit_for(user)` reads the tier from the JWT's server-set `app_metadata.tier` claim — trial→`AI_DAILY_LIMIT` (10), free→`AI_FREE_DAILY_LIMIT` (3), `pro`→`AI_PRO_DAILY_LIMIT` (20 — finalized 2026-08-10). ⚠️ Remaining = owner/launch: the RevenueCat/IAP webhook must write `app_metadata.tier="pro"` on purchase (no quota code change).
 - [~] **Per-IP rate limiting (burst guard)** — per-IP sliding-window burst limits remain on save/resummarize/ask/tasks/workout (`app/ratelimit.py`) as an anti-loop guard beneath the per-user quota. ⚠️ In-memory + per-process: move the store to Redis for multiple instances (the quota itself is already DB-backed + atomic, so it's multi-instance-safe today). **Decision 2026-07-20: Redis is NOT needed yet** — `render.yaml`'s `startCommand` runs a single uvicorn worker on a single instance, so one in-memory bucket is correct. Redis becomes required only on horizontal scale (each instance would otherwise get its own bucket, multiplying the effective limit by N). Free options exist when that day comes (Upstash, Render Key Value), so this is not a cost blocker. **Test hygiene note:** `/api/ask` + `/api/ask/stream` share one process-global bucket while TestClient presents a single IP — suite-order traffic can 429 unrelated tests, so quota/gating fixtures clear `ratelimit._store`.
 - [x] **Ask-your-library cost reduction** — `librarian.ask_library` now retrieves only the top-N most relevant saves (term-overlap scoring, title/tags weighted) instead of dumping up to 60 into every prompt. The per-user quota runs comfortably at 30/day (`AI_DAILY_LIMIT`). *(Next-level: embeddings-based retrieval for semantic matches.)*
 - [x] **Ask-your-library streaming + latency trim** — measured the ask wait: retrieval is ~15 ms, the Claude call is the whole cost (TTFT ~1.4 s + generation ~1.9 s). Fixes: (1) `POST /api/ask/stream` streams the answer token-by-token via `librarian.stream_answer` + FastAPI `StreamingResponse` — first words at ~1.4 s instead of a ~3 s wall of silence; sources are computed from the finished answer (`sources_from_answer`, title-mention match) so no JSON envelope blocks streaming; (2) trimmed the prompt (TOP_N 15→12, per-item caps, max_tokens 500→400) — cut input ~35%, lowering TTFT and cost. Mobile uses **XMLHttpRequest** (incremental `responseText` works identically on RN native and web, unlike `fetch`), rendering tokens live with a caret. The non-streaming `/api/ask` stays for compatibility/tests.
@@ -477,18 +517,22 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
   on digital goods; a raw card form would fail review anyway), whose webhook writes
   `app_metadata.tier = "pro"` — the value `app/quota.py::daily_limit_for` already
   reads, so no quota code changes.
-  ⚠️ **THE INR PRICING IS UPSIDE DOWN.** Owner-specified: ₹20/week, ₹120→₹99/month;
-  $2/week, $7/month. ₹20/week is **₹86.96/month** at 4.348 weeks — so the ₹99
-  monthly plan is the WORSE deal, while the same pair in USD saves 19%.
-  `savingPct()` in `constants/pricing.ts` computes the real number and returns
-  null when there is no saving, so the UI **physically cannot** render a false
-  "SAVE X%" badge. Fix the prices, not the badge: ₹99/mo needs weekly at ~₹30 to
-  read as a discount.
-  ⚠️ **Still contradicts the cost study** (2026-07-24, see "Pricing & Monetization"):
-  it put break-even at ~4.2% conversion and recommended **₹149/mo**, calling ₹99
-  "underwater — it barely covers a pro user's own AI cost". If ₹99 ships,
-  `AI_PRO_DAILY_LIMIT` (currently 100) has to come down with it or every Pro user
-  is a loss. **Owner decision, unresolved.**
+  ✅ **PRICES SET 2026-08-10 (owner):** ₹25/week, ₹120→₹99/month; $1.99/week,
+  $7/month — paired with Pro = 20 AI/day, ₹99 being a 6-month Apple Introductory
+  Offer that reverts to ₹120. The INR pair used to be **upside down**
+  (₹20/week = ₹86.96/month, so the ₹99 monthly was the WORSE deal and
+  `savingPct()` correctly refused to render a badge). At ₹25 the monthly saves
+  ~9%, USD ~19%, so both storefronts now show a truthful badge. `savingPct()`
+  still computes from the real prices and returns null when there is no saving —
+  the UI **physically cannot** render a false "SAVE X%". Keep it that way.
+  ⚠️ **The cost study is overridden, not satisfied** (2026-07-24, see "Pricing &
+  Monetization"): it put break-even at ~4.2% conversion and recommended ₹149/mo,
+  calling ₹99 "underwater". Owner chose volume. Concretely: 20/day at
+  ~$0.004/action is ~$2.43/mo worst case — $7 nets $5.95 after Apple's 15% and
+  clears it; ₹99 nets ~$0.96 and does not (~2.5x). Accepted as a bounded per-user
+  loss, cross-subsidised from US margin.
+  **Watch item before renewing past 6 months:** the real p50/p95 of
+  `ai_usage.count` for INR Pro users.
   **Remaining:** RevenueCat + StoreKit/Play Billing integration; real restore-
   purchases; server-side receipt validation; the tier webhook.
 
@@ -728,8 +772,10 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
   - **US / high-income:** ~$4.99/mo, ~$34.99/yr (margin lever)
   - **EU:** ~€5.99/mo, ~€39.99/yr (price up vs US — displayed price is VAT-inclusive, ~20%)
   - **India + PPP-low countries:** **₹99/mo**, **₹799–₹999/yr** (volume lever)
-- [ ] **India first-purchase promo** — Apple **Introductory Offer** (pay-as-you-go): **₹59/mo for the first 3 months, then ₹99/mo**, India storefront only, auto-renewing. Apple's required pre-renewal notice = the "ask to renew," handled automatically. Optionally also mint a custom **Offer Code `SAVEHEREFIRST`** for marketing/launch buzz (same ₹59×3 deal). ⚠️ Don't make it 3 months *free* (token cost + abuse) and don't use a non-renewing product (worse retention).
-- [ ] **Price ↔ AI-cap pairing rule** — `[Certain]` net revenue per user must stay ≥ their token cost. ₹99 is the lowest price safe at the current 30/day AI cap (even at Apple's 30%). To go lower (₹49–₹79) the India tier needs a **tighter AI cap** (~7–10/day). The per-user quota is now **tier-aware** (`daily_limit_for(user)` reads `app_metadata.tier`; limits via `AI_DAILY_LIMIT`/`AI_PRO_DAILY_LIMIT`) — so a cheaper, tighter-capped tier just needs (a) a new limit constant and (b) the IAP/RevenueCat webhook stamping the tier on the user. Until tiers are sold the free limit is global, so ₹99 is the floor.
+- [ ] **India first-purchase promo — RESPECIFIED 2026-08-10: ₹99/mo for the first 6 months, then ₹120/mo** (was ₹59×3→₹99; the owner set ₹99 as the intro price and ₹120 as standard). Apple **Introductory Offer** (pay-as-you-go), India storefront, auto-renewing. Encoded app-side as `introMonths: 6` + `wasPrice: 120` in `mobile/constants/pricing.ts` and disclosed via `renewalTerms()`; the offer itself is App Store Connect + RevenueCat config. ⚠️ One intro offer per customer per subscription group — a returning subscriber pays ₹120. ⚠️ **Still needed:** the USD monthly revert price (~$8.49 mirrors the 17.5% INR discount) and a decision on whether the weekly plans get an offer.
+  <!-- superseded, kept for the reasoning: -->
+  ~~Apple **Introductory Offer** (pay-as-you-go): **₹59/mo for the first 3 months, then ₹99/mo**, India storefront only, auto-renewing.~~ Apple's required pre-renewal notice = the "ask to renew," handled automatically. Optionally also mint a custom **Offer Code `SAVEHEREFIRST`** for marketing/launch buzz (same ₹59×3 deal). ⚠️ Don't make it 3 months *free* (token cost + abuse) and don't use a non-renewing product (worse retention).
+- [~] **Price ↔ AI-cap pairing rule** — `[Certain]` net revenue per user must stay ≥ their token cost. **As of the 2026-08-10 decision this rule holds in USD and is knowingly broken in INR:** Pro = 20/day ≈ $2.43/mo worst case at ~$0.004/action; $7 nets $5.95 after Apple's 15% ✅, ₹99 nets ~$0.96 ❌ (~2.5x underwater, accepted as a cross-subsidy). ₹99 pairs safely with ~**8/day**. Going lower still (₹49–₹79) would need ~4–5/day. The per-user quota is now **tier-aware** (`daily_limit_for(user)` reads `app_metadata.tier`; limits via `AI_DAILY_LIMIT`/`AI_PRO_DAILY_LIMIT`) — so a cheaper, tighter-capped tier just needs (a) a new limit constant and (b) the IAP/RevenueCat webhook stamping the tier on the user. Until tiers are sold the free limit is global, so ₹99 is the floor.
 - [~] **Tiers — mechanics BUILT (branch `feat/tier-system`), billing pending** — server-side entitlements (`app/entitlements.py`, the single source of truth): **trial** (TRIAL_DAYS=10 from first authenticated request, 30 AI/day, unlimited saves) → **free** (trickle: 3 AI/day + 20-save cap on NEW saves; library/view/search never lock; deleting below the cap re-opens saving) → **pro** (100 AI/day, unlimited; `app_metadata.tier` stamped via `backend/scripts/set_tier.py` — deliberately a script, not an endpoint). **Loophole containment:** trial clock lives in a `profiles` row (client can't forge it) and is keyed to a SHA-256 of the normalized email (`trial_grants`, survives account deletion; gmail dots/+tags collapsed) so re-signup CONTINUES the original trial instead of resetting it. Accepted residues: brand-new emails still mint trials (fixed economically by Apple IAP at launch); JWT downgrade staleness ≤1 h (~$0.15 worst case); save cap is soft under concurrent saves. Referrals deferred (fraud surface > value pre-launch) — `trial_extra_days` is the ready seam; onboarding copy no longer promises them. 18 tests in `tests/test_entitlements.py`. **Remaining at launch:** RevenueCat webhook (signature-verified, idempotent) replaces the script; finalize pro pricing/limits.
 - [~] **Feature gating: free = workout + recipe; ask/tasks/itinerary = Pro (decided 2026-07-20)** — **server side DONE (2026-07-20):** `Entitlements` carries `can_ask`/`can_tasks`/`can_itinerary` (trial + pro = all True; post-trial free = all False); `/api/ask` + `/api/ask/stream` and non-cooking `POST /reels/{id}/tasks` return 403 with `PRO_FEATURE_DETAIL` (cooking tasks = the recipe feature = stays free, workout stays free); gates fire BEFORE the quota charge so a refused call never costs an AI action; `GET /api/account/usage` exposes a `features` dict for the app's locked-button UI. Locked by `tests/test_feature_gating.py` (11 cases: tier × feature matrix, no-charge-on-403, usage flags). **Remaining = mobile:** locked-button-with-Pro-badge states driven by `usage.features` (cosmetic — server already enforces). Locked buttons must NOT link to web payment (anti-steering, India). **Trial keeps FULL access** — locks appear only after expiry. **Decision (same date): auto-summary stays ON for every tier** — cheapest AI action (~$0.005, Haiku) and the product's conversion moment; click-to-generate for post-trial free is a data-driven revisit only if summary spend dominates after launch (plumbing exists: `failed`→retry already IS click-to-generate). Known interaction: free users' 3/day quota is shared with auto-summaries.
 - [ ] **RevenueCat** — manage IAP entitlements + per-territory pricing + promo experiments across iOS/Android. Webhook endpoint is sketched + tested (`app/routes/billing.py`, `tests/test_billing.py`, 15 cases) but **not registered in `main.py`** — activation needs `REVENUECAT_WEBHOOK_TOKEN` set, the 2-line router include, and the mobile app calling `Purchases.logIn(supabaseUserId)` (without which every webhook lands in the ignored-anonymous branch).

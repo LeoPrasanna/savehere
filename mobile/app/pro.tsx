@@ -8,7 +8,7 @@ import { Icon } from '../components/Icon';
 import { Pressable } from '../components/Pressable';
 import { Label, Body, Title, Rule, Index, GhostButton, FilledButton, TextAction, Rail } from '../components/kit';
 import * as haptics from '../services/haptics';
-import { pricingForDevice, savingPct, money, PRO_BENEFITS, Plan } from '../constants/pricing';
+import { pricingForDevice, savingPct, money, renewalTerms, PRO_BENEFITS, Plan } from '../constants/pricing';
 import { colors, spacing, font, radius, tracking, typeface, themed } from '../constants/theme';
 
 /**
@@ -146,8 +146,7 @@ export default function ProScreen() {
 
           <FilledButton label="Continue" trailing="→" onPress={toPayment} style={styles.cta} />
           <Text style={styles.terms}>
-            No commitment. Cancel anytime. Auto-renews{' '}
-            {plan.cadence === 'week' ? 'weekly' : 'monthly'} until cancelled. Prices in {pricing.code}.
+            No commitment. Cancel anytime. {renewalTerms(pricing, plan)} Prices in {pricing.code}.
           </Text>
         </View>
       )}
@@ -237,8 +236,7 @@ export default function ProScreen() {
             <TextAction label="Privacy" onPress={() => haptics.tap()} />
           </View>
           <Text style={styles.terms}>
-            No commitment. Cancel anytime. Auto-renews{' '}
-            {plan.cadence === 'week' ? 'weekly' : 'monthly'} at {money(pricing, plan.price)} until cancelled.
+            No commitment. Cancel anytime. {renewalTerms(pricing, plan)}
           </Text>
         </View>
       )}

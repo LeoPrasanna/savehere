@@ -21,7 +21,12 @@ from app.database import Base, ReelDB, ProfileDB, TrialGrantDB, get_db
 from app.auth import get_current_user, AuthUser
 from app.entitlements import entitlements_for, normalize_email
 from app.quota import charge_ai_action
+from app.config import settings
 from fastapi import HTTPException
+
+# These assert the tier -> limit MAPPING, not the numbers themselves. The caps are
+# a business dial the owner retunes (30/100/3 -> 10/20/3 -> 10/15/3); hardcoding
+# them here means every retune breaks a test that was never about the value.
 
 NOW = datetime(2026, 7, 10, 12, 0, 0)
 
@@ -79,7 +84,7 @@ class TestEffectiveTier:
             ent = entitlements_for(AuthUser(id="u-new", email="a@b.co"), db)
             assert ent.tier == "trial"
             assert ent.save_limit is None
-            assert ent.ai_daily_limit == 10
+            assert ent.ai_daily_limit == settings.AI_DAILY_LIMIT
             assert ent.trial_ends_at is not None
         finally:
             db.close()
@@ -97,7 +102,7 @@ class TestEffectiveTier:
         try:
             ent = entitlements_for(AuthUser(id="u-old", email="old@b.co"), db)
             assert ent.tier == "free"
-            assert ent.ai_daily_limit == 3      # the trickle
+            assert ent.ai_daily_limit == settings.AI_FREE_DAILY_LIMIT   # the trickle
             assert ent.save_limit == 20
         finally:
             db.close()
@@ -109,7 +114,7 @@ class TestEffectiveTier:
             pro = AuthUser(id="u-pro", email="p@b.co", claims={"app_metadata": {"tier": "pro"}})
             ent = entitlements_for(pro, db)
             assert ent.tier == "pro"
-            assert ent.ai_daily_limit == 20
+            assert ent.ai_daily_limit == settings.AI_PRO_DAILY_LIMIT
             assert ent.save_limit is None
             assert ent.trial_ends_at is None
             # pro never creates a profile row (no trial clock needed)
@@ -292,7 +297,7 @@ class TestTrickleQuota:
         db = Session()
         try:
             pro = AuthUser(id="u-down", email="dn@b.co", claims={"app_metadata": {"tier": "pro"}})
-            for _ in range(20):
+            for _ in range(settings.AI_PRO_DAILY_LIMIT):
                 charge_ai_action(db, pro)
             free = AuthUser(id="u-down", email="dn@b.co")
             entitlements_for(free, db)
@@ -303,7 +308,8 @@ class TestTrickleQuota:
         try:
             free = AuthUser(id="u-down", email="dn@b.co")
             with pytest.raises(HTTPException) as exc:
-                charge_ai_action(db, free)       # 20 >= 3
+                # already at the pro cap, which is far above the free trickle
+                charge_ai_action(db, free)
             assert exc.value.status_code == 429
         finally:
             db.close()

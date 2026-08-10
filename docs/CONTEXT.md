@@ -98,12 +98,46 @@ alert-circle icon in `reel/[id].tsx`), not a `window.alert()`. Locked by
 - Est. per-ask cost ~**$0.0015** after retrieval (was ~$0.0055 when dumping 60 reels) `[Guessing on tokens]`.
 - **Per-user daily AI quota (Phase 5) ✓** — every AI action (ask/tasks/workout/(re)summarize) draws from one **per-user, DB-backed daily budget** keyed on the Supabase user id (`app/quota.py` + `ai_usage` table). Routes call `charge_ai_action(db, user)`. Replaces the old interim per-IP 15/day ask cap: it persists across restarts/redeploys and can't be bypassed by rotating IPs. A per-IP **burst** guard still sits beneath it (anti-loop). Charged *before* the call (a failed gen still cost tokens).
   - **Race-safe:** the charge is a single atomic conditional `UPDATE ... WHERE count < limit` (after an idempotent `INSERT ... ON CONFLICT DO NOTHING`), so concurrent requests can't overshoot the cap — correct on SQLite *and* Postgres, single- or multi-instance.
-  - **Tier-aware (the paywall lever):** `daily_limit_for(user)` reads `tier_for(user)` from the JWT's **`app_metadata.tier`** claim (server-set, so a user can't self-upgrade via `user_metadata`). `free` → `AI_DAILY_LIMIT` (30); `pro` → `AI_PRO_DAILY_LIMIT` (100, placeholder). **Remaining owner work:** the RevenueCat/IAP webhook must write `app_metadata.tier="pro"` on purchase, and the pro number gets finalized with pricing — no code change to the quota.
+  - **Tier-aware (the paywall lever):** `daily_limit_for(user)` reads `tier_for(user)` from the JWT's **`app_metadata.tier`** claim (server-set, so a user can't self-upgrade via `user_metadata`). trial → `AI_DAILY_LIMIT` (10); post-trial free → `AI_FREE_DAILY_LIMIT` (3); `pro` → `AI_PRO_DAILY_LIMIT` (20). **Caps finalized by the owner 2026-08-10** alongside pricing — see "Pricing" below for the INR shortfall that was accepted knowingly. **Remaining owner work:** the RevenueCat/IAP webhook must write `app_metadata.tier="pro"` on purchase — no code change to the quota.
 - Rule to never cross: **net revenue per user ≥ their token cost.** Price-down and cap-down are ONE lever.
 - **Tier mechanics (2026-07-10, `feat/tier-system`):** `app/entitlements.py` is the single source of truth — effective tier **trial** (10 d server-side clock, 30 AI/day) → **free** (3 AI/day trickle + 20-save cap on new saves; library never locks) → **pro** (100/day, unlimited; JWT `app_metadata.tier` stamped by `scripts/set_tier.py` until the RevenueCat webhook). Trial re-signup abuse contained by hashing the normalized email into `trial_grants` (survives account deletion → re-signup continues the old clock). Accepted residues: fresh emails mint fresh trials (Apple IAP fixes the economics at launch); ≤1 h downgrade lag (token TTL); soft save cap under concurrency.
 
-### Pricing (planned — see TODO "Pricing & Monetization")
-- Regional / PPP, three buckets: **US** ~$4.99/mo, $34.99/yr · **EU** ~€5.99/€39.99 (VAT-inclusive) · **India** ₹99/mo, ₹799–999/yr.
+### Pricing (DECIDED 2026-08-10 — see TODO "Pricing & Monetization")
+- **Owner-set launch prices:** **India** ₹25/week, ₹99/month · **everywhere else**
+  $1.99/week, $7/month. Paired with **Pro = 20 AI actions/day**
+  (`AI_PRO_DAILY_LIMIT`). Encoded in `mobile/constants/pricing.ts`; storefront is
+  picked by device locale (`/[-_]IN\b/` → INR, else USD).
+- **₹99/month is an Apple Introductory Offer: ₹99 for 6 months, then ₹120**
+  (owner, 2026-08-10). Configured in App Store Connect + RevenueCat, not in code;
+  the app's only obligation is disclosure, which `renewalTerms()` in `pricing.ts`
+  now handles — it replaced a hardcoded "auto-renews monthly at ₹99 until
+  cancelled" that appeared at two sites in `app/pro.tsx` and would have been a
+  false statement (and an App Store review item) the moment the offer went live.
+  Apple grants one intro offer per customer per subscription group. ⚠️ The USD
+  revert price and whether the weekly plans carry an offer are **still unset** —
+  plans without `introMonths` render the plain (and true) renewal sentence.
+- **The rule holds in USD and is knowingly broken in INR — a deliberate
+  cross-subsidy.** 20/day at ~$0.004 per action is ~$2.43/mo worst case. $7 nets
+  $5.95 after Apple's 15% → clears ~2.4x. ₹99 nets ~₹84 (~$0.96) → a maxing INR
+  Pro user costs ~2.5x their subscription. Owner's call: run India generous on
+  volume, cover it from US margin, revisit when the intro offer expires. ₹99
+  breaks even at ~8/day. ⚠️ **Direction matters:** raising the cap widens this gap
+  (the cap IS the worst case); the levers are a lower cap or a higher price, and
+  closing it later means a storefront-specific tier (`daily_limit_for` already
+  branches on tier), not a price edit.
+- ⚠️ 20/day is only **2x the trial's 10/day**. The Pro upgrade story therefore
+  rests on **feature** gating (ask / tasks / itinerary are Pro-only post-trial —
+  `app/entitlements.py`), not on the size of the cap. If conversion disappoints,
+  that asymmetry is the first thing to look at.
+- The 2026-07-24 cost study recommended ₹149/$5.99 and called ₹99 underwater. The
+  owner overrode it on volume grounds. **Watch item, not a resolved question:**
+  read the real p50/p95 of `ai_usage.count` for INR Pro users before renewing.
+- ⚠️ Prices are stated as a **6-month** commitment; the exact mechanism (Apple
+  Introductory Offer that reverts, vs. a flat price reviewed at 6 months) is NOT
+  yet pinned down and is App Store Connect config either way, not app code.
+- Superseded earlier plan (kept for reasoning): three PPP buckets — **US** ~$4.99/mo,
+  $34.99/yr · **EU** ~€5.99/€39.99 (VAT-inclusive) · **India** ₹99/mo, ₹799–999/yr.
+  No annual plan is in the shipped paywall; only weekly + monthly.
 - **India first-purchase promo:** Apple **Introductory Offer** ₹59/mo × 3 months → ₹99 (auto-renew; Apple's pre-renewal notice = the renewal ask). Optional marketing **offer code `SAVEHEREFIRST`**. NOT a custom coupon (Apple owns IAP billing) and NOT 3 months free.
 - iOS subscriptions **must** use Apple IAP (15% via Small Business Program / 30% otherwise) — can't use Stripe in-app. Manage with RevenueCat.
 - "Lifetime" tier: deferred for v1 (unbounded AI-cost liability without a hard cap).
@@ -114,7 +148,7 @@ alert-circle icon in `reel/[id].tsx`), not a `window.alert()`. Locked by
 - **Phase 2 (verify primitive) ✓** — `backend/app/auth.py`: `get_current_user()` dependency verifies ES256 tokens via cached `PyJWKClient`, returns `AuthUser(id=sub, email)`, clean 401s. 9 offline tests (`test_auth.py`, locally-minted EC keypair — no network in CI).
 - **Phase 3 (per-user data) ✓** — `user_id` on `ReelDB` (indexed); `url` no longer globally unique → per-user dedup in `save_reel`. Every route in `reels.py`/`workout.py`/`ask.py` now takes `Depends(get_current_user)` and filters by `user_id`; single-item ops use `_get_owned_reel_or_404` (and task/exercise ownership via a join to the parent reel) → 404 (not 403) on someone else's id. `test_search_api.py` seeds two users and proves isolation (list/get/delete/search don't cross users; unauthenticated → 401).
 - **Phase 4 (mobile auth) ✓** — `contexts/AuthContext.tsx` (session + `onAuthStateChange`); `components/LoginScreen.tsx` (email/password sign-in/up); auth gate in `app/_layout.tsx` (spinner→login→app); `api.ts` `request()` injects `Authorization: Bearer` from `supabase.getAccessToken()`; sign-out in ProfilePanel. **Dev:** email confirmation OFF (turn ON before launch).
-- **Phase 5 (per-user AI quota) ✓** — `app/quota.py` `enforce_daily_ai_quota` + `ai_usage` table; one daily budget across all AI actions, env-tunable `AI_DAILY_LIMIT` (30/day); replaces the interim per-IP ask cap. See "AI cost & caps" above.
+- **Phase 5 (per-user AI quota) ✓** — `app/quota.py` `enforce_daily_ai_quota` + `ai_usage` table; one daily budget across all AI actions, env-tunable per tier (`AI_DAILY_LIMIT` 10 trial / `AI_FREE_DAILY_LIMIT` 3 / `AI_PRO_DAILY_LIMIT` 20); replaces the interim per-IP ask cap. See "AI cost & caps" above.
 - **Remaining:** Phase 6 Postgres in prod via `DATABASE_URL`. Keep SQLite for local dev.
 
 ### Extraction & bot-detection (datacenter IP) — the prod risk
