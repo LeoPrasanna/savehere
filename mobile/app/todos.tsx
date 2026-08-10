@@ -38,12 +38,13 @@ const PRIORITY_MARK: Record<string, 'filled' | 'hollow' | 'faint'> = {
 /** "Someday" sits last by default — undated items are the ones you're least
  *  committed to, and burying them keeps the top of the list honest. Settings can
  *  flip it for people who work the other way round. */
-/** Only celebrate a wait the user actually felt. Below this the list just
- *  appears — see the note in `load()`. */
-const CELEBRATE_AFTER_MS = 900;
-/** How long the thumbs-up holds. Long enough to register, short enough that it
- *  never becomes the reason the screen feels slow. */
-const CELEBRATE_MS = 620;
+/**
+ * ⚠️ THE THUMBS-UP USED TO FIRE HERE, when the fetch came back. It moved to
+ * `TodoGoalBar` (owner, 2026-08-10). A celebration belongs on something the
+ * PERSON did — no task app in the reference set celebrates a network response,
+ * and this screen already owns a real reward gesture in the task tick below.
+ * Loading now just loads. Do not reintroduce a completion beat here.
+ */
 
 const SECTIONS: { key: Bucket; label: string }[] = [
   { key: 'overdue', label: 'OVERDUE' },
@@ -196,9 +197,6 @@ export default function TodosScreen() {
   const [todos, setTodos] = useState<Todo[]>([]);
   const [stats, setStats] = useState<TodoStats | null>(null);
   const [loading, setLoading] = useState(true);
-  // The thumbs-up beat between "data arrived" and "list on screen".
-  const [celebrating, setCelebrating] = useState(false);
-  const startedAt = useRef(Date.now());
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -230,10 +228,6 @@ export default function TodosScreen() {
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
-    if (!isRefresh) startedAt.current = Date.now();
-    // Decided inside the try and read in the finally: `finally` runs on the
-    // failure path too, so it cannot tell success from failure on its own.
-    let worthCelebrating = false;
     try {
       // The device's own date decides what "today" means for the goal — see
       // services/todoSettings.ts and the completed_on column.
@@ -248,27 +242,9 @@ export default function TodosScreen() {
       }));
       setStats(d.stats);
       setError(null);
-      // ⚠️ NEVER celebrate a failure or an empty list.
-      // `setLoading(false)` lives in `finally`, so a FAILED fetch flips the
-      // same flag — gating on `loading` alone would put a two-handed thumbs-up
-      // on screen and then an error banner underneath it. And a thumbs-up over
-      // "Nothing to follow through on" reads as sarcasm on a first run.
-      worthCelebrating = d.items.length > 0;
     } catch (e: any) {
       setError(e?.message || "Couldn't load your list.");
     } finally {
-      // ⚠️ THE CELEBRATION IS CONDITIONAL, AND THAT IS THE POINT.
-      // A thumbs-up after every load would add ~600 ms to a screen the user
-      // opens all day, to congratulate them on something they did not do. It
-      // only fires when the wait was long enough to have been NOTICED (a cold
-      // Render instance), where it reads as "we're back" rather than as an
-      // extra delay. Fast loads go straight to the list, as before.
-      const waited = Date.now() - startedAt.current;
-      if (!isRefresh && worthCelebrating && waited >= CELEBRATE_AFTER_MS) {
-        haptics.success();
-        setCelebrating(true);
-        setTimeout(() => setCelebrating(false), CELEBRATE_MS);
-      }
       setLoading(false);
       setRefreshing(false);
     }
@@ -486,12 +462,8 @@ export default function TodosScreen() {
     [todos],
   );
 
-  if (loading || celebrating) {
-    return (
-      <View style={styles.center}>
-        <MascotLoader phase={celebrating ? 'done' : 'loading'} />
-      </View>
-    );
+  if (loading) {
+    return <View style={styles.center}><MascotLoader /></View>;
   }
 
   return (
