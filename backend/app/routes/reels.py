@@ -115,7 +115,8 @@ def save_reel(body: ReelSaveRequest, background_tasks: BackgroundTasks,
         _apply_duration_guard(reel)
         should_summarize = reel.summary_status == "pending"
         if should_summarize and not _try_charge(db, user, reel.title or canonical_url):
-            reel.summary_status = "failed"   # over budget — retryable after reset
+            # Over budget: keep the card, skip the AI. No Claude call happens.
+            reel.summary_status = QUOTA_STATUS
             should_summarize = False
         db.add(reel)
         db.commit()
@@ -187,8 +188,27 @@ def _apply_duration_guard(reel: ReelDB) -> None:
         reel.raw_text = None
 
 
+# Written to `summary_status` when the save is kept but the AI step was never
+# attempted because the user's daily allowance is gone.
+#
+# ⚠️ WHY THIS IS NOT `failed`. Both are "no summary", but they are different
+# facts and the UI has to tell them apart: `failed` means something broke and
+# retrying now may work, so the card offers a Try again button. Over quota,
+# retrying CANNOT work until the reset — a retry button there is a button that
+# spends nothing and does nothing, all day. Calling it `failed` also told the
+# user their save had gone wrong when it hadn't.
+#
+# For the record on cost: no Claude call was ever made in this state. The charge
+# is taken BEFORE the API call precisely so a refused charge short-circuits the
+# whole chain — the tokens were never spent, only the status was misreported.
+QUOTA_STATUS = "quota_exceeded"
+
+
 def _try_charge(db: Session, user: AuthUser, label: str | None = None) -> bool:
-    """Charge one AI action; False when today's budget is spent (never raises)."""
+    """Charge one AI action; False when today's budget is spent (never raises).
+
+    Returning False is the gate that keeps a quota-exhausted save free: every
+    caller must skip the summarizer entirely rather than call it and hope."""
     try:
         charge_ai_action(db, user, action="summary", label=label)
         return True
@@ -272,7 +292,9 @@ def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
             return
 
         if user is not None and not _try_charge(db, user, reel.title or reel.url):
-            reel.summary_status = "failed"
+            # Extraction already ran and is FREE — the card keeps its title and
+            # thumbnail. Only the paid step is skipped.
+            reel.summary_status = QUOTA_STATUS
             db.commit()
             return
     finally:
@@ -476,7 +498,12 @@ def client_metadata(reel_id: str, body: ClientMetadataRequest,
         # The summary then landed seconds later and stayed invisible until a
         # manual page reload. Keep the title/thumbnail we gained and let the
         # server finish; it sets the honest final status either way.
-        if reel.summary_status != "pending":
+        #
+        # QUOTA_STATUS is protected here for the same reason: it is a statement
+        # about the user's budget, not about this reel's text. Overwriting it
+        # with 'skipped' would tell someone who is merely out of AI actions that
+        # their reel is unreadable, and hide the "resumes tomorrow" message.
+        if reel.summary_status not in ("pending", QUOTA_STATUS):
             reel.summary_status = "skipped"
         db.commit()
         db.refresh(reel)
@@ -489,7 +516,7 @@ def client_metadata(reel_id: str, body: ClientMetadataRequest,
     # Charged only now that we actually have something to summarize. Over budget →
     # keep the text (retryable via /summarize after the daily reset), don't 500.
     if not _try_charge(db, user, reel.title or reel.url):
-        reel.summary_status = "failed"
+        reel.summary_status = QUOTA_STATUS
         db.commit()
         db.refresh(reel)
         return _to_response(reel)

@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import {
   View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform,
-  ScrollView, ActivityIndicator,
+  ScrollView, ActivityIndicator, Image,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Icon } from '../components/Icon';
 import { Pressable } from '../components/Pressable';
 import { Label, Body, Title, Rule, FilledButton } from '../components/kit';
 import { useAuth, AVATAR_OPTIONS } from '../contexts/AuthContext';
+import { AVATARS, avatarLabel } from '../constants/avatars';
 import * as haptics from '../services/haptics';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { colors, spacing, font, typeface, themed } from '../constants/theme';
@@ -80,17 +81,24 @@ export default function ProfileScreen() {
             never a one-way door. Selection reads by border weight — the system
             has no accent hue to mark it with. */}
         <Label style={styles.avatarLabel}>Profile picture — optional</Label>
+        {/* ponytail: all 102 avatars mount at once inside the page ScrollView —
+            no windowing. Download cost is settled (4.5 KB each), but decoded
+            they are ~65 KB of bitmap apiece, so the picker peaks around 6–7 MB
+            of image memory while it is open. Fine on any phone of the last
+            decade and it frees on unmount. If the set grows past ~200, or this
+            ever janks on a low-end Android, move it to a FlatList with
+            numColumns and windowSize — not before. */}
         <View style={styles.avatarGrid}>
-          {AVATAR_OPTIONS.map((emoji) => {
-            const selected = avatar === emoji;
+          {AVATAR_OPTIONS.map((key) => {
+            const selected = avatar === key;
             return (
               <Pressable
-                key={emoji}
-                onPress={() => !busy && setAvatar(selected ? undefined : emoji)}
+                key={key}
+                onPress={() => !busy && setAvatar(selected ? undefined : key)}
                 style={[styles.avatarCell, selected && styles.avatarCellOn]}
-                accessibilityLabel={`Avatar ${emoji}${selected ? ', selected' : ''}`}
+                accessibilityLabel={`Avatar ${avatarLabel(key)}${selected ? ', selected' : ''}`}
               >
-                <Text style={styles.avatarCellEmoji}>{emoji}</Text>
+                <Image source={AVATARS[key]} style={styles.avatarCellImg} resizeMode="contain" />
               </Pressable>
             );
           })}
@@ -138,7 +146,9 @@ const styles = themed(() => StyleSheet.create({
     borderWidth: 0.5, borderColor: colors.ghostLine,
   },
   avatarCellOn: { borderWidth: 1, borderColor: colors.textPrimary },
-  avatarCellEmoji: { fontSize: 24, lineHeight: 30 },
+  // 40 inside a 48 cell — the art is illustrated and needs breathing room the
+  // way an emoji glyph did not, or the grid reads as a solid sheet of colour.
+  avatarCellImg: { width: 40, height: 40 },
 
   errorRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.lg },
   errorText: { flex: 1, fontSize: font.sm },

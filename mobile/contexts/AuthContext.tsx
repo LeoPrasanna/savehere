@@ -17,13 +17,19 @@ export interface Profile {
   avatar?: string;
 }
 
-/** Pick-your-face options. Deliberately a plain emoji list rather than bundled
- *  images: it renders at any size, needs no assets, and costs nothing. */
-export const AVATAR_OPTIONS: string[] = [
-  '🧑', '👩', '🧔', '👧', '👨‍🦱', '👩‍🦰', '🧑‍🎤', '🦸',
-  '🐶', '🐱', '🦊', '🐼', '🐨', '🐧', '🦉', '🐢',
-  '🔥', '⚡', '🌸', '🌊', '🎧', '📚', '🍜', '✈️',
-];
+/**
+ * Pick-your-face options — now 102 illustrated avatars, not emoji
+ * (owner, 2026-08-10). The list itself lives in `constants/avatars.ts`
+ * alongside the `require()` map, because Metro needs static literals.
+ *
+ * ⚠️ The stored value's MEANING changed: it used to be the emoji character
+ * itself, it is now an asset key like `18_astronaut`. Nothing was migrated on
+ * purpose — an account that picked '🎧' still has '🎧' in `profiles.avatar`,
+ * and every render site falls back to drawing an unrecognised value as text.
+ * So old faces keep rendering, new picks get artwork, and no backfill can go
+ * half-done. See `isLegacyAvatar` in constants/avatars.ts.
+ */
+export { AVATAR_KEYS as AVATAR_OPTIONS } from '../constants/avatars';
 
 interface AuthState {
   session: Session | null;

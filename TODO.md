@@ -953,3 +953,82 @@ code has been modified yet.
 
 
 
+- [x] **Quota-exhausted saves are honest now, not "failed" (2026-08-10)**
+  ⚠️ **The brief's premise was wrong in your favour: no money was ever being wasted.**
+  The AI charge is taken *before* the Claude call (`_try_charge` → `charge_ai_action`),
+  so a refused charge already short-circuited the chain — over quota, zero tokens spent,
+  zero API calls made. There is now a test asserting the summarizer is never invoked.
+  **What was actually broken was the reporting.** Those saves were written
+  `summary_status = "failed"`, so the detail screen showed "Something interrupted the AI
+  summary — tap to try again" with a retry button that could not succeed until the daily
+  reset, all day, on a save that had not failed. New status `quota_exceeded`
+  (`QUOTA_STATUS`, `routes/reels.py`) is set at all three charge sites, and
+  `client_metadata` no longer overwrites it with `skipped` — that would tell a user who
+  is merely out of budget that their reel is unreadable.
+  **Three surfaces now say the same true thing:**
+  1. `/save` shows a hairline notice **before** you paste, from `usage.remaining === 0`.
+     It deliberately does **not** block saving — saves are unrationed at every tier, and
+     blocking would turn a soft limit into a hard one and lose the link entirely.
+  2. Reel detail: "Saved — AI summary resumes tomorrow", **no retry button**, because
+     nothing there can succeed yet.
+  3. Grid tile: `AI RESUMES TOMORROW` rather than reusing `NO TEXT`, which blamed the
+     reel for the user's daily cap.
+  **Verified:** 229 backend tests pass incl. two new cases; typecheck + web export clean.
+- [x] **Onboarding figures are the app's own icons now (2026-08-10)**
+  The six first-run cards used abstract figures — a 3×3 cell grid, stacked bars, rows of
+  dots, a giant plus. Rows of dots do not say "workout". `StepFigure` now renders one
+  Lucide glyph per step inside the same 168px hairline frame:
+  `grid→layers`, `ask→ask`, `plan→barbell`, `steps→restaurant`, `check→checkbox`,
+  `save→add`. **Four of those six are the tab bar the user taps within the minute**
+  (Library, Ask, Slate, Save) and the other two are the buttons those steps describe
+  (Build Workout, Get Recipe) — so the tour teaches the real interface instead of
+  decorating beside it. Zero new icon keys, zero new imports, zero bytes.
+  ⚠️ **Lucide's `strokeWidth` is in viewBox units, not pixels** (rendered px =
+  `strokeWidth × size / 24`). The default 1.1 at size 88 would draw a ~4px stroke — the
+  heaviest mark on a screen whose display face runs at 300. Pinned to `0.45` (~1.65px).
+  Do not delete that prop as redundant. 32 lines of orphaned figure styles removed.
+  ⚠️ **Canva MCP was tried first, as asked, and rejected on evidence.** Auth works and
+  `generate-design` returns candidates, but: exports are **`pdf/jpg/png/pptx/gif/mp4` —
+  no SVG**; **transparent PNG is blocked on the Free plan**, so an opaque white tile
+  cannot survive the light/dark inversion; it emitted a single merged 3×3 raster rather
+  than six separable icons; and on the better of two draws, 2 of 6 concepts were wrong
+  (a chef's hat rendered as a tombstone, the save icon an unreadable link/plus tangle).
+  ⚠️ **Two throwaway designs were created in the owner's Canva account and should be
+  deleted:** `DAHR4hrrGtA` and `DAHR4uSm26Y`.
+- [x] **Emoji profile pictures replaced with the 102 illustrated PNGs (2026-08-10)**
+  Source: `~/OneDrive/Desktop/profile_avatars_FINAL_clean_1x1`. New
+  `mobile/constants/avatars.ts` holds a generated static `require()` map — Metro resolves
+  `require` at build time from a string literal, so a computed path silently fails to
+  bundle and throws on native; the file is generated, not hand-written. Keys keep their
+  numeric prefix because five descriptive names repeat (two robots, two clouds, two cacti,
+  two retro computers, two bubble teas). Wired into `app/profile.tsx` (picker) and
+  `components/ProfilePanel.tsx` (the panel's 56px frame).
+  **No data migration, on purpose.** `profiles.avatar` used to hold the emoji character
+  and now holds an asset key. Existing rows keep their emoji, `avatarSource()` returns
+  undefined for them, and both render sites fall back to drawing the stored string as
+  text — so nobody's face vanishes in the release that changed the picker, and there is
+  no half-finished backfill to go wrong. `isLegacyAvatar()` identifies them.
+  **BUNDLE SIZE — the owner's question, answered with numbers.** The originals are
+  512×512 RGBA, **15.9 MB** for the set, against a 5.1 MB JS bundle; Expo bundles
+  everything under `assets/` into the binary and the web build, so shipping them raw
+  would have more than quadrupled the download for art that never renders above 64pt.
+  Committed at **128px** (2× the largest on-screen use, 3× the picker cell) and
+  palette-quantized: **0.47 MB for all 102, ~4.5 KB each — 97% smaller**, no visible loss
+  at render size (checked as a contact sheet at 40px on the dark canvas). In the built
+  web output they are **0.45 MB of a 15.2 MB dist, about 3%**. Regenerate with
+  `scratchpad/prep_avatars.py` if the source art changes; never drop 512px files in.
+  **Runtime:** the picker mounts all 102 at once with no windowing — ~6–7 MB of decoded
+  bitmap while that screen is open, freed on unmount. Fine on any recent phone; marked
+  with a `ponytail:` note naming FlatList windowing as the upgrade if the set passes ~200.
+  ⚠️ **UNRESOLVED, OWNER'S CALL — likeness/IP risk.** Roughly eight of the 102 are
+  recognisable third-party characters despite generic filenames: `22_yellow_mouse`
+  (Pikachu), `24_pink_blob` (Kirby), `25_blue_turtle` (Squirtle), `26_fox_rabbit` (Eevee),
+  `19_tiny_green_creature` (Grogu), `21_groot_like_plant` (Groot), `36_gameboy` (Nintendo
+  hardware), plus a Stitch-like face. This is the **same exposure that got every bitmap
+  pulled from the login screen** in round three. Shipping them as user-selectable avatars
+  in an App Store app is a trademark/copyright risk under App Review 5.2. They are
+  included as supplied — deleting the files and regenerating the map is a two-minute job
+  if you want them out.
+  ⚠️ **Not visually verified in-app:** the picker and the panel both need a signed-in
+  session and the preview browser's session expired mid-session. Typecheck, web export
+  and the rendered contact sheet all pass; **owner should do a visual pass.**
