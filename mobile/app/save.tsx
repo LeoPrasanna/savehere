@@ -60,8 +60,23 @@ export default function SaveScreen() {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
   const [focused, setFocused] = useState(false);
+  // null = don't know yet (or the check failed). Only a hard 0 shows the notice,
+  // so a slow or broken usage call never invents a limit the user isn't at.
+  const [aiRemaining, setAiRemaining] = useState<number | null>(null);
+  const aiExhausted = aiRemaining === 0;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const pulse = useRef(new Animated.Value(1)).current;
+
+  // One read on mount. Cheap (no AI charge — /usage is read-only) and it is the
+  // difference between "your summary silently never appeared" and knowing why
+  // before you even paste.
+  useEffect(() => {
+    let alive = true;
+    api.getUsage()
+      .then(u => { if (alive) setAiRemaining(u.remaining ?? null); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   // Reads the clipboard only on tap (a user gesture), so no permission prompt
   // fires on open — works the same on iOS and web.
@@ -180,6 +195,23 @@ export default function SaveScreen() {
           </View>
         ) : null}
 
+        {/* Out of AI actions — say so BEFORE the save, not after.
+            ⚠️ Deliberately does NOT block saving. Saves are unrationed at every
+            tier; only the AI is capped, and a user who understands that will
+            still want the link kept. Blocking here would turn a soft limit into
+            a hard one and lose the save entirely. Silent on a failed usage
+            fetch: a wrong scare beats nothing, so we show nothing. */}
+        {aiExhausted && !loading && (
+          <View style={styles.quotaBox}>
+            <Icon name="time" size={15} color={colors.textSecondary} />
+            <Body style={styles.quotaText}>
+              Today's AI actions are used up. This link will still be saved with its
+              title and thumbnail — the summary, recipe and workout tools come back
+              after the daily reset.
+            </Body>
+          </View>
+        )}
+
         {/* Progress — numbered rows, the same archival grammar as the rest of
             the app. A row is done, running, or waiting; the state is a word and
             a mark, never a colour. */}
@@ -294,6 +326,18 @@ const styles = themed(() => StyleSheet.create({
     padding: spacing.md,
     marginTop: spacing.md,
   },
+  // Same shape as errorBox but a hairline, not a full-weight border: this is
+  // information, not a failure, and it must not read louder than a real error.
+  quotaBox: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.ghostLine,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  quotaText: { flex: 1 },
   errorText: { flex: 1, fontSize: font.sm, lineHeight: 20 },
 
   progress: { marginTop: spacing.xl },

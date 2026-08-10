@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Pressable } from './Pressable';
 import { Label, Body, Rule, Rail, FilledButton } from './kit';
+import { Icon } from './Icon';
 import { colors, spacing, font, tracking, typeface, motion, themed } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -78,76 +79,58 @@ const STEPS: Step[] = [
 /**
  * The hero slot.
  *
- * The reference is image-led and this app ships no photography, so rather than
- * fake a picture the slot holds an abstract monochrome figure built from the
- * system's own primitives — frames, rules and hairlines. mono's imagery rule
- * sanctions exactly this: "illustrations are abstract, using a monochromatic
- * palette to match the UI, with strong geometric shapes, dots and lines."
+ * ⚠️ REWRITTEN 2026-08-10. This used to hold six ABSTRACT figures built from
+ * the system's primitives — a 3x3 cell grid, stacked bars, rows of dots, a
+ * giant plus. Defensible as composition, and the owner's verdict after
+ * watching first-run was blunt: they don't read. Rows of dots do not say
+ * "workout", and numbered bars do not say "recipe".
+ *
+ * They are now the app's OWN icons, and that is the point rather than a
+ * fallback: four of these six glyphs are the tab bar the user will tap within
+ * the minute (`layers` = Library, `ask` = Ask, `checkbox` = Slate, `add` =
+ * Save), and the other two are the buttons the steps describe (`barbell` =
+ * Build Workout, `restaurant` = Get Recipe, both in app/reel/[id].tsx). So the
+ * tour now teaches the actual interface instead of decorating next to it. The
+ * `save` step was always the one figure that worked — because it was already a
+ * giant version of the Save button's plus. This applies that logic to the rest.
+ *
+ * Zero new imports, zero new icon keys, zero bytes added to the bundle.
+ * (Canva-generated artwork was evaluated for this and rejected: raster only,
+ * no transparent export on the current plan, so it could not survive the
+ * light/dark inversion. See TODO.md.)
  *
  * Fixed 1:1 so the slot never reflows between steps.
  */
+
+/** Step -> the glyph the user will actually tap for that feature. */
+const FIGURE_ICON: Record<Figure, string> = {
+  grid: 'layers',       // Library tab
+  ask: 'ask',           // Ask tab
+  plan: 'barbell',      // "Build Workout" on the reel screen
+  steps: 'restaurant',  // "Get Recipe" on the reel screen
+  check: 'checkbox',    // Slate tab
+  save: 'add',          // Save tab / centre FAB
+};
+
+/** ⚠️ Lucide's `strokeWidth` is in VIEWBOX units, not pixels — rendered px is
+ *  `strokeWidth * size / 24`. Icon.tsx's default of 1.1 at this size would draw
+ *  a ~4px stroke, by far the heaviest mark on a screen whose display face runs
+ *  at 300. 0.45 lands at ~1.65px, in line with the hairline rules everywhere
+ *  else. Do not delete this prop "because the default is fine". */
+const FIGURE_SIZE = 88;
+const FIGURE_STROKE = 0.45;
+
 function StepFigure({ kind }: { kind: Figure }) {
   return (
     <View style={styles.figure}>
-      {kind === 'grid' && (
-        <View style={styles.fGrid}>
-          {Array.from({ length: 9 }).map((_, i) => (
-            <View key={i} style={[styles.fCell, (i === 1 || i === 5 || i === 6) && styles.fCellOn]} />
-          ))}
-        </View>
-      )}
-
-      {kind === 'ask' && (
-        <View style={styles.fStack}>
-          <View style={styles.fBarWide} />
-          <View style={styles.fBarMid} />
-          <View style={styles.fGap} />
-          <View style={[styles.fBarWide, styles.fOn]} />
-          <View style={[styles.fBarMid, styles.fOn]} />
-          <View style={[styles.fBarShort, styles.fOn]} />
-        </View>
-      )}
-
-      {kind === 'plan' && (
-        <View style={styles.fStack}>
-          {[3, 4, 5, 4].map((n, r) => (
-            <View key={r} style={styles.fRow}>
-              {Array.from({ length: 5 }).map((_, c) => (
-                <View key={c} style={[styles.fDot, c < n && styles.fOn]} />
-              ))}
-            </View>
-          ))}
-        </View>
-      )}
-
-      {kind === 'steps' && (
-        <View style={styles.fStack}>
-          {[0, 1, 2, 3].map(i => (
-            <View key={i} style={styles.fStepRow}>
-              <Text style={styles.fNum}>{String(i + 1).padStart(2, '0')}</Text>
-              <View style={[styles.fBarWide, i === 0 && styles.fOn]} />
-            </View>
-          ))}
-        </View>
-      )}
-
-      {kind === 'check' && (
-        <View style={styles.fStack}>
-          {[true, true, false, false].map((done, i) => (
-            <View key={i} style={styles.fStepRow}>
-              <View style={[styles.fBox, done && styles.fBoxOn]} />
-              <View style={[styles.fBarWide, done && styles.fOn]} />
-            </View>
-          ))}
-        </View>
-      )}
-
-      {kind === 'save' && (
-        <View style={styles.fPlusWrap}>
-          <View style={styles.fPlusV} />
-          <View style={styles.fPlusH} />
-        </View>
-      )}
+      <View style={styles.figureFrame}>
+        <Icon
+          name={FIGURE_ICON[kind]}
+          size={FIGURE_SIZE}
+          strokeWidth={FIGURE_STROKE}
+          color={colors.textPrimary}
+        />
+      </View>
     </View>
   );
 }
@@ -277,38 +260,15 @@ const styles = themed(() => StyleSheet.create({
     justifyContent: 'center',
     marginTop: spacing.lg,
   },
-  fGrid: {
+  // The frame the glyph sits in — the same hairline square the old cell grid
+  // used, kept so the slot's silhouette is unchanged between releases.
+  figureFrame: {
     width: 168, height: 168,
-    flexDirection: 'row', flexWrap: 'wrap',
+    borderWidth: 0.5,
+    borderColor: colors.ghostLine,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  fCell: {
-    width: '33.333%', height: '33.333%',
-    borderWidth: 0.5, borderColor: colors.ghostLine,
-  },
-  fCellOn: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
-
-  fStack: { width: 200, gap: spacing.sm },
-  fRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
-  fStepRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
-  fBarWide: { flex: 1, height: 6, backgroundColor: colors.ghostLine },
-  fBarMid: { width: '66%', height: 6, backgroundColor: colors.ghostLine },
-  fBarShort: { width: '38%', height: 6, backgroundColor: colors.ghostLine },
-  fGap: { height: spacing.md },
-  fDot: { width: 14, height: 14, borderWidth: 1, borderColor: colors.ghostLine },
-  fBox: { width: 14, height: 14, borderWidth: 1, borderColor: colors.ghostLine },
-  fBoxOn: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
-  fOn: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
-  fNum: {
-    color: colors.textTertiary,
-    fontFamily: typeface.label,
-    fontSize: font.xs,
-    letterSpacing: tracking.label,
-    fontVariant: ['tabular-nums'],
-    width: 20,
-  },
-  fPlusWrap: { width: 120, height: 120, alignItems: 'center', justifyContent: 'center' },
-  fPlusV: { position: 'absolute', width: 1, height: 120, backgroundColor: colors.textPrimary },
-  fPlusH: { position: 'absolute', height: 1, width: 120, backgroundColor: colors.textPrimary },
 
   foot: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, gap: spacing.md },
   terms: { textAlign: 'center' },

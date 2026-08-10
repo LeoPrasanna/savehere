@@ -88,6 +88,7 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
   const platform = platformMeta[reel.platform] ?? platformMeta.unknown;
   const isPending = reel.summary_status === 'pending';
   const failed = reel.summary_status === 'failed';
+  const overQuota = reel.summary_status === 'quota_exceeded';
   const thumb = candidates[candidate];
 
   return (
@@ -141,6 +142,10 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
             </View>
           )}
           {failed && <Text style={styles.meta}>NO TEXT</Text>}
+          {/* Out of AI actions — the save is complete, only the summary is
+              waiting on the reset. Says so rather than reusing "NO TEXT",
+              which blames the reel for the user's daily cap. */}
+          {overQuota && <Text style={styles.meta}>AI RESUMES TOMORROW</Text>}
           <Text style={styles.title} numberOfLines={2}>
             {reel.title || (isPending ? 'Saving…' : 'Untitled')}
           </Text>

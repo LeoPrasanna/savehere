@@ -107,15 +107,40 @@ class TestInstantSave:
         assert reel.title                        # clean fallback label
 
     def test_quota_exhausted_saves_without_summary(self, env, monkeypatch):
+        """Out of AI actions: keep the card, spend nothing, say why.
+
+        The status assertion is the load-bearing one. It used to be 'failed',
+        which drove the detail screen's "Something interrupted the AI summary —
+        tap to try again" state: a retry that cannot succeed until the reset,
+        offered all day, on a save that never actually failed."""
         client, Session = env
+        called = []
+        monkeypatch.setattr(reels_module.summarizer, "summarize",
+                            lambda **kw: called.append(kw) or dict(FAKE_AI))
         monkeypatch.setattr("app.quota.settings.AI_DAILY_LIMIT", 0)
+
         r = client.post("/api/reels/save", json={"url": "https://youtube.com/shorts/quotafull"})
         assert r.status_code == 200
+
         reel = _get_reel(Session, r.json()["id"])
-        # metadata still filled; summary refused without charging
+        # The free work still happened — the card is a usable bookmark.
         assert reel.thumbnail_url == FAKE_INFO["thumbnail_url"]
-        assert reel.summary_status == "failed"
+        assert reel.title
+        # The paid work did not, and is reported as a budget state, not a fault.
+        assert reel.summary_status == reels_module.QUOTA_STATUS
         assert reel.summary in ([], None)
+        # THE POINT: no Claude call was made. A charge is taken before the API
+        # call precisely so a refused charge costs nothing.
+        assert called == [], "summarizer must not run once the daily budget is spent"
+
+    def test_quota_exhausted_state_is_not_failed(self, env, monkeypatch):
+        """Guards the distinction itself: these two statuses drive different UI
+        (retry button vs "resumes tomorrow"), so collapsing them is a regression
+        even though both mean "no summary"."""
+        client, Session = env
+        monkeypatch.setattr("app.quota.settings.AI_DAILY_LIMIT", 0)
+        r = client.post("/api/reels/save", json={"url": "https://youtube.com/shorts/quotafull2"})
+        assert _get_reel(Session, r.json()["id"]).summary_status != "failed"
 
     def test_long_video_becomes_link_only_bookmark(self, env, monkeypatch):
         client, Session = env

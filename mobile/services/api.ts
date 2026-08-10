@@ -54,7 +54,11 @@ export interface Reel {
   category: string | null;
   // pending = summary generating in background; ready = done; skipped = nothing
   // readable; failed = errored (retryable). Drives the "Summarizing…" UI.
-  summary_status?: 'pending' | 'ready' | 'skipped' | 'failed';
+  /** `quota_exceeded` = the card saved fine, but the day's AI allowance was
+   *  already spent so no summary was attempted. Distinct from `failed` on
+   *  purpose: `failed` is retryable now, this one only after the daily reset,
+   *  so the UI must not offer a Try again button for it. */
+  summary_status?: 'pending' | 'ready' | 'skipped' | 'failed' | 'quota_exceeded';
   notes: string | null;
   summarize_count: number;
   tasks_count: number;

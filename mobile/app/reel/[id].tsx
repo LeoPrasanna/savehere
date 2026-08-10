@@ -458,6 +458,23 @@ export default function ReelDetailScreen() {
                 finance > the generic AI caveat. Stacking two would dilute both. */}
             <Disclaimer variant={summaryDisclaimer} style={{ marginTop: spacing.sm }} />
           </>
+        ) : reel.summary_status === 'quota_exceeded' ? (
+          /* Out of AI actions for the day. The save itself is complete and this
+             screen says so first — the card is the product, the summary is an
+             enhancement. No Try again button on purpose: nothing here can
+             succeed until the reset, and a button that spends nothing and
+             changes nothing all day is worse than no button. */
+          <View style={styles.emptySummary}>
+            <Icon name="time" size={28} color={colors.textSecondary} style={{ marginBottom: spacing.xs }} />
+            <Text style={styles.emptyTitle}>Saved — AI summary resumes tomorrow</Text>
+            <Text style={styles.emptyHint}>
+              You've used today's AI actions, so this one was saved without a summary.
+              Nothing was lost: the link, title and thumbnail are here, and you can add
+              notes now. Summaries, recipes and workouts unlock again after the daily
+              reset — or upgrade for a bigger allowance.
+            </Text>
+            <Text style={styles.quotaNote}>Your saves are never rationed — only the AI actions are.</Text>
+          </View>
         ) : (reel.summary_status === 'failed' || pendingStalled) ? (
           <View style={styles.emptySummary}>
             <Icon name="alert-circle" size={28} color={colors.danger} style={{ marginBottom: spacing.xs }} />
