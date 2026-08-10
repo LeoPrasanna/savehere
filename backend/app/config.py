@@ -53,8 +53,20 @@ class Settings:
     AI_FREE_DAILY_LIMIT: int = int(os.getenv("AI_FREE_DAILY_LIMIT", "3"))
     # Paid tier's daily AI-action limit. Applies to users whose JWT carries
     # app_metadata.tier == "pro" (set server-side: scripts/set_tier.py now, the
-    # RevenueCat/IAP webhook at launch). Owner-set 2026-07-27 to 20/day (was 100,
-    # too generous for the ₹149/$5.99 price point — revisit if pricing moves).
+    # RevenueCat/IAP webhook at launch). Owner-set 2026-08-10 to 20/day, paired
+    # with ₹99 / $7 per month (history: 100 -> 20 -> 25 -> 15 -> 20).
+    # ⚠️ This is a DELIBERATE cross-subsidy, not a break-even number. At
+    # ~$0.004/action, 20/day is ~$2.43/mo worst case: $7 nets $5.95 after Apple's
+    # 15% and clears it ~2.4x, but ₹99 nets ~$0.96 — a maxing INR Pro user costs
+    # ~2.5x their subscription. Owner's call (2026-08-10): run India generous on
+    # volume and cover it from US margin, revisit after 6 months.
+    # ⚠️ RAISING this number makes the INR gap WIDER, never narrower — the cap IS
+    # the worst case. ₹99 breaks even at ~8/day. The levers are a lower cap or a
+    # higher price; if it ever needs closing, the seam is a storefront-specific
+    # tier (daily_limit_for() in quota.py already branches on tier — one constant
+    # plus a "pro_in" stamp), not a tweak here.
+    # ⚠️ Only 2x the trial's 10/day — the Pro upgrade story rests on FEATURE
+    # gating (ask/tasks/itinerary, see entitlements.py), not the size of the cap.
     AI_PRO_DAILY_LIMIT: int = int(os.getenv("AI_PRO_DAILY_LIMIT", "20"))
     # Trial length in days, counted from the user's first authenticated request.
     TRIAL_DAYS: int = int(os.getenv("TRIAL_DAYS", "10"))
