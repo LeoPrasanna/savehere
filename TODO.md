@@ -1058,3 +1058,51 @@ code has been modified yet.
   caching image library like `expo-image`) would have been ceremony around a non-problem.
   The remaining cost is decode, which is why the unwindowed picker still carries its
   `ponytail:` note.
+- [x] **To-do screen: mascot loader replaces the bare spinner (2026-08-10)**
+  `app/todos.tsx` showed a centred `<ActivityIndicator>` while waiting on a backend that
+  cold-starts on Render's free tier — a spinning circle for what can be tens of seconds.
+  New `components/MascotLoader.tsx`: the user's **own profile picture** bobs in the
+  hairline square frame, and on completion two mirrored `thumbs-up` glyphs spring in
+  either side with the same ring burst the task tick uses.
+  **Motion is borrowed, not invented** — spring `damping:11 / stiffness:220` and the
+  520 ms expanding ring are lifted from the existing task-completion animation in the
+  same file, so the screen has one vocabulary rather than two competing ones.
+  ⚠️ **Asked for as an animated GIF; built in code**, for the reasons the login wall's
+  animation was: a GIF is fixed-size, block-compressed, can't follow the colour scheme,
+  and would need **one variant per avatar (92)** to work here at all.
+  ⚠️ **The "two hands" are Lucide glyphs, not artwork, and that is a compromise.** The 92
+  avatars have no thumbs-up pose, no image-generation tool exists in this environment, and
+  Canva was re-checked and is still raster-only with transparent export paywalled. Thin
+  monochrome line icons beside a filled illustrated character **do not match in style and
+  cannot be made to** in code. The real fix is one commissioned 128px transparent hand in
+  the avatar art style, mirrored with `scaleX:-1` — ~4.5 KB, drops straight into the
+  existing pipeline. `'thumbs-up': ThumbsUp` added to `Icon.tsx`.
+  **Three guards, two of which were defects caught in review:**
+  1. **Never celebrates a failure.** `setLoading(false)` lives in `finally`, so a failed
+     fetch flips the same flag — gating on `loading` alone put a thumbs-up on screen with
+     an error banner underneath. Now decided inside the `try`.
+  2. **Never celebrates an empty list.** A thumbs-up over "Nothing to follow through on"
+     reads as sarcasm on a first run.
+  3. **Never fires on a fast load** (`CELEBRATE_AFTER_MS = 900`), and the mascot itself
+     doesn't render for the first 350 ms — a warm backend answers in ~300 ms and the flash
+     read as a rendering glitch, not warmth.
+  **The most useful part is the least decorative:** past 2500 ms the loader says *"Waking
+  the server — this can take a few seconds"*. Silence during a cold start is what makes it
+  feel broken. Quality bar #1.
+  **Verified live** on the real to-do screen: 200 ms → nothing (flash guard), 600 ms →
+  mascot + "GETTING YOUR SLATE", 3000 ms → cold-start line, and the completion beat with
+  both hands mirrored correctly. An empty fast load went straight to the list with no
+  celebration, as designed. Typecheck + web export clean.
+  ⚠️ **RESEARCH SAYS THIS REWARDS THE WRONG EVENT — worth a decision.** Refero has no task
+  app that celebrates a fetch: Todoist Zero, Apple Books' Daily Goal, Opal, Drops all
+  attach celebration to something the **user** did, and all have a dismiss control. This
+  screen already owns a genuine reward — the spring tick + ring on completing a task.
+  Firing a bigger version of that same gesture for a page load risks teaching the user it
+  means nothing. **Recommendation: keep the bob (a clear win over a spinner), and move the
+  two-handed thumbs-up to the daily-goal-met moment in `TodoGoalBar.tsx`**, where `hit ===
+  true` currently gets only a label change. Same component, fires ~once a day, and means
+  something. Owner's call.
+  ⚠️ **Also flagged, not done:** the loading state still blanks the WHOLE screen (hero,
+  dashboard, bottom bar all unmount). Asana's two loading screens in the reference set
+  both keep their chrome and swap only the list region — a bigger perceived-speed win than
+  the mascot, and it would make the handoff free rather than merely cheap.

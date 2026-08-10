@@ -10,7 +10,7 @@ import {
   PartyPopper, Eye, EyeOff, Scissors, Mail, KeyRound,
   Menu, UserRound, Settings, Bell, Download, LogIn, ChevronRight, Bookmark, Layers, Shield,
   MessageCircle, Compass, ArrowLeft, Send, Brush,
-  Rocket, BicepsFlexed, PersonStanding, Trophy,
+  Rocket, BicepsFlexed, PersonStanding, Trophy, ThumbsUp,
 } from 'lucide-react-native';
 
 // One icon family for the whole app (Lucide). Platform brand logos are the only
@@ -30,7 +30,7 @@ const MAP: Record<string, any> = {
   login: LogIn, 'chevron-right': ChevronRight, bookmark: Bookmark, layers: Layers, shield: Shield,
   ask: MessageCircle, rediscover: Compass, back: ArrowLeft, send: Send,
   barbell: Dumbbell, 'barbell-outline': Dumbbell, trash: Trash2,
-  search: Search, trophy: Trophy, flame: Flame,
+  search: Search, trophy: Trophy, flame: Flame, 'thumbs-up': ThumbsUp,
 
   // ── Categories ──
   // motivation is Rocket (not Flame) so it never collides with the 'cook' step icon.
