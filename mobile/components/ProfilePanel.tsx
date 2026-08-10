@@ -191,8 +191,15 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
               </View>
             </View>
 
-            {/* ── Upgrade ── */}
-            {usage?.tier !== 'pro' && (
+            {/* ── Upgrade ──
+                ⚠️ `usage &&`, not `usage?.tier !== 'pro'`. `usage` starts null
+                and is only fetched when the panel OPENS, so the optional chain
+                made "not loaded yet" identical to "free" and showed a paying
+                user a live Go Pro button for the whole round-trip — seconds,
+                against a cold Render instance. Same reasoning as the tier badge
+                above: hiding an upsell for a moment costs nothing, showing one
+                to a subscriber reads as a billing failure. */}
+            {usage && usage.tier !== 'pro' && (
               <FilledButton
                 label="Go Pro"
                 trailing="→"

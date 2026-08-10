@@ -54,13 +54,21 @@ Blueprint apply). See [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) and
    `sync:false` env vars (incl. `YOUTUBE_API_KEY`), apply
    `backend/scripts/enable_rls.sql` to the PROD Supabase project (it now includes
    `ai_action_log` **and `todos`**), and enable Supabase Pro.
-7. ⚠️ **Right after the to-do list deploys to staging: re-run `enable_rls.sql`
-   against `savehere-dev`.** The migration creates the `todos` table with RLS
-   **off**, and Supabase exposes every table over PostgREST to the publishable
-   key that ships inside the app bundle — so until the script is re-run, anyone
-   with that key can read and rewrite every user's to-dos. The script is
-   idempotent, so just run the whole thing again. This is the same trap that
-   `ai_action_log` fell into: **any new table needs a matching RLS line.**
+7. ✅ **RLS on `savehere-dev` — VERIFIED CLOSED (2026-08-10), this warning was stale.**
+   Audited directly rather than trusted: every application table (`todos` included)
+   reports `relrowsecurity = true` AND `relforcerowsecurity = true`, with **zero
+   policies** — the intended deny-all. Proven from the OUTSIDE too, which is the
+   check that actually matters: `GET /rest/v1/<table>` against
+   `ymclmbmmwtczspnmccsy.supabase.co` using the **publishable key that ships in the
+   app bundle** returns `200 []` for todos, reels, ai_usage, trial_grants, profiles,
+   ai_action_log, tasks, workout_exercises and extraction_cache — including `reels`,
+   which really holds 66 rows. The connecting backend role (`postgres`) has
+   `rolbypassrls = true`, which is why FORCE doesn't break the API.
+   ⚠️ **Still outstanding for PROD.** `enable_rls.sql` has NOT been applied to the
+   `SaveHere` project (ref `lukmwwcilrjqqtgqbynq`) — that needs prod credentials and
+   must happen before the first prod deploy. The standing rule holds regardless:
+   **any new table needs a matching RLS line**, which is the trap `ai_action_log`
+   and `todos` each fell into once.
 
 ### Shipped 2026-07-21 → 07-25 (PRs #11–#20, all merged)
 
@@ -860,8 +868,42 @@ code has been modified yet.
   are what keeps the wordmark legible, and the scenes read without moving them.
   **Verified live** at 375×812 in both schemes: typecheck clean,
   `expo export --platform web` clean.
-- [ ] **Remove ASK YOUR LIBRARY button on landing page** - completely remove the ask you library button, not hide just completely remove along with the code. Once you remove it do a visual verification and code base to confirm the completely removed code.
-- [ ] **Bug: Go Pro is enable even for Pro user for sometime after login** - I have noticed that the GO PRO button is enabled for pro user after loggin in, its remove later after sometime, i belive the code is not properly placed or checking before logging to show that button or not. go ahead test the existing code in sub agent if required and fix the profile panel code. test and verify
+- [x] **Removed the ASK YOUR LIBRARY button from the landing page (2026-08-10)** — deleted,
+  not hidden. `Landing.tsx`'s composer used to swap its label, icon and destination at the
+  `ready` stage; it now always reads "Paste a link" and always pushes `/save`. Gone with it:
+  the `stage === 'ready'` branch, the `MotiView` wrapper and the `moti` import, the
+  `composerAsk` style, and the conditional `accessibilityLabel`/icon. **Grep confirms the
+  only remaining occurrences of the string in `mobile/` are the two comments that record the
+  removal.**
+  ⚠️ **One thing removed that you did not name, and why.** The `ready` hero read "You saved
+  it. / Now ask it." — copy written for the button underneath it. Left alone it would
+  promise an action the screen no longer offers, so it is now "You saved it. / Now use it."
+  with a sub-line pointing at the Ask **tab**, which still exists. The three-stage ladder and
+  the `ASK_MIN_REELS` unlock ticks were **kept**: they describe the library, not the button,
+  and the gate they show is still real and still enforced server-side.
+  **Verified live** at 375×812 dark on the 66-save account: composer reads "Paste a link",
+  no ask affordance anywhere on the screen. Typecheck + `expo export --platform web` clean.
+- [x] **Bug fixed: "Go Pro" showed to Pro users right after sign-in (2026-08-10)** —
+  root cause was one character class in `ProfilePanel.tsx`: the CTA was gated on
+  `usage?.tier !== 'pro'`, and `usage` starts `null` and is only fetched **when the panel
+  opens**. During that round-trip `usage?.tier` is `undefined`, `undefined !== 'pro'` is
+  `true`, so a paying user got a live upsell button until the request landed — seconds, not
+  frames, against a cold Render instance. The optional chain made "not loaded yet"
+  indistinguishable from "free". Now `usage && usage.tier !== 'pro'`, matching the **tier
+  badge two lines above**, which was already guarded with a comment naming this exact hazard;
+  whoever wrote it guarded the badge and not the button.
+  **Not a shared-state problem — do not build a UsageContext for it.** The other two
+  `getUsage()` callers already handle the unknown state correctly and deliberately
+  (`app/ask.tsx:51` gates on `savedCount !== null`; `app/reel/[id].tsx:344` locks only on an
+  explicit `false` so loading renders unlocked). This was the one unguarded site.
+  ⚠️ **A second, separate delay exists and is NOT this bug.** `/api/account/usage` reads the
+  tier from the JWT's `app_metadata.tier` claim, not the database (`app/entitlements.py:47`),
+  so a tier granted by `scripts/set_tier.py` to an already-signed-in session stays stale for
+  up to the token's ~1 h life. That one shows as a CTA that *persists* until re-login, and
+  the fix for it is a sign-out/in — don't chase it in the client.
+  **Verified live** on the real Pro dev account, all three states: mid-fetch → neither badge
+  nor button; loaded Pro → badge "PRO", no button; response rewritten to `tier:'free'` →
+  badge "FREE" and the button returns. Typecheck clean.
 
 
 
