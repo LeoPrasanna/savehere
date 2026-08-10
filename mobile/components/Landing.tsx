@@ -1,13 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { MotiView } from 'moti';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api } from '../services/api';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { Label, Wordmark } from './kit';
-import { colors, spacing, font, tracking, typeface, radius, themed } from '../constants/theme';
+import { colors, spacing, font, tracking, typeface, radius, themed, gradients, hazeLocations } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
 import { emitUi } from '../services/uiBus';
 import { ASK_MIN_REELS } from '../constants/limits';
@@ -29,20 +29,19 @@ import { getSaveCount, hydrateSaveCount, rememberSaveCount } from '../services/s
  * own filter; the disclaimer moved to where it is actually read.
  *
  * ── The one idea worth preserving ────────────────────────────────────────────
- * THE INPUT NEVER MOVES. It sits in the same place at every library size and
- * only changes what it accepts:
+ * THE INPUT NEVER MOVES, and as of 2026-08-10 it never changes job either:
  *
  *     0 saves        paste a link      "Save it. Then ask it."
  *     1..MIN-1       paste a link      "…and two to go."   + unlock ticks
- *     MIN+           ask a question    "You saved it. Now ask it."
+ *     MIN+           paste a link      "You saved it. Now use it."
  *
- * So the gesture learned on day one keeps working and simply gets more
- * powerful. Most apps ship a throwaway empty state; this is the same screen.
- *
- * ⚠️ The three-state ladder is NOT cosmetic — Ask is genuinely gated at
- * `ASK_MIN_REELS` (see app/ask.tsx, which enforces it independently). Showing an
- * "ask" affordance below that threshold would point at a locked feature, so the
- * threshold is imported, never hardcoded.
+ * ⚠️ The composer used to become an "ASK YOUR LIBRARY" button at MIN+ saves.
+ * The owner removed it (2026-08-10): Ask is a tab, and the home screen has one
+ * action. The three-state ladder survives because it describes the LIBRARY, not
+ * the button — `ASK_MIN_REELS` is still a real server-enforced gate
+ * (app/ask.tsx enforces it independently), so the unlock ticks still tell the
+ * truth about when the Ask tab starts working. Threshold is imported, never
+ * hardcoded.
  *
  * ⚠️ NO SERIF. The approved mockup rendered the hero in a serif face; the app is
  * one family (Inter) and the owner asked for strict consistency in the same
@@ -101,13 +100,30 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
       sub: `Questions unlock at ${ASK_MIN_REELS} saves — they need a little to draw on.`,
     },
     ready: {
-      head: 'You saved it.\nNow ask it.',
-      sub: 'Every reel, short and post you kept — answerable in a sentence.',
+      // ⚠️ Was "You saved it. / Now ask it." — copy for a button that no longer
+      // sits under it (owner removed the Ask CTA, 2026-08-10). A hero that says
+      // "ask it" above a Paste-a-link control is a promise the screen can't
+      // keep. Ask still exists; it is a tab, and the sub-line points there.
+      head: 'You saved it.\nNow use it.',
+      sub: 'Every reel, short and post you kept — summarised, and answerable from the Ask tab.',
     },
   }[stage];
 
   return (
     <View style={styles.screen}>
+      {/* Nocturnal Dimension haze (owner, 2026-08-10). This screen is exactly
+          what the wash was designed for — two text blocks and one control on an
+          otherwise empty canvas, the same conditions under which it reads on the
+          login wall. It is invisible on the library grid because full-bleed
+          thumbnails cover it, and that stays accepted: there the pictures ARE
+          the colour. Rendered ONCE at the root and non-interactive so it cannot
+          eat the composer's tap. `hazeFor()` collapses to a flat canvas fill in
+          light, so this paints nothing there — same deal as app/index.tsx. */}
+      <LinearGradient
+        colors={gradients.haze}
+        locations={hazeLocations}
+        style={[StyleSheet.absoluteFill, { pointerEvents: 'none' }]}
+      />
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
         <Wordmark size={22} />
         <Pressable
@@ -161,38 +177,24 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         )}
       </View>
 
-      {/* ── The input. Same position at every stage; only its job changes. ──
+      {/* ── The input. One job at every stage: paste a link. ──
           A Pressable shaped like the composer rather than a live field: the
-          paste flow lives on /save and the ask flow on /ask, both of which
-          already handle clipboard permissions, validation, quota and errors.
-          Duplicating either here would be a second implementation to keep in
-          sync — and the first one to drift. */}
+          paste flow lives on /save, which already handles clipboard
+          permissions, validation, quota and errors. Duplicating it here would
+          be a second implementation to keep in sync — and the first to drift.
+
+          ⚠️ This used to swap to an "ASK YOUR LIBRARY" button at `ready`
+          (owner removed it, 2026-08-10). Ask is a tab; the home screen's one
+          action is saving. Do not re-add a second destination here. */}
       <View style={[styles.dock, { paddingBottom: insets.bottom + TAB_BAR_CLEARANCE }]}>
         <Pressable
           style={styles.composer}
-          onPress={() => router.push(stage === 'ready' ? '/ask' : '/save')}
+          onPress={() => router.push('/save')}
           accessibilityRole="button"
-          accessibilityLabel={stage === 'ready' ? 'Ask your library' : 'Paste a link to save'}
+          accessibilityLabel="Paste a link to save"
         >
-          {stage === 'ready' ? (
-            // High-emphasis and animated — this is the card's whole purpose, and
-            // a static save count read as a label rather than an invitation.
-            <MotiView
-              from={{ opacity: 0.55, translateY: 3 }}
-              animate={{ opacity: 1, translateY: 0 }}
-              transition={{ type: 'timing', duration: 320, loop: false }}
-              style={{ flex: 1 }}
-            >
-              <Text style={styles.composerAsk}>ASK YOUR LIBRARY</Text>
-            </MotiView>
-          ) : (
-            <Text style={styles.composerText}>Paste a link</Text>
-          )}
-          <Icon
-            name={stage === 'ready' ? 'arrow-forward' : 'copy'}
-            size={15}
-            color={colors.textPrimary}
-          />
+          <Text style={styles.composerText}>Paste a link</Text>
+          <Icon name="copy" size={15} color={colors.textPrimary} />
         </Pressable>
       </View>
     </View>
@@ -268,12 +270,5 @@ const styles = themed(() => StyleSheet.create({
     color: colors.textSecondary,
     fontFamily: typeface.body,
     fontSize: font.md,
-  },
-  composerAsk: {
-    color: colors.textPrimary,
-    fontFamily: typeface.display,
-    fontSize: font.md,
-    fontWeight: '800',
-    letterSpacing: tracking.label,
   },
 }));

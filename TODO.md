@@ -54,13 +54,21 @@ Blueprint apply). See [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) and
    `sync:false` env vars (incl. `YOUTUBE_API_KEY`), apply
    `backend/scripts/enable_rls.sql` to the PROD Supabase project (it now includes
    `ai_action_log` **and `todos`**), and enable Supabase Pro.
-7. ⚠️ **Right after the to-do list deploys to staging: re-run `enable_rls.sql`
-   against `savehere-dev`.** The migration creates the `todos` table with RLS
-   **off**, and Supabase exposes every table over PostgREST to the publishable
-   key that ships inside the app bundle — so until the script is re-run, anyone
-   with that key can read and rewrite every user's to-dos. The script is
-   idempotent, so just run the whole thing again. This is the same trap that
-   `ai_action_log` fell into: **any new table needs a matching RLS line.**
+7. ✅ **RLS on `savehere-dev` — VERIFIED CLOSED (2026-08-10), this warning was stale.**
+   Audited directly rather than trusted: every application table (`todos` included)
+   reports `relrowsecurity = true` AND `relforcerowsecurity = true`, with **zero
+   policies** — the intended deny-all. Proven from the OUTSIDE too, which is the
+   check that actually matters: `GET /rest/v1/<table>` against
+   `ymclmbmmwtczspnmccsy.supabase.co` using the **publishable key that ships in the
+   app bundle** returns `200 []` for todos, reels, ai_usage, trial_grants, profiles,
+   ai_action_log, tasks, workout_exercises and extraction_cache — including `reels`,
+   which really holds 66 rows. The connecting backend role (`postgres`) has
+   `rolbypassrls = true`, which is why FORCE doesn't break the API.
+   ⚠️ **Still outstanding for PROD.** `enable_rls.sql` has NOT been applied to the
+   `SaveHere` project (ref `lukmwwcilrjqqtgqbynq`) — that needs prod credentials and
+   must happen before the first prod deploy. The standing rule holds regardless:
+   **any new table needs a matching RLS line**, which is the trap `ai_action_log`
+   and `todos` each fell into once.
 
 ### Shipped 2026-07-21 → 07-25 (PRs #11–#20, all merged)
 
@@ -785,11 +793,32 @@ code has been modified yet.
 - [x] **Fixed the `platformMeta` drift** — was hardcoding `#F8F8F8`/`#0B0B0B`; now reads `PALETTES.dark.textPrimary`/`.card` so it can't silently desync from the palette again. This was a regression introduced by the palette swap, not pre-existing.
 - [x] **Landed all 3 `gradients.haze` adoptions** — workout rest backdrop, LoginScreen (layered above the wash, below the bottom ramp so legibility is untouched), and the library-grid screen root (`app/index.tsx`, `pointerEvents="none"`).
 - [x] **Verified in the browser** — `npm run typecheck` clean; dark scheme renders on `#101012`; haze confirmed painting at 989×963 with all 4 stops at the right locations; every `ReelCard` scrim now resolves through the token.
-- [ ] ⚠️ **The haze is effectively invisible on the library grid.** It renders correctly but sits *behind* a full-bleed thumbnail mosaic, so almost none of it is ever on screen. It reads only on the workout rest screen and the login wall, which are mostly empty. Either accept it as atmosphere for sparse screens only, raise the stop opacities (currently 10%/14%), or move it above the grid at very low alpha. Owner's call — do not "fix" by adding blur.
-- [ ] **`Landing.tsx` has no haze.** `app/index.tsx:214` early-returns `<Landing/>` before the patched root, so the editorial hero screen is untouched. `DESIGN_PROPOSAL.md` §4 specs the library grid, not the hero — decide whether the hero should get it too.
-- [ ] **Capsule tab bar + centre FAB still unbuilt** — `components/TabBar.tsx` currently renders a pill bar off `colors.tabBarTop`/`tabBarBottom`. The FAB, active-tab orange dot, and filter-chip accent are where Option B says the orange actually earns its place.
-- [ ] **Build the capsule tab bar + centre FAB** in `app/(tabs)/_layout.tsx`.
-- [ ] **Home screen**: haze gradient root, Fraunces greeting, filter pill row.
+- [x] **DECIDED: haze is atmosphere for SPARSE SCREENS ONLY** (owner, 2026-08-10). It stays
+  behind the library grid's full-bleed thumbnails and stays effectively invisible there —
+  that is accepted, not a defect: on the grid the pictures ARE the colour, which was the
+  governing rule of the whole direction. Stop opacities (10%/14%) are NOT being raised and
+  the layer is NOT moving above the tiles; both would put a cast over user photography.
+  No code change. And still: do not "fix" this with blur.
+- [x] **`Landing.tsx` now has the haze** (owner, 2026-08-10). It early-returned before the
+  patched root in `app/index.tsx`, so the editorial hero was the one sparse screen without
+  it — the exact conditions (two text blocks, one control, empty canvas) where it works on
+  the login wall. One `LinearGradient` at the screen root, `pointerEvents: 'none'` so it
+  can't eat the composer's tap. **Verified in the browser:** all four stops resolve
+  (`#101012` → pink 10% @45% → orange 14% @78% → `#101012`), hero and sub stay legible.
+  In light `hazeFor()` still collapses to a flat canvas fill, so it paints nothing there —
+  same behaviour as `app/index.tsx`, deliberately not special-cased.
+- [x] **CLOSED: capsule tab bar + centre FAB — not doing it** (owner, 2026-08-10).
+  ⚠️ **The instruction was unbuildable as written.** It said to build the bar in
+  `app/(tabs)/_layout.tsx`; **there is no `app/(tabs)/` directory and never was.**
+  `components/TabBar.tsx` is a custom bar rendered at the ROOT, above the router, and that
+  is load-bearing: Home and Library **share the route `/`** and are told apart by a session
+  flag, which expo-router's `Tabs` cannot express. Migrating would have meant splitting them
+  into two real routes and re-breaking the active-indicator bug fixed in PR #39. The pill
+  bar already ships with five tabs and a centre Save, so the restyle was closed in favour of
+  the launch blockers. **Consequence to accept:** `colors.accent` orange now has no home in
+  the nav — Option B reserved it for "active tabs, filter chips and the centre FAB", and
+  none of those are built, so the app is effectively still achromatic outside `danger`.
+- [ ] **Home screen**: Fraunces greeting, filter pill row. *(Haze root: done above.)*
 - [ ] **Verify on web + Android** — the whole point of this hybrid is no `expo-blur`. Confirm the gradient costs nothing on scroll before calling it done.
 - [ ] **Contrast audit** — `#F7F4EF` on `#101012` and `#101012` on `#E96B34` both need re-measuring; the current palette's ratios are documented in `theme.ts` comments and must not regress.
 
@@ -815,9 +844,87 @@ code has been modified yet.
 - [x] **Fix Workout Plan Rest-Time Contrast (Bug 1)** — root cause was NOT the plan screen (`workout/[reelId].tsx` rest tag was already on `textTertiary`/`textSecondary` and fine). It was `workout/session/[reelId].tsx` `restCount`, the 110px countdown, styled `colors.onAction` — which **is** the page background in both schemes, so it rendered near-black on the dark canvas and white-on-white in light. Now `colors.textPrimary`.
 - [x] **Fix Navigation Tab Active Indicator Collision (Bug 2)** — ⚠️ **the prescribed fix was for a bug that didn't exist.** `TabBar` already exact-matched the root (`pathname === '/' || pathname === '/index'`); there was no `startsWith('/')` collision. The real cause: Home and Library **share** the route `/` and are distinguished by a session flag, so `usePathname()` never changes between them — and `TabBar` emitted `libraryState` for the route to consume but **never subscribed to it itself**, so nothing re-rendered the bar. Fixed by subscribing (`useEffect(() => onUi('libraryState', bumpActive), [])`). The `/`-exact guard was also applied to `HIDE_ON` defensively, but it is a no-op today — `HIDE_ON` contains no `/` entry.
 - [x] **Remove Library Header Search Option (Feature Change 3)** — `<TextInput>` search row deleted from `app/index.tsx`, replaced by memoized `RollingTagline` over `LIBRARY_CAPABILITIES` (module-level so the memo holds). Style keeps the old 42px footprint so the grid doesn't shift. Orphaned `Search`/`XCircle`/`TextInput` imports removed.
-- [ ] **Follow-up to Feature 3 — strip the dead search plumbing.** `app/index.tsx` still carries `search`/`searchResults`/`searching` state, the debounce effect, `searchEverywhere()`, and the `inSearchMode` empty states ("No matches", "Search all categories") — all now unreachable, ~50 lines. Left in place deliberately so the decision stays easy to reverse. **Also note: this removed the only entry point to the server-side smart search** (`app/services/search.py` — tokenizing, synonyms, category matching, relevance ranking). That backend feature is now unreachable from the app.
+- [x] **Follow-up to Feature 3 — dead search plumbing stripped (2026-08-10).** `app/index.tsx`
+  lost `search`/`searchResults`/`searching`, the debounce effect, `searchEverywhere()`, the
+  `searching` spinner branch, the `inSearchMode` empty states, the `displayList` alias and
+  the `!inSearchMode` guard on `loadMore` — every one provably unreachable, since no setter
+  ever wrote a non-empty query. Swept alongside it: the unused `KeyboardAvoidingView` import,
+  the `headerActions`/`searchInput`/`loader` styles, and a **local `goHome()` that had been
+  dead since round five** — going home is `TabBar.tsx`/`HomeButton.tsx`'s job now
+  (`clearEnteredLibrary()` + the `libraryState` emit the screen subscribes to); a comment
+  marks the spot so nobody adds a second copy. Net −78 lines.
+  ⚠️ **One behaviour change, deliberate — the dead code was masking a live bug.** Filtering
+  to a category with no saves fell through to the generic empty state and told a user with 66
+  saves "Nothing saved yet", offering "Save your first link". It now reads "Nothing in
+  {category}" with a **Show all categories** button. Verified live by stubbing an empty
+  category response.
+  **Verified:** typecheck clean, `expo export --platform web` clean, library exercised live
+  against the real 66-save dev account (grid, category switching, empty-category state and
+  its recovery button).
+- [ ] ⚠️ **DECIDE: give search a home, or delete the whole vertical.** With the header field
+  gone there is **no search entry point anywhere in the app**, so `backend/app/services/search.py`
+  (tokenizing, stopwords, synonym groups, category matching, relevance ranking),
+  `GET /api/reels/search` and `tests/test_smart_search.py` are code that runs in CI and can
+  never be reached by a user. `mobile/services/api.ts::searchReels()` was **kept on purpose**
+  as the seam — it now has zero callers and is the one line to wire a new entry point back to.
+  Half-keeping it is the worst of the three options: either search gets a surface (a header
+  icon that expands, or a tab) or that backend vertical comes out. Owner's call.
 - [x] **Implement Ask Screen Focus Hand-Off (Feature Change 4)** — Home card now renders an animated, high-emphasis `ASK YOUR LIBRARY` (MotiView fade/rise, no loop) instead of the static save count; `ask.tsx` focuses its input via a ref on a 350 ms timer rather than `autoFocus`, because focusing mid-push-transition is the case where iOS shows a caret but never raises the keyboard.
-- [ ] **make sure the mockreel tiles been shown in both light and dark modes** - Make the mockreel run on login page for dark and light modes.
+- [x] **MockReel tiles now render in BOTH schemes (2026-08-10)** — the wall was
+  always mounted and always drifting in both; what was missing was the *scenes*.
+  `MockReel.tsx` declared a scheme-aware `alpha()` ramp and then ignored it in the
+  StyleSheet, hardcoding `rgba(0,0,0,…)` for all 12 scene primitives (plus a white
+  `hSun`). In light that happens to read — black silhouettes on a pale well. In
+  dark it is black on a faintly-lit well under the 0.74 scrim, i.e. nothing: the
+  login wall showed bare card outlines and no compositions at all. Every primitive
+  now goes through `alpha()`, so the vocabulary actually inverts as the docstring
+  always claimed. The `hSun` highlight follows the ink too (bright disc in dark,
+  dark disc in light) rather than being white in both. **The play glyph was broken
+  in BOTH schemes** and is the same class of bug: `borderLeftColor:
+  colors.background` is a knockout, which only works when the well is far from the
+  canvas tone — it never is here, so the arrow was white-on-pale in light and
+  near-black-on-near-black in dark; it is `alpha(0.9)` now. The sheet is built
+  inside `themed()`, so the factory re-runs on `setScheme` and the tiles re-tint
+  live. Scrim opacities (`0.74` dark / `0.42` light) deliberately untouched — they
+  are what keeps the wordmark legible, and the scenes read without moving them.
+  **Verified live** at 375×812 in both schemes: typecheck clean,
+  `expo export --platform web` clean.
+- [x] **Removed the ASK YOUR LIBRARY button from the landing page (2026-08-10)** — deleted,
+  not hidden. `Landing.tsx`'s composer used to swap its label, icon and destination at the
+  `ready` stage; it now always reads "Paste a link" and always pushes `/save`. Gone with it:
+  the `stage === 'ready'` branch, the `MotiView` wrapper and the `moti` import, the
+  `composerAsk` style, and the conditional `accessibilityLabel`/icon. **Grep confirms the
+  only remaining occurrences of the string in `mobile/` are the two comments that record the
+  removal.**
+  ⚠️ **One thing removed that you did not name, and why.** The `ready` hero read "You saved
+  it. / Now ask it." — copy written for the button underneath it. Left alone it would
+  promise an action the screen no longer offers, so it is now "You saved it. / Now use it."
+  with a sub-line pointing at the Ask **tab**, which still exists. The three-stage ladder and
+  the `ASK_MIN_REELS` unlock ticks were **kept**: they describe the library, not the button,
+  and the gate they show is still real and still enforced server-side.
+  **Verified live** at 375×812 dark on the 66-save account: composer reads "Paste a link",
+  no ask affordance anywhere on the screen. Typecheck + `expo export --platform web` clean.
+- [x] **Bug fixed: "Go Pro" showed to Pro users right after sign-in (2026-08-10)** —
+  root cause was one character class in `ProfilePanel.tsx`: the CTA was gated on
+  `usage?.tier !== 'pro'`, and `usage` starts `null` and is only fetched **when the panel
+  opens**. During that round-trip `usage?.tier` is `undefined`, `undefined !== 'pro'` is
+  `true`, so a paying user got a live upsell button until the request landed — seconds, not
+  frames, against a cold Render instance. The optional chain made "not loaded yet"
+  indistinguishable from "free". Now `usage && usage.tier !== 'pro'`, matching the **tier
+  badge two lines above**, which was already guarded with a comment naming this exact hazard;
+  whoever wrote it guarded the badge and not the button.
+  **Not a shared-state problem — do not build a UsageContext for it.** The other two
+  `getUsage()` callers already handle the unknown state correctly and deliberately
+  (`app/ask.tsx:51` gates on `savedCount !== null`; `app/reel/[id].tsx:344` locks only on an
+  explicit `false` so loading renders unlocked). This was the one unguarded site.
+  ⚠️ **A second, separate delay exists and is NOT this bug.** `/api/account/usage` reads the
+  tier from the JWT's `app_metadata.tier` claim, not the database (`app/entitlements.py:47`),
+  so a tier granted by `scripts/set_tier.py` to an already-signed-in session stays stale for
+  up to the token's ~1 h life. That one shows as a CTA that *persists* until re-login, and
+  the fix for it is a sign-out/in — don't chase it in the client.
+  **Verified live** on the real Pro dev account, all three states: mid-fetch → neither badge
+  nor button; loaded Pro → badge "PRO", no button; response rewritten to `tier:'free'` →
+  badge "FREE" and the button returns. Typecheck clean.
 
 
 
