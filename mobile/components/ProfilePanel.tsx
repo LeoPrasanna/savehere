@@ -7,7 +7,7 @@ import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { Label, Body, Title, Rule, GhostButton, FilledButton, Index } from './kit';
 import { useAuth } from '../contexts/AuthContext';
-import { avatarSource } from '../constants/avatars';
+import { avatarSource, isLegacyAvatar } from '../constants/avatars';
 import { markReopenPanel } from '../services/sessionFlags';
 import { clearSaveCount } from '../services/saveCount';
 import {
@@ -178,8 +178,13 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                     text so nobody's face silently disappears in a release that
                     changed the picker; or nobody picked one. */}
                 {avatarSource(profile.avatar)
-                  ? <Image source={avatarSource(profile.avatar)} style={styles.avatarImg} resizeMode="contain" />
-                  : profile.avatar
+                  ? <Image
+                      source={avatarSource(profile.avatar)}
+                      style={styles.avatarImg}
+                      resizeMode="contain"
+                      fadeDuration={0}
+                    />
+                  : isLegacyAvatar(profile.avatar)
                     ? <Text style={styles.avatarEmoji}>{profile.avatar}</Text>
                     : <Icon name="user" size={24} color={colors.textPrimary} />}
               </View>

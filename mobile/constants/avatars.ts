@@ -1,6 +1,22 @@
 /**
- * Profile avatars — 102 illustrated PNGs, owner-supplied (2026-08-10),
+ * Profile avatars — 92 illustrated PNGs, owner-supplied (2026-08-10),
  * replacing the emoji list that shipped before.
+ *
+ * ── TEN WERE REMOVED FROM THE SUPPLIED SET, DO NOT PUT THEM BACK ───────────
+ * They were recognisable third-party characters despite generic filenames, and
+ * shipping them as selectable avatars in an App Store app is a trademark
+ * problem (App Review 5.2), not a style one:
+ *   19_tiny_green_creature (Grogu)   20_blue_creature (Stitch)
+ *   21_groot_like_plant (Groot)      22_yellow_mouse (Pikachu)
+ *   24_pink_blob (Kirby)             25_blue_turtle (Squirtle)
+ *   26_fox_rabbit (Eevee)            27_pink_cat (Mew)
+ *   35_game_controller (Xbox trade dress)  36_gameboy (Nintendo hardware)
+ * This is the same exposure that got every bitmap pulled from the login screen
+ * in round three.
+ * ⚠️ Removing keys is why `isLegacyAvatar` checks the SHAPE of the value and
+ * not just "is it missing from the map". A user who had picked `22_yellow_mouse`
+ * now holds a key that resolves to nothing; the emoji fallback would have
+ * printed the literal string "22_yellow_mouse" into their avatar box.
  *
  * ── ON BUNDLE SIZE, WHICH IS THE REASON THIS FILE READS LIKE THIS ──────────
  * The originals are 512x512 RGBA, 15.9 MB for the set. Expo bundles everything
@@ -55,22 +71,14 @@ export const AVATARS: Record<string, number> = {
   '17_skull': require('../assets/avatars/17_skull.png'),
   '18_astronaut': require('../assets/avatars/18_astronaut.png'),
   '18_hedgehog': require('../assets/avatars/18_hedgehog.png'),
-  '19_tiny_green_creature': require('../assets/avatars/19_tiny_green_creature.png'),
-  '20_blue_creature': require('../assets/avatars/20_blue_creature.png'),
   '20_coffee': require('../assets/avatars/20_coffee.png'),
   '21_cloud': require('../assets/avatars/21_cloud.png'),
-  '21_groot_like_plant': require('../assets/avatars/21_groot_like_plant.png'),
-  '22_yellow_mouse': require('../assets/avatars/22_yellow_mouse.png'),
   '23_black_dragon': require('../assets/avatars/23_black_dragon.png'),
   '23_penguin': require('../assets/avatars/23_penguin.png'),
   '24_alpaca': require('../assets/avatars/24_alpaca.png'),
-  '24_pink_blob': require('../assets/avatars/24_pink_blob.png'),
   '25_avocado': require('../assets/avatars/25_avocado.png'),
-  '25_blue_turtle': require('../assets/avatars/25_blue_turtle.png'),
   '26_cactus': require('../assets/avatars/26_cactus.png'),
-  '26_fox_rabbit': require('../assets/avatars/26_fox_rabbit.png'),
   '27_mountain': require('../assets/avatars/27_mountain.png'),
-  '27_pink_cat': require('../assets/avatars/27_pink_cat.png'),
   '29_capybara': require('../assets/avatars/29_capybara.png'),
   '29_robot': require('../assets/avatars/29_robot.png'),
   '30_hooded_mask': require('../assets/avatars/30_hooded_mask.png'),
@@ -82,9 +90,7 @@ export const AVATARS: Record<string, number> = {
   '33_retro_computer': require('../assets/avatars/33_retro_computer.png'),
   '34_fox': require('../assets/avatars/34_fox.png'),
   '35_bubble_tea': require('../assets/avatars/35_bubble_tea.png'),
-  '35_game_controller': require('../assets/avatars/35_game_controller.png'),
   '36_axolotl': require('../assets/avatars/36_axolotl.png'),
-  '36_gameboy': require('../assets/avatars/36_gameboy.png'),
   '38_ufo': require('../assets/avatars/38_ufo.png'),
   '40_sleepy_crescent': require('../assets/avatars/40_sleepy_crescent.png'),
   '42_magic_book': require('../assets/avatars/42_magic_book.png'),
@@ -145,9 +151,18 @@ export function avatarSource(value?: string | null): number | undefined {
   return value ? AVATARS[value] : undefined;
 }
 
-/** True for a pre-2026-08-10 emoji avatar: a value that is set but not a key. */
+/**
+ * True for a pre-2026-08-10 emoji avatar — something to draw as TEXT.
+ *
+ * ⚠️ Not simply "missing from the map". Avatar keys can be withdrawn (ten were,
+ * for IP reasons), and a withdrawn key is also missing from the map — printing
+ * it as text would put the literal string `22_yellow_mouse` in someone's avatar
+ * frame. So the test is the value's SHAPE: anything matching the `<digits>_<name>`
+ * key format is a key, present or not, and never text. Everything else is an
+ * emoji from the old picker.
+ */
 export function isLegacyAvatar(value?: string | null): boolean {
-  return !!value && !(value in AVATARS);
+  return !!value && !(value in AVATARS) && !/^\d+_/.test(value);
 }
 
 /** "18_astronaut" -> "Astronaut". Used for accessibility labels only. */

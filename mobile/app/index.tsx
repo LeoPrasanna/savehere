@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, ScrollView, StyleSheet, ActivityIndicator,
-  RefreshControl, useWindowDimensions, Platform,
+  RefreshControl, useWindowDimensions, Platform, Image,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -18,6 +18,8 @@ import { ASK_MIN_REELS } from '../constants/limits';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { RollingTagline } from '../components/RollingTagline';
+import { useAuth } from '../contexts/AuthContext';
+import { avatarSource, isLegacyAvatar } from '../constants/avatars';
 import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, GRID_GAP, themed, gradients, hazeLocations } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
@@ -37,6 +39,7 @@ const LIBRARY_CAPABILITIES = [
 export default function HomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { profile, displayName } = useAuth();
   const { width } = useWindowDimensions();
   const numColumns = width < 600 ? 2 : width < 1024 ? 3 : 4;
   const [reels, setReels] = useState<Reel[]>([]);
@@ -169,10 +172,34 @@ export default function HomeScreen() {
           no gradient, no shadow — the header is metadata about the sheet below
           it and speaks in the same small tracked voice. */}
       <View style={[styles.header, { paddingTop: insets.top + spacing.sm }]}>
+        {/* The face, and it is a control: tapping it opens the same profile
+            panel as the hamburger. An avatar that looks tappable and isn't is
+            the more annoying option, and this is where every other app puts
+            the way into your account. */}
+        <Pressable
+          style={styles.hAvatar}
+          onPress={() => emitUi('openProfile')}
+          accessibilityLabel="Your profile"
+        >
+          {avatarSource(profile.avatar) ? (
+            <Image
+              source={avatarSource(profile.avatar)}
+              style={styles.hAvatarImg}
+              resizeMode="contain"
+              fadeDuration={0}
+            />
+          ) : isLegacyAvatar(profile.avatar) ? (
+            <Text style={styles.hAvatarEmoji}>{profile.avatar}</Text>
+          ) : (
+            <Icon name="user" size={18} color={colors.textPrimary} />
+          )}
+        </Pressable>
         <View style={styles.brandRow}>
-          <Wordmark size={26} />
-          <Label style={styles.count}>
-            {total > 0 ? `${total} saved` : 'Nothing saved yet'}
+          <Wordmark size={22} />
+          {/* displayName is already nickname > first name > a name derived from
+              the email, so this needs no fallback logic of its own. */}
+          <Label style={styles.count} numberOfLines={1}>
+            {displayName} · {total > 0 ? `${total} saved` : 'nothing saved yet'}
           </Label>
         </View>
         <Pressable style={styles.hBtn} onPress={() => emitUi('openProfile')} accessibilityLabel="Menu">
@@ -195,7 +222,10 @@ export default function HomeScreen() {
         style={styles.capabilityRoll}
         numberOfLines={1}
       />
-      <Rule />
+      {/* ⚠️ A full-bleed <Rule/> used to sit here, directly under the roll's own
+          inset bottom hairline — two rules, 1px apart, at different widths.
+          Removed (owner, 2026-08-10); the roll keeps its own line and its 42px
+          footprint, so the grid below does not shift. */}
 
       {/* ── Category filter ──────────────────────────────────────────────────
           Round icon bubbles with the name beneath, mirroring the reference
@@ -346,8 +376,20 @@ const styles = themed(() => StyleSheet.create({
     paddingBottom: spacing.sm,
     gap: spacing.md,
   },
-  brandRow: { gap: 2 },
+  // minWidth:0 is load-bearing: without it a long nickname pushes the menu
+  // button off the right edge instead of ellipsizing inside its own column.
+  brandRow: { flex: 1, minWidth: 0, gap: 2 },
   count: { marginBottom: 2 },
+  hAvatar: {
+    width: 40, height: 40,
+    borderWidth: 1,
+    borderColor: colors.ghostLine,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  hAvatarImg: { width: 34, height: 34 },
+  hAvatarEmoji: { fontSize: 20, lineHeight: 26 },
   // Square hairline. No fill, no radius, no shadow.
   hBtn: {
     width: 36, height: 36,

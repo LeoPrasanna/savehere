@@ -98,7 +98,18 @@ export default function ProfileScreen() {
                 style={[styles.avatarCell, selected && styles.avatarCellOn]}
                 accessibilityLabel={`Avatar ${avatarLabel(key)}${selected ? ', selected' : ''}`}
               >
-                <Image source={AVATARS[key]} style={styles.avatarCellImg} resizeMode="contain" />
+                {/* fadeDuration={0}: React Native's Image fades in over 300ms
+                    on Android by default. Across a grid of 92 that reads as the
+                    picker "loading slowly" when the bytes are already there —
+                    they are bundled 4.5 KB assets, not network fetches. Killing
+                    the fade is the whole speed fix; there is no download to
+                    optimise. */}
+                <Image
+                  source={AVATARS[key]}
+                  style={styles.avatarCellImg}
+                  resizeMode="contain"
+                  fadeDuration={0}
+                />
               </Pressable>
             );
           })}

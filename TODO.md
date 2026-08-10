@@ -1020,15 +1020,41 @@ code has been modified yet.
   **Runtime:** the picker mounts all 102 at once with no windowing — ~6–7 MB of decoded
   bitmap while that screen is open, freed on unmount. Fine on any recent phone; marked
   with a `ponytail:` note naming FlatList windowing as the upgrade if the set passes ~200.
-  ⚠️ **UNRESOLVED, OWNER'S CALL — likeness/IP risk.** Roughly eight of the 102 are
-  recognisable third-party characters despite generic filenames: `22_yellow_mouse`
-  (Pikachu), `24_pink_blob` (Kirby), `25_blue_turtle` (Squirtle), `26_fox_rabbit` (Eevee),
-  `19_tiny_green_creature` (Grogu), `21_groot_like_plant` (Groot), `36_gameboy` (Nintendo
-  hardware), plus a Stitch-like face. This is the **same exposure that got every bitmap
-  pulled from the login screen** in round three. Shipping them as user-selectable avatars
-  in an App Store app is a trademark/copyright risk under App Review 5.2. They are
-  included as supplied — deleting the files and regenerating the map is a two-minute job
-  if you want them out.
+  ✅ **RESOLVED — the IP avatars are deleted (owner, 2026-08-10).** On close inspection it
+  was **ten**, not the eight first estimated: `19_tiny_green_creature` (Grogu),
+  `20_blue_creature` (Stitch), `21_groot_like_plant` (Groot), `22_yellow_mouse` (Pikachu),
+  `24_pink_blob` (Kirby), `25_blue_turtle` (Squirtle), `26_fox_rabbit` (Eevee),
+  `27_pink_cat` (Mew), `35_game_controller` (Xbox trade dress) and `36_gameboy` (Nintendo
+  hardware). **92 avatars remain, 0.42 MB.** Judgement calls that were KEPT, for the
+  record: `14_lucky_cat` (maneki-neko is traditional), `12_shiba` (a real dog breed),
+  `36_axolotl` (a real animal), `31_vr_gamer` and `29_robot`/`32_pixel_hero` (generic).
+  ⚠️ **Withdrawing keys created a trap that is now closed.** `isLegacyAvatar` used to mean
+  "not in the map", which after this deletion also matched a withdrawn key — so a user who
+  had picked Pikachu would have had the literal string `22_yellow_mouse` printed in their
+  avatar frame. It now tests the value's SHAPE (`^\d+_`), so a withdrawn key falls through
+  to the neutral user icon and only real emoji render as text.
   ⚠️ **Not visually verified in-app:** the picker and the panel both need a signed-in
   session and the preview browser's session expired mid-session. Typecheck, web export
   and the rendered contact sheet all pass; **owner should do a visual pass.**
+- [x] **Library header: profile picture + name, and the doubled rule removed (2026-08-10)**
+  1. **The face is on the library page**, left of the wordmark, with
+     `displayName · N saved` beside it. No new fallback logic was written —
+     `AuthContext.displayName` already resolves **nickname → first name → a name derived
+     from the email**, which is exactly the rule asked for.
+  2. **The avatar is a control**, not decoration: tapping it opens the same profile panel
+     as the hamburger. An avatar that looks tappable and isn't is the more annoying
+     option, and it is where every other app puts the way into your account.
+  3. **`brandRow` gained `flex:1, minWidth:0`** — load-bearing. Without it a long nickname
+     pushes the menu button off the right edge instead of ellipsizing in its own column.
+  4. **The extra line under the rolling tagline is gone.** A full-bleed `<Rule/>` sat
+     directly beneath the roll's own inset bottom hairline: two rules, 1px apart, at
+     different widths. The roll keeps its own line and its 42px footprint, so the grid
+     below does not shift.
+- [x] **Avatars load faster — the honest fix (2026-08-10)** — `fadeDuration={0}` on all
+  three render sites. React Native's `Image` fades in over **300 ms on Android by
+  default**, and across a 92-cell grid that reads as "the picker is loading slowly" when
+  the bytes are already in the binary. ⚠️ There was **no download to optimise**: these are
+  bundled 4.5 KB assets, not network fetches, so anything else (a CDN, prefetching, a
+  caching image library like `expo-image`) would have been ceremony around a non-problem.
+  The remaining cost is decode, which is why the unwindowed picker still carries its
+  `ponytail:` note.
