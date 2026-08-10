@@ -59,7 +59,15 @@ mobile/    Expo SDK 56 + expo-router + React Native (dev on web).
 - Per-reel **AI caps**: tasks generated **once** then manual add/edit/delete; workout ×3. Resummarize is **uncapped per reel** (2026-07-14) — every run charges the per-user daily AI quota, which is the real ceiling; the per-IP burst guard stops loops. The UI notes the quota cost next to the button.
 - **Ask your library** — retrieval-based (only top-15 relevant saves sent to Claude).
 - **AI outputs show dual units**: °F/°C, lb/g, cup/ml across all 4 prompts (summary, tasks/recipe, workout).
-- **Smart search** (server-side, `app/services/search.py`): tokenized query + stopword stripping, **category** matching, synonym groups (gym ↔ fitness, recipe ↔ cooking), prefix type-ahead, relevance ranking. Lexical on purpose — search fires per keystroke, a Claude call per search would drain the quota. Embeddings = the semantic upgrade path.
+- **Search: REMOVED (2026-08-10).** There is no search in the app, client or server.
+  The library header field went in PR #39; the endpoint, `app/services/search.py`
+  (tokenizing, stopwords, synonyms, category matching, relevance ranking), the
+  mobile `api.searchReels()` and `tests/test_smart_search.py` were all deleted
+  once it was clear nothing could reach them. **Narrowing the grid is category
+  bubbles only.** If search returns, the lexical ranker is in git — but at the
+  scale that would justify rebuilding it, go to embeddings instead. The old
+  rationale still holds and is why this was never Claude-backed: search fires
+  per keystroke and would drain the daily AI quota.
 - **Safety surfaces**: all disclaimer copy lives in ONE place, `mobile/components/Disclaimer.tsx` (variants: ai / fitness / recipe / ownership / medical). Sensitive (medical/high-stakes) saves are flagged by the summarizer (`is_sensitive`), show the medical disclaimer, and the server refuses tasks/workout generation for them (`routes/workout.py`, 422 before quota charge). A pre-build workout modal sets "generic template, not coaching" expectations.
 - Rediscover, Help, landing page.
 - Landing: hamburger (☰) opens profile panel; "Ask your library" card shown prominently once ≥3 reels saved; card hidden from panel when shown on landing; "Open my library" below the Ask card.
@@ -188,7 +196,8 @@ that section is now marked **RETIRED**. Full spec: [`DESIGN_PROPOSAL.md`](DESIGN
 2. **Auth + per-user data** (Supabase): users table, `user_id` everywhere, per-user filtering, per-user AI quota. *Largest pure-code unlock; enables tiers/referrals/quota.*
 3. **Deploy backend** (Railway/Render) + point `EXPO_PUBLIC_API_URL` at it + lock CORS + Postgres. Repo is deploy-ready (`render.yaml`, env-driven CORS/DATABASE_URL, `$PORT` start, `/health` check) — owner action: connect repo, set `ANTHROPIC_API_KEY`.
 4. **iOS share extension** (needs Mac/EAS) — the core capture gesture.
-5. **Server-side search** — `GET /api/reels/search?q=` (title+tags+summary+notes) for full-library queries vs current client-side-over-loaded-page approach.
+5. ~~**Server-side search**~~ — built, then **deleted 2026-08-10** when the UI
+   entry point was removed and nothing could call it. See §3.
 6. Pricing/IAP config in App Store Connect (intro offer, offer code, regional prices) — at launch.
 
 See [`TODO.md`](../TODO.md) for the full, categorized checklist.

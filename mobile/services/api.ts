@@ -363,8 +363,10 @@ export const api = {
 
   getReel: (id: string) => request<Reel>(`/api/reels/${id}`),
 
-  searchReels: (q: string, limit = 24, offset = 0) =>
-    request<ReelListResponse>(`/api/reels/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
+  // ⚠️ `searchReels()` was removed on 2026-08-10 along with the endpoint it
+  // called. The library header's search field went in PR #39; this client method
+  // was kept one round as the seam to wire a new entry point back to, and the
+  // owner then chose to delete the vertical rather than carry it unreachable.
 
   resummarize: (id: string) =>
     request<Reel>(`/api/reels/${id}/resummarize`, { method: 'POST' }),

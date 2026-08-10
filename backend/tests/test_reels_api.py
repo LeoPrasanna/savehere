@@ -1,7 +1,12 @@
-"""DB-backed tests for the library list/search endpoints (pagination + server-side
-search) AND per-user isolation. Uses an isolated in-memory SQLite so the real
+"""DB-backed tests for the library list endpoints (pagination, tag/platform
+filters) AND per-user isolation. Uses an isolated in-memory SQLite so the real
 savehere.db is never touched, and overrides get_current_user so no real JWT/Supabase
-call happens. Seeds two users to prove one can't see the other's reels."""
+call happens. Seeds two users to prove one can't see the other's reels.
+
+Was `test_search_api.py`: the server-side search endpoint and its ranker were
+deleted on 2026-08-10 (no reachable client), so the search cases went with them
+and the file was renamed to match what it actually covers.
+"""
 import pytest
 from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
@@ -100,49 +105,6 @@ class TestListPagination:
         assert body["items"][0]["id"] == "a2"
 
 
-class TestSearch:
-    def test_matches_title(self, client):
-        body = client.get("/api/reels/search?q=pasta").json()
-        assert body["total"] == 1
-        assert body["items"][0]["id"] == "a1"   # NOT user B's "Secret pasta"
-
-    def test_matches_tag(self, client):
-        body = client.get("/api/reels/search?q=finance").json()
-        assert {i["id"] for i in body["items"]} == {"a3"}
-
-    def test_matches_summary_text(self, client):
-        assert client.get("/api/reels/search?q=pushups").json()["items"][0]["id"] == "a2"
-
-    def test_matches_notes(self, client):
-        assert client.get("/api/reels/search?q=kitchen").json()["items"][0]["id"] == "a1"
-
-    def test_case_insensitive(self, client):
-        assert client.get("/api/reels/search?q=PASTA").json()["total"] == 1
-
-    def test_empty_query_returns_nothing(self, client):
-        assert client.get("/api/reels/search?q=").json() == {"total": 0, "items": []}
-
-    def test_no_match_is_empty(self, client):
-        assert client.get("/api/reels/search?q=zzzznope").json()["total"] == 0
-
-    def test_natural_phrase_matches_category(self, client):
-        # "any videos on Fitness": a2 is category=fitness but the word "fitness"
-        # appears nowhere in its title/summary/notes — the old LIKE search
-        # returned nothing here.
-        body = client.get("/api/reels/search?q=any%20videos%20on%20Fitness").json()
-        assert {i["id"] for i in body["items"]} == {"a2"}
-
-    def test_synonym_matches(self, client):
-        # "gym" should find the fitness reel via the synonym group.
-        body = client.get("/api/reels/search?q=gym").json()
-        assert {i["id"] for i in body["items"]} == {"a2"}
-
-    def test_prefix_typeahead(self, client):
-        # Mid-typing prefix already surfaces results (old LIKE behavior kept).
-        body = client.get("/api/reels/search?q=budg").json()
-        assert {i["id"] for i in body["items"]} == {"a3"}
-
-
 class TestPerUserIsolation:
     def test_list_only_shows_own_reels(self, make_client):
         a = make_client(USER_A).get("/api/reels").json()
@@ -161,10 +123,16 @@ class TestPerUserIsolation:
         # B's reel still there afterwards.
         assert make_client(USER_B).get("/api/reels/b1").status_code == 200
 
-    def test_search_does_not_cross_users(self, make_client):
-        # "pasta" exists for both A (Perfect pasta) and B (Secret pasta).
-        a = make_client(USER_A).get("/api/reels/search?q=pasta").json()
+    def test_tag_filter_does_not_cross_users(self, make_client):
+        # Replaces the deleted search-isolation case (2026-08-10). The `?tag=`
+        # filter is now the only query surface that matches rows in PYTHON rather
+        # than in SQL, which is exactly where a user_id filter can get dropped
+        # unnoticed — so it is the one worth guarding. Both a1 and b1 are tagged
+        # "cooking"; A must see only their own.
+        a = make_client(USER_A).get("/api/reels?tag=cooking").json()
         assert {i["id"] for i in a["items"]} == {"a1"}
+        b = make_client(USER_B).get("/api/reels?tag=cooking").json()
+        assert {i["id"] for i in b["items"]} == {"b1"}
 
     def test_unauthenticated_request_is_401(self, make_client):
         # Clear the auth override -> the real dependency rejects the missing token.
