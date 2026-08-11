@@ -241,3 +241,39 @@ class TestThumbnailRedirectGuard:
         assert main._thumb_host_ok("https://scontent.cdninstagram.com/x.jpg")
         assert not main._thumb_host_ok("https://ytimg.com.evil.example/x.jpg")
         assert not main._thumb_host_ok("http://i.ytimg.com/x.jpg")
+
+
+class TestHealthProbeReportsCurrentBreakerState:
+    """`breakers` used to be captured while building the response dict — i.e.
+    BEFORE the probe ran and updated the counters — so a failing probe was
+    returned next to a breaker count that had not registered it yet. Two
+    different moments in one payload is the wrong thing to hand someone
+    debugging a live block."""
+
+    @pytest.fixture(autouse=True)
+    def _clean(self):
+        extractor._breaker.clear()
+        yield
+        extractor._breaker.clear()
+
+    def test_a_failing_probe_is_reflected_in_the_same_response(self, monkeypatch):
+        from app import main
+
+        def _failing_probe(url):
+            extractor.record_result("youtube", False)
+            return {"best_text": "", "thumbnail_url": ""}
+
+        monkeypatch.setattr(extractor, "extract_info", _failing_probe)
+        out = main.health_extract(live=True)
+
+        assert out["probe_ok"] is False
+        assert out["breakers"].get("youtube", {}).get("fails") == 1, (
+            "the probe's own failure must appear in the breakers it is reported beside"
+        )
+
+    def test_non_live_call_still_reports_state(self, monkeypatch):
+        from app import main
+        extractor.record_result("instagram", False)
+        out = main.health_extract(live=False)
+        assert out["breakers"]["instagram"]["fails"] == 1
+        assert "probe_ok" not in out

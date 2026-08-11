@@ -63,6 +63,14 @@ class ReelDB(Base):
     # turned into tasks/workouts (enforced server-side in routes/workout.py) and
     # the app shows a "not responsible" disclaimer.
     is_sensitive = Column(Boolean, nullable=False, default=False)
+    # When startup recovery last re-ran this reel's summary for free.
+    #
+    # recover_pending_summaries() charges nothing (user=None) because an
+    # interrupted summary is our crash, not the user's action. Without this
+    # stamp, a row that can never finish was re-summarized on every cold start —
+    # unbounded Claude spend that never appeared in ai_usage or the action log.
+    # Set = a free recovery has already been spent on this row; it gets one.
+    recovered_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 

@@ -885,7 +885,20 @@ def recover_pending_summaries() -> None:
     mid-task. FastAPI BackgroundTasks run in-process, so a restart/crash/cold-start
     (common on free hosting) orphans any in-flight summary — without this it would
     be stuck 'Summarizing…' forever. Called once on startup. Bounded so a backlog
-    can't trigger a cost spike; anything beyond the cap is left for manual retry."""
+    can't trigger a cost spike; anything beyond the cap is left for manual retry.
+
+    ONE free recovery per reel, enforced by the `recovered_at` stamp. This path
+    charges nothing (`user=None`) on purpose — the interrupted summary was our
+    crash, not the user's action, so billing them for it would be wrong. But
+    unstamped it was the only AI path in the app that spends Claude tokens
+    without decrementing anyone's allowance or showing up in the usage meter,
+    and Render's free tier cold-starts constantly. A row that could never
+    complete was re-summarized free and invisibly on EVERY boot, forever.
+
+    A reel still 'pending' after its free recovery is flipped to 'failed' rather
+    than left spinning: nothing is pending any more, and 'failed' is what makes
+    the detail screen offer the manual retry — which does charge, correctly,
+    because the user chose it."""
     db = SessionLocal()
     try:
         # Self-heal rows whose status contradicts their content. A reel that HAS
@@ -907,14 +920,43 @@ def recover_pending_summaries() -> None:
             db.commit()
             logger.info(f"[RECOVER] healed {fixed} reel(s) that had a summary but a non-ready status")
 
+        # Already had its one free pass and is STILL pending — a second free run
+        # would fail the same way. Surface it instead: 'failed' is the status the
+        # detail screen turns into a retry button, and that retry charges,
+        # correctly, because the user chose it.
+        exhausted = (
+            db.query(ReelDB)
+            .filter(ReelDB.summary_status == "pending", ReelDB.recovered_at.isnot(None))
+            .all()
+        )
+        for r in exhausted:
+            r.summary_status = "failed"
+        if exhausted:
+            db.commit()
+            logger.info(
+                f"[RECOVER] {len(exhausted)} reel(s) still pending after their free "
+                "recovery — marked failed so the app offers a manual retry"
+            )
+
         rows = (
             db.query(ReelDB.id, ReelDB.raw_text, ReelDB.title)
-            .filter(ReelDB.summary_status == "pending")
+            .filter(ReelDB.summary_status == "pending", ReelDB.recovered_at.is_(None))
             .order_by(ReelDB.created_at.desc())
             .limit(PENDING_RECOVERY_LIMIT)
             .all()
         )
         pending = [(r[0], bool((r[1] or "").strip() or r[2])) for r in rows]
+
+        # Stamp BEFORE enqueuing, and commit. If the process dies mid-recovery
+        # the work is lost but the stamp survives — which is the safe direction:
+        # a missed retry costs the user one manual tap, an unstamped row costs
+        # unbounded Claude tokens on every future boot.
+        if pending:
+            now = datetime.utcnow()
+            (db.query(ReelDB)
+               .filter(ReelDB.id.in_([rid for rid, _ in pending]))
+               .update({ReelDB.recovered_at: now}, synchronize_session=False))
+            db.commit()
     except Exception as e:
         logger.warning(f"[RECOVER] could not query pending summaries: {e}")
         return
@@ -926,7 +968,8 @@ def recover_pending_summaries() -> None:
             _executor.submit(_summarize_reel, rid)
         else:
             # Died before extraction finished — redo the whole chain. user=None:
-            # the recovery path doesn't charge quota (bounded by the cap above).
+            # the recovery path doesn't charge quota (our crash, not their
+            # action), which is exactly why `recovered_at` bounds it to once.
             _executor.submit(_extract_and_summarize, rid, None)
     if pending:
         logger.info(f"[RECOVER] re-enqueued {len(pending)} orphaned pending task(s)")

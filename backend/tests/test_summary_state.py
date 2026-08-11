@@ -73,6 +73,76 @@ def test_startup_heals_a_summary_stuck_behind_skipped(session):
     s.close()
 
 
+class TestRecoveryIsBoundedToOneFreePass:
+    """Startup recovery re-summarizes 'pending' rows WITHOUT charging quota
+    (user=None) — an interrupted summary is our crash, not the user's action.
+
+    Unbounded, that made it the only AI path that spends Claude tokens without
+    decrementing anyone's allowance or appearing in the usage meter. On a host
+    that cold-starts constantly, a row that can never finish was re-summarized
+    free and invisibly on EVERY boot. `recovered_at` caps it at one pass.
+    """
+
+    def test_first_boot_recovers_and_stamps(self, session, monkeypatch):
+        rid = _reel(session, title="Knife skills", summary_status="pending",
+                    raw_text="hold the blade at fifteen degrees and draw slowly")
+        ran = []
+        monkeypatch.setattr(reels_module, "_summarize_reel", lambda r, **kw: ran.append(r))
+        monkeypatch.setattr(reels_module._executor, "submit",
+                            lambda fn, *a: fn(*a))
+
+        reels_module.recover_pending_summaries()
+
+        assert ran == [rid], "a never-recovered pending reel should get its one free pass"
+        s = session()
+        assert s.query(ReelDB).filter(ReelDB.id == rid).first().recovered_at is not None
+        s.close()
+
+    def test_second_boot_does_not_spend_again(self, session, monkeypatch):
+        """The actual cost bug: this used to re-run on every single boot."""
+        rid = _reel(session, title="Knife skills", summary_status="pending",
+                    raw_text="hold the blade at fifteen degrees and draw slowly")
+        ran = []
+        monkeypatch.setattr(reels_module, "_summarize_reel", lambda r, **kw: ran.append(r))
+        monkeypatch.setattr(reels_module._executor, "submit", lambda fn, *a: fn(*a))
+
+        reels_module.recover_pending_summaries()      # boot 1 — one free pass
+        ran.clear()
+        reels_module.recover_pending_summaries()      # boot 2 — must not spend
+
+        assert ran == [], "a second free recovery is unbilled Claude spend on every cold start"
+
+    def test_still_pending_after_its_free_pass_becomes_retryable(self, session, monkeypatch):
+        """Left 'pending' the card spins on 'Summarizing…' forever with nothing
+        actually running. 'failed' is what surfaces the manual retry — which
+        charges, correctly, because the user chose it."""
+        rid = _reel(session, title="Knife skills", summary_status="pending",
+                    raw_text="hold the blade at fifteen degrees and draw slowly")
+        monkeypatch.setattr(reels_module, "_summarize_reel", lambda r, **kw: None)
+        monkeypatch.setattr(reels_module._executor, "submit", lambda fn, *a: fn(*a))
+
+        reels_module.recover_pending_summaries()      # stamps, summary still doesn't land
+        reels_module.recover_pending_summaries()      # boot 2 gives up on it
+
+        s = session()
+        assert s.query(ReelDB).filter(ReelDB.id == rid).first().summary_status == "failed"
+        s.close()
+
+    def test_a_newly_saved_reel_is_still_eligible(self, session, monkeypatch):
+        """The stamp is per-row, not global — a fresh save must not be starved."""
+        old = _reel(session, title="Old one", summary_status="pending", raw_text="x" * 60)
+        monkeypatch.setattr(reels_module, "_summarize_reel", lambda r, **kw: None)
+        monkeypatch.setattr(reels_module._executor, "submit", lambda fn, *a: fn(*a))
+        reels_module.recover_pending_summaries()
+
+        fresh = _reel(session, title="Just saved", summary_status="pending", raw_text="y" * 60)
+        ran = []
+        monkeypatch.setattr(reels_module, "_summarize_reel", lambda r, **kw: ran.append(r))
+        reels_module.recover_pending_summaries()
+
+        assert ran == [fresh], "a reel saved after the last boot gets its own free pass"
+
+
 class TestCachePoisoning:
     """A failed extraction must never be cached as a success.
 
