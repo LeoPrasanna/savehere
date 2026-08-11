@@ -47,7 +47,7 @@ def env(monkeypatch):
     app.dependency_overrides[get_current_user] = lambda: AuthUser(id=USER, email="t@e.co")
     monkeypatch.setattr(reels_module, "SessionLocal", TestingSession)
     monkeypatch.setattr(reels_module.summarizer, "summarize",
-                        lambda platform, title, text: dict(FAKE_AI))
+                        lambda platform, title, text, meta=None: dict(FAKE_AI))
     # Per-IP buckets are process-global and TestClient presents one IP — clear so
     # suite-order traffic can't 429 these tests.
     ratelimit._store.clear()

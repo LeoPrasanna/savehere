@@ -89,7 +89,14 @@ def health_extract(live: bool = False):
     import yt_dlp
     from app.services import extractor
 
-    info = {"status": "ok", "yt_dlp_version": yt_dlp.version.__version__}
+    # Circuit state is the difference between "a user says saves are broken" and
+    # a dashboard telling you Instagram started refusing us 40 minutes ago.
+    info = {
+        "status": "ok",
+        "yt_dlp_version": yt_dlp.version.__version__,
+        "breakers": extractor.breaker_state(),
+        "proxy_configured": bool(extractor._PROXY),
+    }
     if not live:
         return info
 
@@ -121,24 +128,57 @@ _THUMB_HEADERS = {
 }
 
 
+# Unauthenticated endpoint at 120 req/min/IP, so an unbounded read is a cheap
+# OOM: 120 slots times one oversized asset is far past a 512 MB instance.
+_MAX_THUMB_BYTES = 5 * 1024 * 1024
+_MAX_THUMB_REDIRECTS = 3
+
+
+def _thumb_host_ok(url: str) -> bool:
+    """https + a suffix match on domain-label boundaries. A plain substring check
+    would let "ytimg.com.evil.example" through and turn this into an open proxy."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        return False
+    host = (parsed.hostname or "").lower().rstrip(".")
+    return any(host == h or host.endswith("." + h) for h in _THUMB_HOSTS)
+
+
 @app.get("/api/thumbnail", dependencies=[Depends(rate_limit(120, 60, "thumbnail"))])
 def thumbnail(url: str):
     """Proxy a media-CDN image so it loads on web (Instagram/Facebook CDNs block
     browser hotlinking via CORS). Native loads the URL directly and skips this."""
-    if urlparse(url).scheme != "https":
-        raise HTTPException(status_code=400, detail="Host not allowed")
-    # Suffix match on domain-label boundaries — a plain substring check would let
-    # "ytimg.com.evil.example" through and turn this into an open proxy.
-    host = urlparse(url).hostname or ""
-    host = host.lower().rstrip(".")
-    if not any(host == h or host.endswith("." + h) for h in _THUMB_HOSTS):
+    if not _thumb_host_ok(url):
         raise HTTPException(status_code=400, detail="Host not allowed")
     try:
-        r = httpx.get(url, headers=_THUMB_HEADERS, timeout=10, follow_redirects=True)
+        # Redirects are followed MANUALLY so the allowlist is re-applied to every
+        # hop. Validating only the initial URL while httpx followed redirects
+        # itself made this an SSRF: an open redirect on any allowed CDN host
+        # would be chased straight to the cloud metadata endpoint or any internal
+        # address, because httpx applies no host policy of its own.
+        with httpx.Client(follow_redirects=False, timeout=10, headers=_THUMB_HEADERS) as c:
+            for _ in range(_MAX_THUMB_REDIRECTS):
+                r = c.get(url)
+                if r.status_code not in (301, 302, 303, 307, 308):
+                    break
+                nxt = r.headers.get("location") or ""
+                url = str(httpx.URL(url).join(nxt)) if nxt else ""
+                if not _thumb_host_ok(url):
+                    raise HTTPException(status_code=400, detail="Host not allowed")
+            else:
+                raise HTTPException(status_code=502, detail="Too many redirects")
+    except HTTPException:
+        raise
     except Exception:
         raise HTTPException(status_code=502, detail="Could not fetch image")
+
     if r.status_code != 200:
         raise HTTPException(status_code=502, detail="Could not fetch image")
+    if not r.headers.get("content-type", "").startswith("image/"):
+        raise HTTPException(status_code=502, detail="Not an image")
+    if len(r.content) > _MAX_THUMB_BYTES:
+        raise HTTPException(status_code=502, detail="Image too large")
+
     return Response(
         content=r.content,
         media_type=r.headers.get("content-type", "image/jpeg"),

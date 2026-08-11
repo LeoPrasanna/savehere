@@ -7,7 +7,10 @@ Measured on the deployed backend, a save came back with title+thumbnail but
 570 chars of description. Without this fallback every YouTube save on the server
 degrades to a link-only bookmark, no matter how many times it's retried.
 
-No network here: httpx.get is monkeypatched.
+No network here: the extractor's pooled client (extractor._http) is monkeypatched.
+Patch THAT, not httpx.get — the module moved to one shared client for connection
+reuse and a cookie jar, so patching httpx.get intercepts nothing and the test
+would quietly start making real network calls.
 """
 import pytest
 
@@ -60,12 +63,12 @@ class TestDataApiFallback:
         """Must degrade to exactly the old behaviour when unconfigured."""
         monkeypatch.setattr(settings, "YOUTUBE_API_KEY", "")
         called = []
-        monkeypatch.setattr(extractor.httpx, "get", lambda *a, **k: called.append(1))
+        monkeypatch.setattr(extractor._http, "get", lambda *a, **k: called.append(1))
         assert extractor._youtube_data_api("https://youtube.com/shorts/abc123") == {}
         assert not called, "called the API without a key"
 
     def test_recovers_the_description(self, with_key, monkeypatch):
-        monkeypatch.setattr(extractor.httpx, "get", lambda *a, **k: FakeResp(200, SNIPPET))
+        monkeypatch.setattr(extractor._http, "get", lambda *a, **k: FakeResp(200, SNIPPET))
         got = extractor._youtube_data_api("https://youtube.com/shorts/cT5S4En6XDg")
         assert got["title"] == "3 Bali Travel Tips for First-Timers"
         assert len(got["description"]) >= 50
@@ -78,7 +81,7 @@ class TestDataApiFallback:
         def fake_get(url, params=None, **k):
             seen["url"] = url; seen["params"] = params or {}
             return FakeResp(200, SNIPPET)
-        monkeypatch.setattr(extractor.httpx, "get", fake_get)
+        monkeypatch.setattr(extractor._http, "get", fake_get)
         extractor._youtube_data_api("https://youtube.com/shorts/cT5S4En6XDg")
         assert seen["url"].endswith("/videos")
         assert seen["params"]["id"] == "cT5S4En6XDg"
@@ -87,15 +90,15 @@ class TestDataApiFallback:
     def test_quota_exhausted_degrades_quietly(self, with_key, monkeypatch):
         """403 = quotaExceeded. Must not raise — the save falls back to a
         link-only bookmark rather than erroring."""
-        monkeypatch.setattr(extractor.httpx, "get", lambda *a, **k: FakeResp(403, {}))
+        monkeypatch.setattr(extractor._http, "get", lambda *a, **k: FakeResp(403, {}))
         assert extractor._youtube_data_api("https://youtube.com/shorts/abc123") == {}
 
     def test_unknown_video_returns_nothing(self, with_key, monkeypatch):
-        monkeypatch.setattr(extractor.httpx, "get", lambda *a, **k: FakeResp(200, {"items": []}))
+        monkeypatch.setattr(extractor._http, "get", lambda *a, **k: FakeResp(200, {"items": []}))
         assert extractor._youtube_data_api("https://youtube.com/shorts/abc123") == {}
 
     def test_network_failure_returns_nothing(self, with_key, monkeypatch):
         def boom(*a, **k):
             raise RuntimeError("connection reset")
-        monkeypatch.setattr(extractor.httpx, "get", boom)
+        monkeypatch.setattr(extractor._http, "get", boom)
         assert extractor._youtube_data_api("https://youtube.com/shorts/abc123") == {}

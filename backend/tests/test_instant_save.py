@@ -1,6 +1,6 @@
 """Instant-save path: POST /save returns a pending card immediately; the
 extraction + quota charge + summary chain runs in the background and fills the
-card in. TestClient executes FastAPI BackgroundTasks before returning, so the
+card in. conftest's autouse fixture runs that chain inline (see _enqueue), so the
 end state is assertable right after the call. No network: extractor and
 summarizer are monkeypatched."""
 import pytest
@@ -53,7 +53,7 @@ def env(monkeypatch):
     monkeypatch.setattr(reels_module, "SessionLocal", TestingSession)
     monkeypatch.setattr(reels_module.extractor, "extract_info", lambda url: dict(FAKE_INFO))
     monkeypatch.setattr(reels_module.summarizer, "summarize",
-                        lambda platform, title, text: dict(FAKE_AI))
+                        lambda platform, title, text, meta=None: dict(FAKE_AI))
 
     yield TestClient(app), TestingSession
     app.dependency_overrides.clear()
