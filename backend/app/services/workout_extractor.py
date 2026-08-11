@@ -40,6 +40,8 @@ RULES:
 - For REP-based exercises (push-ups, squats, curls): use reps, set duration_seconds:null
 - rest_seconds defaults: strength=60, cardio=30, core=30, flexibility=15
 - difficulty: beginner (<3 sets, basic moves), advanced (>4 sets or complex moves)
+- Build a COMPLETE session, not a bare list: open with a short warm-up move and close with a stretch or cool-down (type "flexibility" or "cardio"), around the main work. These are almost never stated in a reel — add them and mark is_estimated:true.
+- Never prescribe a load or weight. Sets, reps, holds and rest only — you cannot see the person, and a specific kilo figure for an unknown body is the one number here that can injure.
 - 3 to 8 exercises per plan
 - Only return {{"exercises": []}} if the content has ZERO connection to physical exercise (e.g. cooking, tech, news)
 - Respond ONLY with the JSON object"""
@@ -72,7 +74,9 @@ RULES:
 - TASKS: 3-8 high-level action items.
 - Every item starts with an action verb and is SPECIFIC to THIS content, not generic.
 - Each item must be SELF-CONTAINED: include enough context to act on it without rewatching the video (name the tool, setting, ingredient or subject — not a bare "do the next step").
-- Be FAITHFUL to the content — use only what's stated; never invent specifics (numbers, settings, names).
+- MAKE IT ACTUALLY FOLLOWABLE. The content is your starting point, not your ceiling. If it names a subject or technique but skips the obvious connecting steps, use your own knowledge of that subject to fill them in so the list works end to end. A thin reel about a topic you know well should still produce a real, complete list — not two vague lines.
+- Anything the content DOES state takes priority and must appear. Your additions fill gaps around it; they never replace or contradict it.
+- ACCURACY — the hard limit: never invent specific NUMBERS, settings, versions, prices, product names or people. "Set the shutter speed to 1/500" when the content never said so is a wrong instruction stated as fact. Describe the step without the number ("raise the shutter speed until motion is frozen"), or leave the specific out.
 - UNITS: when a step states a measurement (temperature, weight, volume, length/size), show BOTH units — keep the one stated, add the equivalent in parentheses, e.g. "375°F (190°C)", "9 in (23 cm)". Round cleanly. Convert real measurements only — never times, counts, ratios, money or %. Same quantity, other unit — never change the original amount.
 - estimated_minutes: honest time estimate (5-120 minutes).
 - If nothing actionable can be extracted, return {{"kind": "tasks", "tasks": []}}
@@ -98,9 +102,10 @@ Build the list in the exact order you'd cook it:
 EMOJI per step: 🛒 gather  🔪 prep/chop  🥣 mix/combine  🔥 cook/heat  ⏲️ wait/rest/bake  🧂 season  🍽️ plate/serve
 
 RULES:
-- Be FAITHFUL to the content. Use only ingredients, quantities, times and temperatures stated in the text. NEVER invent specifics — a wrong amount or temperature ruins the dish.
+- QUANTITIES, TIMES AND TEMPERATURES ARE GROUNDED-ONLY. Use only the ones stated in the text. NEVER invent an amount, a cooking time or a temperature — a wrong one ruins the dish, and for meat, poultry, eggs, fish or preserving it is a food-safety risk, not a taste preference. If a number isn't stated, write the step without it ("season to taste", "cook until the juices run clear") rather than supplying a figure.
+- STANDARD TECHNIQUE MAY BE FILLED IN. If the video clearly implies a routine step it didn't spell out — salting pasta water, preheating the pan, resting dough or meat, draining, tasting before serving — include it so the recipe actually works. Keep these steps generic and technique-level; never let them smuggle in a number the content didn't give.
 - UNITS: show every measurement in BOTH units — keep the one stated, add the equivalent in parentheses: temperatures "375°F (190°C)", weights "1 lb (450 g)" / "8 oz (225 g)", volumes "1 cup (240 ml)" / "2 tbsp (30 ml)" / "1 tsp (5 ml)", sizes "9 in (23 cm)". Round cleanly. Do NOT convert times or servings. Same quantity in another unit — never change the original amount.
-- If the video is vague, keep steps at the level of detail actually described. Fewer accurate steps beat many fabricated ones.
+- If the video is vague about a QUANTITY, keep that step at the level of detail actually described — fewer accurate numbers beat many fabricated ones. (Vague about ordinary technique is different: fill that in, per the rule above.)
 - Keep any technique CUE the content states inside its step ("until golden", "low heat", "don't overmix", "rest 5 min") — the cue is often what separates success from failure, so it's the most valuable thing to preserve.
 - Each step = ONE action, one concise sentence, starting with a verb (Dice, Heat, Add, Stir, Simmer, Flip, Season, Plate...).
 - 4 to 15 steps depending on recipe complexity.
