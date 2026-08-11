@@ -155,8 +155,11 @@ class TestItineraryEndpoint:
 
 # ── Extractor normalization (mock-based, mirrors test_workout_extractor) ───────
 
-def _stub_client_raw(monkeypatch, text: str):
-    msg = SimpleNamespace(content=[SimpleNamespace(text=text)])
+def _stub_client_raw(monkeypatch, text: str, stop_reason: str = "end_turn"):
+    # stop_reason must be present: extract_itinerary checks it so a response cut
+    # off at max_tokens becomes a loud retryable error instead of being parsed
+    # into an empty plan and blamed on the user's reel.
+    msg = SimpleNamespace(content=[SimpleNamespace(text=text)], stop_reason=stop_reason)
     monkeypatch.setattr(we.client, "messages", SimpleNamespace(create=lambda **kw: msg))
 
 
@@ -203,3 +206,15 @@ class TestExtractItineraryNormalization:
         assert len(out["days"]) == 14
         assert all(len(d["items"]) == 10 for d in out["days"])
         assert len(out["tips"]) == 6
+
+    def test_truncated_reply_raises_instead_of_returning_an_empty_plan(self, monkeypatch):
+        """A response cut off at max_tokens is OUR budget bug, not a bad reel.
+
+        Silently parsing the half-JSON into days=[] surfaced as a 422 telling the
+        user their content had no trip details — after their AI action had
+        already been charged. It must raise so the route can say 'try again'.
+        """
+        _stub_client_raw(monkeypatch, '{"trip_name": "Japan", "days": [{"lab',
+                         stop_reason="max_tokens")
+        with pytest.raises(RuntimeError):
+            we.extract_itinerary(platform="instagram", title="10 days in Japan", text="x" * 60)

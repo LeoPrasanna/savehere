@@ -25,6 +25,7 @@ Be an **advisor, not an assistant** — sharper and more direct than expected:
 3. **Consistent data** — no silent partial states.
 4. **Validated information** — don't trust client input; enforce on the server.
 5. **No guessing in summaries** — AI output must be grounded in real content; say "couldn't read this" rather than invent.
+   - **One documented exception: trip itineraries** (owner decision, 2026-08-11). Strict grounding made them useless — a title-only travel reel produced "Explore Tokyo" for all ten days, because the prompt banned adding anything the reel had not named. `extract_itinerary` now supplements the reel with Claude's own knowledge of the destination. Reel content still takes priority and must appear. The residual guard is **accuracy, not provenance**: unverifiable specifics (prices, opening hours, admission fees, booking rules) must never be asserted, because a wrong one sends someone to a closed door. This exception does NOT extend to summaries, recipes, tasks or workouts — those stay grounded-only, where an invented quantity or instruction is the harm.
 
 ## Shipping gate
 **`TODO.md` is the release checklist.** Review the production/blocker items before any ship/deploy talk, and never silently drop an item — update it.

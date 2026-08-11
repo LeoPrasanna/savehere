@@ -34,7 +34,7 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 
 - 🍳 **Recipes & checklists** — step-by-step instructions extracted from how-to / cooking content
 - 🏋️ **Workout plans** — exercises with sets/reps/rest, plus a guided session player
-- 🧳 **Trip itineraries** — travel saves become a day-by-day plan built **only** from places the reel actually mentions; when the reel states no day plan the grouping is AI-organised and labelled as such
+- 🧳 **Trip itineraries** — travel saves become a real day-by-day plan with named landmarks, neighbourhoods and food stops. Anything the reel states takes priority; Claude fills the gaps around it from its own knowledge of the destination, so a reel that only names "Tokyo, Kyoto, Osaka" still produces a usable trip rather than "Explore Tokyo". **This is the one AI surface that is deliberately not grounded-only** (see [CLAUDE.md](CLAUDE.md) quality bar #5) — unverifiable specifics like prices and opening hours are still never asserted, and an AI-organised day grouping is flagged as estimated
 - ✅ **Your slate** — a cross-reel list of what you actually meant to do. Add any save to it (title + summary are copied in, so it still reads after the reel is gone), pick a date from an inline calendar, set a priority, and the home screen shows Today and Upcoming side by side. Past dates are refused, one open task per save, finishing one asks whether to clear the save from your library, and a **daily goal** tracks completions against the device's own calendar day. **Zero AI cost** — it's your own text, not a generation
 - ✍️ **Manual control** — AI generates once, then you add / edit / delete items yourself (no repeat AI cost)
 
