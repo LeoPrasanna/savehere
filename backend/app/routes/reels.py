@@ -582,7 +582,15 @@ def client_metadata(reel_id: str, body: ClientMetadataRequest,
         raise HTTPException(status_code=422, detail="This metadata doesn't belong to that saved link.")
 
     # Server extraction already produced something usable → keep it, spend nothing.
-    if len((reel.raw_text or "").strip()) >= _MIN_SUMMARIZABLE:
+    #
+    # "Usable" is a QUALITY test, not just a length one. This guard used to be
+    # length-only, which meant 150 characters of "Follow us on Instagram" plus
+    # three URLs counted as server data and threw away the phone's real caption —
+    # the precise case the client path exists to rescue. Latent while the app ran
+    # on web (CORS blocks those fetches, so no payload ever arrived); it goes live
+    # the moment the app runs natively, where RN's fetch has no CORS.
+    server_text = (reel.raw_text or "").strip()
+    if len(server_text) >= _MIN_SUMMARIZABLE and not extractor.is_link_only(server_text):
         return _to_response(reel)
     if reel.summary_status == "ready" and reel.summary:
         return _to_response(reel)
