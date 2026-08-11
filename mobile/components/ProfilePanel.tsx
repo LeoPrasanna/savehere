@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, Platform, ScrollView, Animated, Image } from 'react-native';
+import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, Platform, ScrollView, Animated } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, Reel, Usage, UsageLog } from '../services/api';
@@ -7,7 +7,7 @@ import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { Label, Body, Title, Rule, GhostButton, FilledButton, Index } from './kit';
 import { useAuth } from '../contexts/AuthContext';
-import { avatarSource, isLegacyAvatar } from '../constants/avatars';
+import { Avatar } from './Avatar';
 import { markReopenPanel } from '../services/sessionFlags';
 import { clearSaveCount } from '../services/saveCount';
 import {
@@ -173,20 +173,11 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                 radius everywhere regardless. ── */}
             <View style={styles.account}>
               <View style={styles.avatar}>
-                {/* Three cases, in order: a current illustrated avatar; a
-                    pre-2026-08-10 emoji still stored on the account, drawn as
-                    text so nobody's face silently disappears in a release that
-                    changed the picker; or nobody picked one. */}
-                {avatarSource(profile.avatar)
-                  ? <Image
-                      source={avatarSource(profile.avatar)}
-                      style={styles.avatarImg}
-                      resizeMode="contain"
-                      fadeDuration={0}
-                    />
-                  : isLegacyAvatar(profile.avatar)
-                    ? <Text style={styles.avatarEmoji}>{profile.avatar}</Text>
-                    : <Icon name="user" size={24} color={colors.textPrimary} />}
+                {/* 48 inside the 56 frame, so the hairline reads as a frame
+                    rather than being crowded out by the art. The three states
+                    (illustrated key / legacy emoji as text / neutral mark) live
+                    in <Avatar>. */}
+                <Avatar value={profile.avatar} size={48} />
               </View>
               <View style={styles.accountText}>
                 <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
@@ -438,10 +429,6 @@ const styles = themed(() => StyleSheet.create({
     borderWidth: 1, borderColor: colors.ghostLine,
     alignItems: 'center', justifyContent: 'center',
   },
-  avatarEmoji: { fontSize: 26, lineHeight: 32 },
-  // 48 inside the 56 frame, so the hairline stays visible as a frame rather
-  // than being crowded out by the art.
-  avatarImg: { width: 48, height: 48 },
   accountText: { flex: 1, minWidth: 0, gap: spacing.xs },
   name: {
     color: colors.textPrimary,

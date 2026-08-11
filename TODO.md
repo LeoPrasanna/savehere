@@ -1120,6 +1120,74 @@ code has been modified yet.
   caching image library like `expo-image`) would have been ceremony around a non-problem.
   The remaining cost is decode, which is why the unwindowed picker still carries its
   `ponytail:` note.
+- [x] **Avatar picker: all 92 show instantly, and the batching is deleted (2026-08-11)**
+  Opening Edit Profile now renders **every** face on the first frame. The grid had been
+  mounting 24 at a time on a 250 ms timer, justified by an in-code note claiming a single
+  avatar took **10.9 s** (median 12.4 s) under 92-way request contention on Metro.
+  ⚠️ **That number does not reproduce, and the staggering was the actual cause of the
+  complaint.** Measured in the preview browser against the Metro dev server, all 92
+  distinct files, cache-busted and cold: **257–285 ms wall clock for the whole set**
+  (median 150–174 ms, p90 263 ms). Off by roughly **40×**. The waves bought nothing and
+  cost the requirement — you saw 24 faces and waited ~1 s for the rest. On iOS/Android it
+  was never arguable at all: `require()`d PNGs are compiled into the binary, so mounting
+  an `<Image>` is a disk read with no HTTP request to contend for.
+  **The real cost was re-rendering, not loading.** The three name fields keep their value
+  in `ProfileScreen` state, so every keystroke re-rendered all 92 cells — each allocating
+  a fresh `Animated.Value` inside `<Pressable>`. A memoised `AvatarCell` plus a stable
+  `useCallback` handler fixes it. **Verified by instrumenting the render count in the
+  browser, then removing the instrumentation:** 92 renders at mount, **0 across 8
+  keystrokes**, and **exactly 2** per selection (the face you left and the face you
+  picked). Previously 8 keystrokes cost ~736 cell renders.
+  **A sprite sheet was measured and rejected.** One 1280×1280 quantized PNG is 310 KB vs
+  412 KB for the 92 files and would be a single request, but it needs a generated binary,
+  a generator script, a second quantization pass over the art (mean RMS 7.9) and a
+  refactor of four render sites — to save ~200 ms on a **dev server**, on a platform that
+  is not the shipping target. Rung 1: it does not need to exist.
+  ⚠️ **Fixed a real data bug found on the way.** `updateProfile` merges into existing
+  metadata and ships it as JSON, and `JSON.stringify` **drops undefined keys** — so
+  clearing your nickname or deselecting your avatar sent a payload that simply omitted
+  the field. Supabase merged nothing, the old value stayed on the server, and it came
+  back at the next token refresh while the local session claimed it was gone. `Profile`
+  fields are now `string | null` and the screen sends **null** to clear. This was a
+  silent partial state, i.e. quality-bar #3.
+  **Selection is now visible.** It was carried by border weight alone — 0.5 px vs 1 px on
+  a 48 pt tile in a grid of 92. A filled tick badge (ink block, background-coloured
+  glyph — the system's existing filled-control grammar, no new hue) marks the chosen one.
+- [x] **To-do dashboard: the face and the name moved onto it (2026-08-11)**
+  The daily-goal card carried an unattributed statistic. It is now a two-column head —
+  the picked avatar on the left (tappable, opens the profile panel via the same
+  `emitUi('openProfile')` every other entry point uses), `displayName` and the goal bar
+  stacked on the right. Nothing duplicates the hero above it: that rolls through **names
+  for the list** ("Order of the Day", "Docket"), never the user's own name.
+  The head renders unconditionally and only the bar inside it is gated, so switching the
+  daily goal off (`TodoGoalBar` returns null) leaves a clean identity row rather than a
+  dangling face. `minWidth: 0` on the right column is load-bearing — without it a long
+  nickname shoves the `1/5` count off the right edge instead of ellipsizing.
+  **New `components/Avatar.tsx`** holds the three-state fallback (asset key → legacy emoji
+  as text → neutral user icon) that had been inlined at three call sites; this was the
+  fourth. The emoji branch is the reason it is worth a component — it is exactly what a
+  fifth copy would drop, and dropping it makes a pre-2026-08-10 user's face vanish.
+  ✅ **The three original sites are converted too (2026-08-11).** `app/index.tsx`,
+  `components/ProfilePanel.tsx` and `components/MascotLoader.tsx` now all render
+  `<Avatar>`; their `hAvatarImg`/`hAvatarEmoji`, `avatarImg`/`avatarEmoji` and
+  `face`/`faceEmoji` styles are deleted along with the `Image`/`avatarSource`/
+  `isLegacyAvatar` imports each no longer needs. Four call sites, one implementation.
+  ⚠️ **A size-only API was NOT enough, and assuming it would have shipped a silent
+  visual regression.** The old per-site values were hand-tuned and do not sit on one
+  ratio — the fallback glyph gets proportionally *smaller* as the frame grows
+  (0.529 at 34pt, 0.500 at 48pt, 0.463 at 82pt). The component's 0.5 default reproduces
+  ProfilePanel exactly (24) but would have rendered the header at 17 instead of 18 and
+  **the to-do loader's face at 41 instead of 38 — 8% larger, on the biggest and most
+  visible instance in the app.** Measured in the browser, not eyeballed. `Avatar` now
+  takes an optional `iconSize`; `index.tsx` passes 18 and `MascotLoader` passes 38, and
+  a re-measure confirms 18 / 24 / 38 — byte-identical to before the refactor. Fitting a
+  curve to three hand-picked points would have been worse than one optional number.
+  New surfaces (the to-do dashboard head) just omit it and take the ratio.
+  **Verified per screen, not assumed:** library header (34 in its 40 frame), profile
+  panel (48 in 56), and the loader (82 in a 96 frame, confirmed still 82×82 so the
+  bobbing MotiView's layout box is unchanged — it was the one real risk in the swap).
+  The loader was caught by stalling its fetch in the page for 20 s rather than hoping to
+  screenshot a fast local backend mid-load.
 - [x] **To-do screen: mascot loader replaces the bare spinner (2026-08-10)**
   `app/todos.tsx` showed a centred `<ActivityIndicator>` while waiting on a backend that
   cold-starts on Render's free tier — a spinning circle for what can be tens of seconds.
