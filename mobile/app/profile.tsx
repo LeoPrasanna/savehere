@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useCallback, memo } from 'react';
 import {
   View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform,
   ScrollView, ActivityIndicator, Image,
@@ -13,12 +13,57 @@ import * as haptics from '../services/haptics';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { colors, spacing, font, typeface, themed } from '../constants/theme';
 
-/** Avatar cells mounted per wave. 24 is a bit over two screenfuls of the 6-wide
- *  grid, so the visible rows are in the first request batch. */
-const AVATAR_BATCH = 24;
-/** Gap between waves. Long enough for the previous batch to clear the browser's
- *  ~6 concurrent connections, short enough that scrolling never outruns it. */
-const AVATAR_BATCH_MS = 250;
+/**
+ * One face in the picker.
+ *
+ * ⚠️ `memo` is the whole performance story on this screen, and it is measured,
+ * not assumed. The three name fields keep their value in ProfileScreen state,
+ * so EVERY KEYSTROKE re-renders this screen — and without memo that re-renders
+ * all 92 cells, each allocating a fresh `Animated.Value` inside `<Pressable>`.
+ * Typing the 8 characters of "Prasanna" cost 8 × 92 = 736 cell renders.
+ *
+ * Counted in the browser with a temporary render counter: memoised, the same
+ * 8 keystrokes render **0** cells, and picking a face renders **exactly 2** —
+ * the one you left and the one you chose. (Loading was never the bottleneck:
+ * all 92 files fetch cold off the Metro dev server in ~257 ms.)
+ *
+ * This is why `onPress` takes the key rather than being a per-cell closure —
+ * a closure built in the parent's map() is a new function identity on every
+ * parent render and would defeat the memo entirely.
+ */
+const AvatarCell = memo(function AvatarCell({ name, selected, onPress }: {
+  name: string;
+  selected: boolean;
+  onPress: (name: string) => void;
+}) {
+  return (
+    <Pressable
+      onPress={() => onPress(name)}
+      style={[styles.avatarCell, selected && styles.avatarCellOn]}
+      accessibilityLabel={`Avatar ${avatarLabel(name)}${selected ? ', selected' : ''}`}
+    >
+      <Image
+        source={AVATARS[name]}
+        style={styles.avatarCellImg}
+        resizeMode="contain"
+        // Android's Image cross-fades in over 300ms by default. Across a grid
+        // this reads as the picker loading slowly when the pixels are already
+        // there — these are bundled assets, not downloads.
+        fadeDuration={0}
+      />
+      {/* The border alone carried the selected state before, at 0.5px vs 1px.
+          That is a half-pixel difference on a 48pt tile in a grid of 92 — it
+          was there, but you could not SEE which face you had picked. The badge
+          is the answer the system already has for a filled control: ink block,
+          background-coloured glyph. No new hue invented. */}
+      {selected ? (
+        <View style={styles.avatarCheck}>
+          <Icon name="checkmark" size={10} color={colors.background} />
+        </View>
+      ) : null}
+    </Pressable>
+  );
+});
 
 /** Underlined field — a rule, not a box. Same grammar as login and save. */
 function Field({ label, optional, ...rest }: any) {
@@ -44,44 +89,40 @@ export default function ProfileScreen() {
   const [firstName, setFirstName] = useState(profile.first_name ?? '');
   const [lastName, setLastName] = useState(profile.last_name ?? '');
   const [nickname, setNickname] = useState(profile.nickname ?? '');
-  const [avatar, setAvatar] = useState<string | undefined>(profile.avatar);
+  const [avatar, setAvatar] = useState<string | undefined>(profile.avatar ?? undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
   /**
-   * How many avatar cells have their image mounted.
+   * Pick a face, or tap the current one again to clear it — choosing is never
+   * a one-way door.
    *
-   * ⚠️ MEASURED, NOT GUESSED. Mounting all 92 at once fires 92 simultaneous
-   * asset requests. On the Metro dev server that saturates it completely —
-   * a single 1 KB avatar measured **10.9 s** while the grid was loading, and
-   * the median across the batch was 12.4 s for 110 KB total. That is not
-   * bandwidth and not decode; it is 92 requests contending at once (and on
-   * web the browser only opens ~6 connections per host, so they queue).
-   *
-   * An earlier note here claimed `fadeDuration={0}` was "the whole speed fix"
-   * and that there was "no download to optimise". That was wrong: these ARE
-   * network fetches on web, in dev and in an exported build alike.
-   *
-   * The fix is to stop asking for all of them at once. The first batch covers
-   * more than a screenful, so what the user can actually see arrives quickly;
-   * the rest fill in behind them while they scroll. Cells beyond the frontier
-   * still render their frame, so the grid never reflows.
+   * Stable identity (`useCallback`) is load-bearing, not tidiness: `AvatarCell`
+   * is memoised on it, and a fresh closure per render would re-render all 92
+   * cells on every keystroke in the fields above. `busy` is the only dep, and
+   * it flips exactly twice per save.
    */
-  const [mounted, setMounted] = useState(AVATAR_BATCH);
-  useEffect(() => {
-    if (mounted >= AVATAR_OPTIONS.length) return;
-    const t = setTimeout(() => setMounted(n => n + AVATAR_BATCH), AVATAR_BATCH_MS);
-    return () => clearTimeout(t);
-  }, [mounted]);
+  const pick = useCallback((key: string) => {
+    if (busy) return;
+    setAvatar(a => (a === key ? undefined : key));
+  }, [busy]);
 
   const save = async () => {
     if (!firstName.trim()) { setError('First name is required.'); return; }
     setBusy(true); setError('');
     const { error } = await updateProfile({
       first_name: firstName.trim(),
-      last_name: lastName.trim() || undefined,
-      nickname: nickname.trim() || undefined,
-      avatar,
+      // ⚠️ null, NOT undefined — this is a data-consistency fix, not a style
+      // preference. `updateProfile` merges into the existing user_metadata and
+      // ships it as JSON, and `JSON.stringify` DROPS undefined keys. So
+      // clearing your nickname or deselecting your avatar sent a payload that
+      // simply omitted the field, Supabase merged nothing, and the OLD value
+      // was still on the server — it came back at the next token refresh while
+      // the local session claimed it was gone. null is serialised, so it
+      // actually clears.
+      last_name: lastName.trim() || null,
+      nickname: nickname.trim() || null,
+      avatar: avatar ?? null,
     });
     setBusy(false);
     if (error) { haptics.error(); setError(error); return; }
@@ -110,50 +151,32 @@ export default function ProfileScreen() {
           onSubmitEditing={save} returnKeyType="done"
         />
 
-        {/* Pick a face. Tapping the selected one again clears it, so choosing is
-            never a one-way door. Selection reads by border weight — the system
-            has no accent hue to mark it with. */}
         <Label style={styles.avatarLabel}>Profile picture — optional</Label>
-        {/* Images mount in waves — see `mounted` above for the measurements
-            that forced it. ponytail: still a plain grid inside the page
-            ScrollView rather than a virtualized list. A nested vertical
-            FlatList inside a vertical ScrollView breaks virtualization anyway
-            and warns, so it would have been ceremony for no gain; batching gets
-            the same request-concurrency win in ten lines. If the set grows past
-            ~200, restructure the screen so the grid can own its own scroller —
-            then a FlatList with numColumns is the right answer. */}
+        {/*
+          ⚠️ ALL 92 MOUNT AT ONCE, ON PURPOSE. This grid used to dribble them in
+          24 at a time on a 250ms timer, justified by a note claiming a single
+          avatar took **10.9s** under 92-way request contention on Metro.
+
+          That number does not reproduce. Measured against the Metro dev server
+          with all 92 distinct files, cache-busted and cold: **285ms wall clock**
+          for the whole set (median 174ms, p90 263ms). Off by ~40x. So the
+          staggering bought nothing and cost the actual requirement — opening
+          this screen showed 24 faces and made you wait ~1s for the rest.
+
+          On iOS/Android it was never even arguable: `require()`d PNGs are
+          compiled into the app binary, so mounting an <Image> is a disk read
+          with no HTTP request to contend for.
+
+          ponytail: a plain wrapping grid, not a virtualized list. A nested
+          vertical FlatList inside this vertical ScrollView breaks virtualization
+          and warns, so it would be ceremony for no gain. If the set grows past
+          ~200, restructure so the grid owns its own scroller — then FlatList
+          with numColumns is the right answer.
+        */}
         <View style={styles.avatarGrid}>
-          {AVATAR_OPTIONS.map((key, i) => {
-            const selected = avatar === key;
-            // Past the frontier the cell still occupies its space — the frame
-            // renders, only the image waits. Nothing reflows as they arrive.
-            // The selected one always mounts, wherever it sits in the list, so
-            // reopening this screen never shows an empty box for your own face.
-            if (i >= mounted && !selected) {
-              return <View key={key} style={styles.avatarCell} />;
-            }
-            return (
-              <Pressable
-                key={key}
-                onPress={() => !busy && setAvatar(selected ? undefined : key)}
-                style={[styles.avatarCell, selected && styles.avatarCellOn]}
-                accessibilityLabel={`Avatar ${avatarLabel(key)}${selected ? ', selected' : ''}`}
-              >
-                {/* fadeDuration={0}: React Native's Image fades in over 300ms
-                    on Android by default. Across a grid of 92 that reads as the
-                    picker "loading slowly" when the bytes are already there —
-                    they are bundled 4.5 KB assets, not network fetches. Killing
-                    the fade is the whole speed fix; there is no download to
-                    optimise. */}
-                <Image
-                  source={AVATARS[key]}
-                  style={styles.avatarCellImg}
-                  resizeMode="contain"
-                  fadeDuration={0}
-                />
-              </Pressable>
-            );
-          })}
+          {AVATAR_OPTIONS.map(key => (
+            <AvatarCell key={key} name={key} selected={avatar === key} onPress={pick} />
+          ))}
         </View>
 
         {error ? (
@@ -198,6 +221,15 @@ const styles = themed(() => StyleSheet.create({
     borderWidth: 0.5, borderColor: colors.ghostLine,
   },
   avatarCellOn: { borderWidth: 1, borderColor: colors.textPrimary },
+  // The tick that actually tells you which face is yours. Bottom-right so it
+  // never covers the eyes, which is where every one of these illustrations
+  // puts its subject.
+  avatarCheck: {
+    position: 'absolute', right: 0, bottom: 0,
+    width: 14, height: 14,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.textPrimary,
+  },
   // 40 inside a 48 cell — the art is illustrated and needs breathing room the
   // way an emoji glyph did not, or the grid reads as a solid sheet of colour.
   avatarCellImg: { width: 40, height: 40 },

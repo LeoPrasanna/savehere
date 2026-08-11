@@ -6,15 +6,25 @@ import { supabase } from '../services/supabase';
 import { api } from '../services/api';
 import { resetSessionFlags } from '../services/sessionFlags';
 
+/**
+ * ⚠️ The optional fields are `string | null`, and the null is the point.
+ *
+ * `updateProfile` merges into existing metadata and sends it as JSON, and
+ * `JSON.stringify` drops undefined keys. So `{nickname: undefined}` shipped a
+ * payload with no `nickname` at all, Supabase merged nothing, and the old value
+ * survived on the server — a field the user had just cleared came back at the
+ * next token refresh. Callers clearing a field MUST pass null, which serialises.
+ */
 export interface Profile {
-  first_name?: string;
-  last_name?: string;
-  nickname?: string;
-  /** A single emoji the user picked as their profile picture. Replaced the
-   *  earlier gender field (2026-07-24): asking someone's gender to choose a
+  first_name?: string | null;
+  last_name?: string | null;
+  nickname?: string | null;
+  /** Key into the illustrated avatar set (e.g. `18_astronaut`), or a legacy
+   *  emoji character for accounts that picked one before 2026-08-10. Replaced
+   *  the earlier gender field (2026-07-24): asking someone's gender to choose a
    *  glyph collected personal data the app has no use for, and the answer was
    *  never really about identity — people just want a face they like. */
-  avatar?: string;
+  avatar?: string | null;
 }
 
 /**
