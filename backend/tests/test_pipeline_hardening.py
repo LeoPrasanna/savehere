@@ -43,8 +43,47 @@ class TestVttPacing:
         hint = extractor.pacing_hint(30, "word " * 100, [1.0])
         assert "sparse narration" not in hint
 
-    def test_no_transcript_is_marked_visual(self):
+    def test_no_transcript_and_no_caption_tracks_is_marked_visual(self):
         assert "no speech transcript" in extractor.pacing_hint(30, "", [])
+
+    def test_failed_caption_fetch_is_not_reported_as_silence(self):
+        """The bug this pins, caught on a real save: YouTube 429'd the timedtext
+        endpoint for a 118s talking-head video that HAS caption tracks, and the
+        hint told the summarizer 'no speech — visual or text-overlay content'.
+        That is a false statement handed to Claude as evidence."""
+        hint = extractor.pacing_hint(118, "", [], captions_offered=True)
+        assert "no speech transcript" not in hint
+        assert "could not be fetched" in hint
+        assert "do NOT assume" in hint
+
+
+class TestLinkOnlyCaptions:
+    """Promo-link captions clear every length check but hold no content, so they
+    were charging an AI action to come back empty."""
+
+    def test_pure_promo_caption_is_rejected(self):
+        caption = (
+            "📌Follow us on Instagram here: https://www.instagram.com/aevytvdaily/\n"
+            "https://www.instagram.com/aevyvideoschool/\n"
+            "https://www.instagram.com/achinamayya/"
+        )
+        assert len(caption) > 50, "must clear the old length bar to be a real regression"
+        assert extractor.is_link_only(caption)
+
+    def test_handles_and_hashtags_alone_are_rejected(self):
+        assert extractor.is_link_only("@chef #recipe #food #viral #trending @friend")
+
+    def test_one_real_sentence_alongside_links_is_kept(self):
+        caption = (
+            "Heat the oil until it shimmers, then add the mustard seeds and wait "
+            "for them to pop before anything else goes in. "
+            "https://instagram.com/someone"
+        )
+        assert not extractor.is_link_only(caption)
+
+    def test_empty_is_not_flagged(self):
+        # Empty text is handled by the length check, not this one.
+        assert not extractor.is_link_only("")
 
     def test_unknown_duration_yields_nothing(self):
         # Never fabricate structure we do not have.

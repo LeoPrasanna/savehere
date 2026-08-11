@@ -216,7 +216,14 @@ def _reel_from_info(user_id: str, url: str, info: dict) -> ReelDB:
             kind = "Reel" if "/reel" in url.lower() else "Post"
             title = f"{(info.get('platform') or 'web').capitalize()} {kind}"
     raw_text = (info.get("best_text") or "").strip()
-    should_summarize = len(raw_text) >= 50 or bool(info.get("needs_audio"))
+    # A caption that is only "Follow us on Instagram" plus three URLs clears the
+    # length bar (150 chars looks like content) but has nothing to summarize.
+    # Charging an AI action to be told low_content:true is pure waste — measured
+    # on a real save: 2048 input tokens spent for an empty summary.
+    should_summarize = (
+        (len(raw_text) >= 50 and not extractor.is_link_only(raw_text))
+        or bool(info.get("needs_audio"))
+    )
     return ReelDB(
         id=str(uuid.uuid4()),
         user_id=user_id,

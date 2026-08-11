@@ -250,13 +250,22 @@ def _vtt_cue_starts(vtt: str) -> list[float]:
     return starts
 
 
-def pacing_hint(duration: int, transcript: str, cue_starts: list[float]) -> str:
+def pacing_hint(duration: int, transcript: str, cue_starts: list[float],
+                *, captions_offered: bool = False) -> str:
     """One line of derived structure for the summarizer prompt.
 
     Pure function of data we already hold — no extra fetch, no extra cost. It
     encodes the difference between formats that are indistinguishable as plain
     text: 45 seconds carrying 20 spoken words is on-screen-text content; 45
     seconds carrying 160 is a talking head.
+
+    `captions_offered` says whether the platform LISTED caption tracks, which is
+    a different fact from whether we managed to download them. Without that
+    distinction this function asserted "no speech — visual content" every time a
+    caption fetch failed, and YouTube 429s the timedtext endpoint routinely. On
+    a talking-head video that is a false statement handed to the summarizer as
+    evidence, which is exactly the kind of confident wrongness the prompt is
+    supposed to prevent.
     """
     if not duration or duration <= 0:
         return ""
@@ -267,6 +276,11 @@ def pacing_hint(duration: int, transcript: str, cue_starts: list[float]) -> str:
         bits.append(f"~{int(wpm)} spoken words/min")
         if wpm < 60:
             bits.append("sparse narration — likely carried by on-screen text or a visual demo")
+    elif captions_offered:
+        bits.append(
+            "transcript unavailable — captions exist but could not be fetched, "
+            "so do NOT assume the video is silent or visual-only"
+        )
     else:
         bits.append("no speech transcript — visual or text-overlay content")
     gaps = [b - a for a, b in zip(cue_starts, cue_starts[1:]) if b - a > 2.5]
@@ -585,6 +599,32 @@ def _pick_thumbnail(info: dict, platform: str) -> str:
 
 
 _HASHTAG = re.compile(r'#\w+')
+_URL_RE = re.compile(r'https?://\S+|www\.\S+')
+_HANDLE_RE = re.compile(r'[@#]\w+')
+# Below this many characters of real prose, there is nothing to summarize.
+# Matches the _MIN_SUMMARIZABLE bar the save path already uses.
+_MIN_PROSE = 40
+
+
+def is_link_only(text: str) -> bool:
+    """True when a caption is just promo links / handles with no actual content.
+
+    Creator captions are frequently nothing but "Follow us on Instagram" plus
+    three URLs. That clears every length check in the pipeline — 150 characters
+    looks like content — so it was charging the user an AI action and a Claude
+    call to be told `low_content: true`. Observed live on a real save:
+    2048 input tokens spent to produce an empty summary.
+
+    Strips URLs, @handles and #tags, then applies the same prose bar the rest of
+    the pipeline uses. Deliberately conservative: one real sentence alongside the
+    links is enough to keep the caption.
+    """
+    if not text:
+        return False
+    prose = _URL_RE.sub(' ', text)
+    prose = _HANDLE_RE.sub(' ', prose)
+    prose = re.sub(r'\s+', ' ', prose).strip()
+    return len(prose) < _MIN_PROSE
 
 
 def _build_meta(info: dict, duration: int, transcript: str,
@@ -596,7 +636,10 @@ def _build_meta(info: dict, duration: int, transcript: str,
     pipeline reason about visual content instead of guessing.
     """
     meta: dict = {}
-    pacing = pacing_hint(duration, transcript, cue_starts)
+    # The platform LISTING caption tracks is a different fact from us managing to
+    # download them — see pacing_hint().
+    captions_offered = bool(info.get("automatic_captions") or info.get("subtitles"))
+    pacing = pacing_hint(duration, transcript, cue_starts, captions_offered=captions_offered)
     if pacing:
         meta["pacing"] = pacing
     # yt-dlp resolves these for music-matched content. On TikTok/IG the audio IS
