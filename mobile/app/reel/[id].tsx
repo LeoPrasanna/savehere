@@ -11,6 +11,7 @@ import { Icon } from '../../components/Icon';
 import { api, Reel, Task, TaskListResponse, ItineraryResponse, Usage, ReelTodo, thumbUrl } from '../../services/api';
 import { formatDue } from '../../services/todoDates';
 import { TODO_ADD_LABEL, TODO_ADDED_LABEL } from '../../constants/todoBrand';
+import { useWaitingMessage } from '../../constants/waitingMessages';
 import { openSourceLink } from '../../services/openLink';
 import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
@@ -45,6 +46,14 @@ export default function ReelDetailScreen() {
   const [itin, setItin] = useState<ItineraryResponse | null>(null);
   const [generatingItin, setGeneratingItin] = useState(false);
   const [itinError, setItinError] = useState('');
+  // Rotating "still working" copy — an AI action takes 3-10s and a static
+  // "Planning…" reads as a hang. MUST live up here with the other hooks: this
+  // component early-returns for the loading/error/missing-reel states further
+  // down, so calling these below that point would break the rules of hooks.
+  const isCookingReel = (reel?.category || '').toLowerCase() === 'cooking';
+  const itinWaiting = useWaitingMessage(generatingItin, 'itinerary');
+  const workoutWaiting = useWaitingMessage(generatingWorkout, 'workout');
+  const tasksWaiting = useWaitingMessage(generatingTasks, isCookingReel ? 'recipe' : 'tasks');
   // Drives the locked-Pro button states. The server enforces the gates with
   // 403s regardless — this only decides what the button LOOKS like, so a failed
   // fetch just falls back to the normal (unlocked) rendering.
@@ -631,7 +640,10 @@ export default function ReelDetailScreen() {
                   </Text>
                 </LinearGradient>
               </Pressable>
-              <Text style={styles.actionHint}>Built only from what the reel mentions — nothing is invented. Uses 1 AI action.</Text>
+              <Text style={styles.actionHint}>
+                {itinWaiting
+                  ?? 'Uses what the reel mentions, then fills the plan in with known highlights of the destination. Prices and opening hours are never guessed — check those yourself. Uses 1 AI action.'}
+              </Text>
             </>
           )}
 
@@ -646,7 +658,7 @@ export default function ReelDetailScreen() {
                 <View style={styles.disclaimer}>
                   <Icon name="information-circle" size={14} color={colors.warning} />
                   <Text style={styles.disclaimerText}>
-                    The reel didn't state a day-by-day plan, so the days were organized by AI. The places themselves come only from the reel.
+                    The reel didn't state a day-by-day plan, so the days were organized by AI — and anything the reel didn't name was added from general knowledge of the destination. Double-check opening times and prices before you go.
                   </Text>
                 </View>
               )}
@@ -663,7 +675,7 @@ export default function ReelDetailScreen() {
               ))}
               {itinerary.tips.length > 0 && (
                 <View style={styles.itinDay}>
-                  <Text style={styles.itinDayLabel}>Tips from the reel</Text>
+                  <Text style={styles.itinDayLabel}>Tips</Text>
                   {itinerary.tips.map((t, i) => (
                     <View key={i} style={styles.itinItemRow}>
                       <Text style={styles.itinEmoji}>💡</Text>
@@ -743,9 +755,11 @@ export default function ReelDetailScreen() {
               </Pressable>
             )}
           </View>
+          {/* Workout has no standing hint line — this only appears while generating. */}
+          {workoutWaiting && <Text style={styles.actionHint}>{workoutWaiting}</Text>}
           {showTasksAction && (
             <Text style={styles.actionHint}>
-              {actionLocked ? PRO_HINT : 'Generated once with AI — after that you can add, edit, or delete by hand.'}
+              {tasksWaiting ?? (actionLocked ? PRO_HINT : 'Generated once with AI — after that you can add, edit, or delete by hand.')}
             </Text>
           )}
           {taskError ? (
@@ -775,6 +789,18 @@ export default function ReelDetailScreen() {
           {category === 'health' && <Disclaimer variant="health" style={{ marginTop: spacing.sm }} />}
           {category === 'finance' && <Disclaimer variant="finance" style={{ marginTop: spacing.sm }} />}
           {isCooking && <Disclaimer variant="recipe" style={{ marginTop: spacing.sm }} />}
+          {/* The backend has always computed this disclaimer (_source_note: the
+              steps were inferred from the title or your note because the reel
+              itself couldn't be read) and shipped it on TaskListResponse.note —
+              nothing ever rendered it. That distinction matters more now the
+              prompts fill gaps from general knowledge, so surface the server's
+              own wording rather than a second copy that can drift from it. */}
+          {taskList?.note && taskList.tasks.length > 0 && (
+            <View style={styles.disclaimer}>
+              <Icon name="information-circle" size={14} color={colors.warning} />
+              <Text style={styles.disclaimerText}>{taskList.note}</Text>
+            </View>
+          )}
           <View style={{ marginTop: spacing.sm }}>
             <TaskList
               tasks={taskList.tasks}
