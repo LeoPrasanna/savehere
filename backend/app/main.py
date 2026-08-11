@@ -111,6 +111,12 @@ def health_extract(live: bool = False):
         })
     except Exception as e:
         info.update({"status": "down", "probe_ok": False, "error": f"{type(e).__name__}: {e}"})
+    # Re-read AFTER the probe. `breakers` was captured when `info` was built —
+    # i.e. BEFORE extract_info ran and called record_result — so a failing probe
+    # was returned next to a breaker count that hadn't registered it yet. Two
+    # different moments in one response is precisely the wrong thing to hand
+    # someone debugging a live block.
+    info["breakers"] = extractor.breaker_state()
     return info
 
 
