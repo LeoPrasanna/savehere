@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, FlatList, ScrollView, StyleSheet, ActivityIndicator,
-  RefreshControl, useWindowDimensions, Platform, Image,
+  RefreshControl, useWindowDimensions, Platform,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -19,7 +19,7 @@ import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { RollingTagline } from '../components/RollingTagline';
 import { useAuth } from '../contexts/AuthContext';
-import { avatarSource, isLegacyAvatar } from '../constants/avatars';
+import { Avatar } from '../components/Avatar';
 import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, GRID_GAP, themed, gradients, hazeLocations } from '../constants/theme';
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
@@ -181,18 +181,7 @@ export default function HomeScreen() {
           onPress={() => emitUi('openProfile')}
           accessibilityLabel="Your profile"
         >
-          {avatarSource(profile.avatar) ? (
-            <Image
-              source={avatarSource(profile.avatar)}
-              style={styles.hAvatarImg}
-              resizeMode="contain"
-              fadeDuration={0}
-            />
-          ) : isLegacyAvatar(profile.avatar) ? (
-            <Text style={styles.hAvatarEmoji}>{profile.avatar}</Text>
-          ) : (
-            <Icon name="user" size={18} color={colors.textPrimary} />
-          )}
+          <Avatar value={profile.avatar} size={34} iconSize={18} />
         </Pressable>
         <View style={styles.brandRow}>
           <Wordmark size={22} />
@@ -388,8 +377,6 @@ const styles = themed(() => StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  hAvatarImg: { width: 34, height: 34 },
-  hAvatarEmoji: { fontSize: 20, lineHeight: 26 },
   // Square hairline. No fill, no radius, no shadow.
   hBtn: {
     width: 36, height: 36,

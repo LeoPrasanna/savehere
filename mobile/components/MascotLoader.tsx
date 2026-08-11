@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
-import { View, Text, Image, StyleSheet, AccessibilityInfo } from 'react-native';
+import { View, Text, StyleSheet, AccessibilityInfo } from 'react-native';
 import { MotiView } from 'moti';
-import { Icon } from './Icon';
 import { useAuth } from '../contexts/AuthContext';
-import { avatarSource, isLegacyAvatar } from '../constants/avatars';
+import { Avatar } from './Avatar';
 import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
 
 /**
@@ -73,19 +72,15 @@ export function MascotLoader({ label }: { label?: string } = {}) {
     return () => { alive = false; sub?.remove?.(); };
   }, []);
 
-  const src = avatarSource(profile.avatar);
-
   if (!visible) return <View style={styles.wrap} />;
 
-  const face = src ? (
-    <Image source={src} style={styles.face} resizeMode="contain" fadeDuration={0} />
-  ) : isLegacyAvatar(profile.avatar) ? (
-    <Text style={styles.faceEmoji}>{profile.avatar}</Text>
-  ) : (
-    // Nobody has picked a face yet — the same neutral mark the header and the
-    // profile panel fall back to, so the app never invents an identity.
-    <Icon name="user" size={38} color={colors.textPrimary} />
-  );
+  // 82 inside the 96 frame. <Avatar> owns the three states — including the
+  // neutral mark when nobody has picked a face, so the app never invents an
+  // identity. It sits inside the bobbing MotiView, which takes its size from
+  // this child, so the 82pt box is what keeps the bob amplitude unchanged.
+  // iconSize 38, not the derived 41 — see <Avatar>. This screen's fallback
+  // glyph was hand-tuned and the default ratio would have grown it 8%.
+  const face = <Avatar value={profile.avatar} size={82} iconSize={38} />;
 
   return (
     <View style={styles.wrap}>
@@ -136,8 +131,6 @@ const styles = themed(() => StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
   },
-  face: { width: 82, height: 82 },
-  faceEmoji: { fontSize: 44, lineHeight: 54 },
 
 
 

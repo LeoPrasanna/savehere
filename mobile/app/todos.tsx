@@ -11,6 +11,9 @@ import { TodoEditor } from '../components/TodoEditor';
 import { RollingTagline } from '../components/RollingTagline';
 import { MascotLoader } from '../components/MascotLoader';
 import { TodoGoalBar } from '../components/TodoGoalBar';
+import { Avatar } from '../components/Avatar';
+import { useAuth } from '../contexts/AuthContext';
+import { emitUi } from '../services/uiBus';
 import { Label } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { TodoSettingsSheet } from '../components/TodoSettingsSheet';
@@ -194,6 +197,7 @@ export default function TodosScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { profile, displayName } = useAuth();
   const [todos, setTodos] = useState<Todo[]>([]);
   const [stats, setStats] = useState<TodoStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -515,13 +519,42 @@ export default function TodosScreen() {
           />
         </View>
 
-        {/* ── Dashboard: where you stand, plus something worth reading ──── */}
+        {/* ── Dashboard: whose slate, where you stand, and something to read ── */}
         <View style={styles.dash}>
-          {/* Rendered only once settings have loaded, so the bar can't flash the
-              default goal and then snap to the user's real one. */}
-          {settingsReady && stats?.completed_today !== null && stats?.completed_today !== undefined && (
-            <TodoGoalBar done={stats.completed_today} goal={settings.dailyGoal} />
-          )}
+          {/*
+            LAYOUT CHANGE: the goal bar used to run the full width of this card
+            with nobody's name on it. It is now the right-hand column of a
+            two-column head, with the picked face and the display name on the
+            left — so the row reads "PRASANNA · today's goal · 1/5" instead of
+            an unattributed statistic.
+
+            This is also the only place on the to-do screen the chosen avatar
+            appears. The hero above rolls through NAMES FOR THE LIST ("Order of
+            the Day", "Docket") — never the user's own name — so nothing here
+            duplicates it.
+
+            The head renders unconditionally; only the bar inside it is gated,
+            so switching the daily goal off in settings (TodoGoalBar returns
+            null) leaves a clean identity row rather than a dangling face.
+          */}
+          <View style={styles.dashHead}>
+            <Pressable
+              style={styles.dashAvatar}
+              onPress={() => { haptics.tap(); emitUi('openProfile'); }}
+              accessibilityLabel="Your profile"
+            >
+              <Avatar value={profile.avatar} size={30} />
+            </Pressable>
+            <View style={styles.dashHeadMain}>
+              <Label numberOfLines={1}>{displayName}</Label>
+              {/* Rendered only once settings have loaded, so the bar can't flash
+                  the default goal and then snap to the user's real one. */}
+              {settingsReady && stats?.completed_today !== null && stats?.completed_today !== undefined && (
+                <TodoGoalBar done={stats.completed_today} goal={settings.dailyGoal} />
+              )}
+            </View>
+          </View>
+
           <View style={styles.statRow}>
             <StatTile label="OPEN" value={stats?.open ?? 0} />
             <StatTile label="DONE" value={stats?.completed ?? 0} tint={colors.success} />
@@ -705,6 +738,18 @@ const styles = themed(() => StyleSheet.create({
     borderWidth: 1, borderColor: colors.border,
     padding: spacing.md, gap: spacing.sm,
   },
+  // Two-column head: face on the left, name + goal stacked on the right.
+  dashHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Square frame, 0 radius — the app went square on avatars everywhere (the
+  // reference's circle was one of ITS signatures, not this system's).
+  dashAvatar: {
+    width: 42, height: 42,
+    alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: colors.border,
+  },
+  // minWidth 0 so the name truncates inside the row instead of shoving the
+  // goal count off the right edge.
+  dashHeadMain: { flex: 1, minWidth: 0, gap: spacing.xs },
   statRow: { flexDirection: 'row' },
   stat: { flex: 1, alignItems: 'center', gap: 2 },
   statValue: { color: colors.textPrimary, fontSize: font.xxl, fontWeight: '800', lineHeight: 34 },
