@@ -1,7 +1,9 @@
 import anthropic
 import json
+import logging
 from app.config import settings
 
+logger = logging.getLogger(__name__)
 client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 WORKOUT_PROMPT = """You are a certified personal trainer AI. Build a workout plan from this fitness content.
@@ -133,7 +135,7 @@ RULES:
 - Respond ONLY with the JSON object"""
 
 
-ITINERARY_PROMPT = """You are a travel-planning AI. Turn this travel content into a practical trip itinerary the user can actually follow.
+ITINERARY_PROMPT = """You are an experienced travel planner. Turn this travel content into a rich, practical trip itinerary the user can actually follow.
 
 Platform: {platform}
 Title: {title}
@@ -143,26 +145,36 @@ User's note: {notes}
 Return this EXACT JSON structure:
 {{
   "trip_name": "Short name (max 6 words)",
-  "destination": "Place name if stated, else null",
+  "destination": "Main destination",
   "duration_days": 3,
   "structure_estimated": false,
   "days": [
-    {{ "label": "Day 1", "items": [ {{ "text": "One concrete thing to do/see, verb-first", "emoji": "📍" }} ] }}
+    {{ "label": "Day 1 — Tokyo", "items": [ {{ "text": "One concrete thing to do/see, verb-first", "emoji": "📍" }} ] }}
   ],
-  "tips": ["Short practical tip stated in the content"]
+  "tips": ["Short practical tip"]
 }}
 
 EMOJI GUIDE: 📍 place/visit  🏔️ nature/trek  🏖️ beach  🍜 food/eat  🛕 culture/temple  🚗 transport  🏨 stay  📸 viewpoint  🎟️ ticket/booking  🛍️ market/shop
 
-RULES:
-- Be FAITHFUL to the content: only places, activities, prices, timings, and names STATED in the text or the user's note. NEVER invent specifics — a made-up price or place name sends someone to the wrong spot. If a detail isn't mentioned, leave it out.
-- ANTI-PADDING (critical): if the content only NAMES places with no activities or details, output one honest stop per place ("Explore Kyoto") and stop there. NEVER pad the plan with famous attractions, restaurants, neighborhoods, or timings the content didn't mention — a plausible-sounding invented stop is worse than a short plan.
-- Structure MAY be organized: if the content lists places without a day plan, group them into sensible days labeled "Day N — Place" (e.g. "Day 1 — Tokyo") — but then set "structure_estimated": true and "duration_days" to your grouping's length. If the content states its own day plan, follow it exactly and set "structure_estimated": false.
-- "duration_days": the number stated in the content, or your grouping's length when estimating; null only if there are no day-like groupings at all (then put everything in one "Places" day).
-- Each item = ONE concrete action or stop, one concise sentence, verb-first (Visit, Trek, Eat at, Catch, Book...). Use the standard spelling of a well-known real place if the content clearly misspells it ("Hiroahima" → "Hiroshima"); otherwise keep names exactly as the content gives them.
-- 1 to 14 days; 1 to 10 items per day; 0 to 6 tips. Tips only from the content (best season, what to carry, booking advice) — never generic filler.
-- If the content has ZERO usable trip information (no places, no activities), return {{"days": []}}.
-- Respond ONLY with the JSON object"""
+BUILD A REAL PLAN — this is the point of the feature:
+- The content is your STARTING POINT, not your ceiling. Take the destinations, trip length and any stated plan from it, then use your own knowledge of those places to build a genuinely useful day-by-day itinerary.
+- Name real, specific, well-known places — neighbourhoods, landmarks, temples, markets, viewpoints, districts. "Visit Senso-ji temple in Asakusa" is a real plan; "Explore Tokyo" is not. Never leave a day as a single vague stop when you know the destination.
+- Aim for 3 to 5 items per day: a mix of a headline sight, something to eat or drink, and a neighbourhood or experience. Sequence each day so the stops are geographically sensible rather than criss-crossing the city.
+- Anything stated in the content or the user's note takes PRIORITY and must appear. Your own additions fill the gaps around it, never replace it.
+- If the content states its own day plan, follow it exactly and set "structure_estimated": false. If you organised the days yourself, set "structure_estimated": true.
+- "duration_days": the number stated in the content, else the length of your plan.
+
+ACCURACY — the one hard limit:
+- Do NOT state exact prices, opening hours, admission fees, booking requirements or travel times as fact. You cannot verify them and a wrong one sends someone to a closed door or blows their budget. Write "check current opening hours" or "book ahead in peak season" instead of inventing a number or a time.
+- EXCEPTION: if the content or the user's note states a price, time or booking detail, repeat it exactly as given.
+- Only name places you are genuinely confident exist. A famous landmark is fine; do not invent a restaurant name to fill a slot.
+- Use the standard spelling of a well-known real place if the content misspells it ("Hiroahima" → "Hiroshima").
+
+LIMITS: 1 to 14 days; 3 to 6 items per day; 0 to 6 tips. Tips should be practical and destination-specific — best season, getting around, what to book early, local etiquette.
+(The per-day ceiling is 6 rather than 10 to keep a 14-day plan inside the output token budget — a plan that overruns is a charged failure, not a longer plan.)
+
+If the content names no destination at all and you cannot tell where the trip is, return {{"days": []}}.
+Respond ONLY with the JSON object"""
 
 
 def _parse_model_json(raw_text: str, fallback: dict) -> dict:
@@ -246,15 +258,27 @@ def extract_tasks(platform: str, title: str, text: str, category: str, notes: st
 
 
 def extract_itinerary(platform: str, title: str, text: str, notes: str = "") -> dict:
-    """Extract a trip itinerary from travel content. Returns
+    """Build a trip itinerary from travel content. Returns
     {trip_name, destination, duration_days, structure_estimated, days[], tips[]}
-    with days=[] when the content holds no usable trip information.
-    Facts (places/prices/timings) are grounded-only; day GROUPING may be inferred
-    and is flagged via structure_estimated (the itinerary analog of the workout
-    extractor's is_estimated)."""
+    with days=[] when no destination could be determined at all.
+
+    ⚠️ Owner decision 2026-08-11: this is the ONE extractor that is deliberately
+    NOT grounded-only. Everywhere else in the app (summaries, recipes, workouts)
+    AI output must come from the saved content — see CLAUDE.md quality bar #5.
+    Here it produced useless plans: a title-only travel reel yielded "Explore
+    Tokyo" for every day, because the old prompt banned adding anything the reel
+    had not named. Claude now supplements the reel with its own knowledge of the
+    destination. Content still takes priority and must appear; the residual guard
+    is that unverifiable SPECIFICS (prices, opening hours, booking rules) must
+    not be stated as fact, since a wrong one sends someone to a closed door.
+    `structure_estimated` still flags a day grouping the model invented."""
     msg = client.messages.create(
         model="claude-haiku-4-5-20251001",
-        max_tokens=1400,
+        # 1400 was too small the moment the prompt started asking for 3-5 items a
+        # day: a 10-day plan overran it, the truncated JSON failed to parse, and
+        # _parse_model_json's fallback surfaced as a 422 "no itinerary" AFTER the
+        # user's AI action had already been charged.
+        max_tokens=4000,
         messages=[{
             "role": "user",
             "content": ITINERARY_PROMPT.format(
@@ -265,6 +289,15 @@ def extract_itinerary(platform: str, title: str, text: str, notes: str = "") -> 
             ),
         }],
     )
+
+    if msg.stop_reason == "max_tokens":
+        # Loud and retryable, never silently downgraded to "no itinerary" — that
+        # told the user their reel was unusable when the real fault was our cap.
+        logger.error(
+            f"[ITINERARY] hit max_tokens for {platform} title={title[:60]!r} — raise the cap"
+        )
+        raise RuntimeError("itinerary truncated at max_tokens")
+
     result = _parse_model_json(msg.content[0].text, {"days": []})
 
     # Normalize defensively — this JSON is stored and rendered as-is, so a

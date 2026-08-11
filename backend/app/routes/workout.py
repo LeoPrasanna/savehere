@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+import logging
 import uuid
 from datetime import datetime
 
@@ -17,6 +18,8 @@ from app.entitlements import entitlements_for, PRO_FEATURE_DETAIL
 # Shared with the save path: detects generic placeholder titles ("Instagram Reel")
 # that look like content but can't seed any AI extraction.
 from app.routes.reels import _weak_title
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["workout"])
 
@@ -288,17 +291,29 @@ def generate_itinerary(reel_id: str, user: AuthUser = Depends(get_current_user),
     # free checks, before the Claude call.
     charge_ai_action(db, user, action="itinerary", label=reel.title or reel.url)
 
-    result = workout_extractor.extract_itinerary(
-        platform=reel.platform,
-        title=reel.title or "",
-        text=source,
-        notes=reel.notes or "",
-    )
+    try:
+        result = workout_extractor.extract_itinerary(
+            platform=reel.platform,
+            title=reel.title or "",
+            text=source,
+            notes=reel.notes or "",
+        )
+    except Exception as e:
+        # extract_itinerary now raises on a truncated response rather than
+        # quietly returning an empty plan. The user has already been charged, so
+        # they get a retryable sentence — not a stack trace, and not the old
+        # "couldn't find trip details" message which blamed their reel for our
+        # token cap. The existing itinerary (if any) is left untouched.
+        logger.error(f"[ITINERARY] {reel.id} failed: {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail="The trip planner is having trouble right now. Please try again in a moment.",
+        )
 
     if not result.get("days"):
         raise HTTPException(
             status_code=422,
-            detail="Couldn't find trip details in this content — no places or activities to plan around.",
+            detail="Couldn't work out where this trip goes — add the destination to Notes and try again.",
         )
 
     # Replace only on success — a failed regeneration must never destroy an
