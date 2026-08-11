@@ -97,6 +97,35 @@ def test_fills_and_summarizes_when_server_extraction_found_nothing(env):
     s.close()
 
 
+def test_promo_link_server_text_does_not_beat_the_phones_real_caption(env):
+    """The server-wins guard is a QUALITY test, not just a length one.
+
+    Observed on a real save: the server's whole caption was "Follow us on
+    Instagram here:" plus three URLs — 150 characters, which cleared the old
+    length-only check and threw away the phone's real caption. That is precisely
+    the case the client path exists to rescue.
+
+    Latent while the app ran on web (CORS blocks those device-side fetches, so no
+    payload ever arrived). It goes live the moment the app runs natively, where
+    RN's fetch has no CORS — i.e. on TestFlight.
+    """
+    client, Session = env
+    promo = ("Follow us on Instagram here: https://www.instagram.com/aevytvdaily/ "
+             "https://www.instagram.com/aevyvideoschool/ "
+             "https://www.instagram.com/achinamayya/")
+    assert len(promo) >= 50, "must clear the length bar or this isn't the regression"
+    rid = _make_reel(Session, raw_text=promo, status="skipped")
+
+    r = client.post(f"/api/reels/{rid}/client-metadata", json=_payload())
+    assert r.status_code == 200, r.text
+
+    s = Session()
+    reel = s.query(ReelDB).filter(ReelDB.id == rid).first()
+    assert reel.raw_text.startswith("Teri roti"), "the phone's real caption must win over promo links"
+    assert reel.summary_status == "ready"
+    s.close()
+
+
 def test_server_data_wins_and_costs_nothing(env):
     """If our own extraction already produced usable text, the client payload is
     ignored — this is what bounds a lying client to unreadable saves."""
