@@ -36,8 +36,10 @@ Be an **advisor, not an assistant** — sharper and more direct than expected:
 
 **Secrets:** live in `.env` only (gitignored). **Never** commit a key, **never** paste one into chat. `.env.example` is the template. In cloud dev, use the environment's secret store (see `docs/REMOTE_DEV.md`).
 
-**Git:** commit or push **only when asked**. Branch off `develop` (the default branch). End commit messages with:
-`Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
+**Git:** commit or push **only when asked**. Branch off `develop` (the default branch). End commit messages with a co-author trailer naming **the model that actually wrote the commit**:
+`Co-Authored-By: Claude <MODEL> <noreply@anthropic.com>`
+
+Substitute `<MODEL>` with your own model's display name — e.g. `Claude Opus 5`, `Claude Sonnet 5`, `Claude Haiku 4.5`. This line is **attribution, so it has to be true**: do not copy the version out of an older commit, and do not carry a hardcoded version forward. Older commits in this repo say `Claude Opus 4.8` because that was the model at the time; leave them alone, they were accurate when written.
 
 **Backend** (`backend/`) — FastAPI + SQLAlchemy, system Python (no virtualenv assumed):
 - Run: `python -m uvicorn app.main:app --reload --port 8000` (from `backend/`)
