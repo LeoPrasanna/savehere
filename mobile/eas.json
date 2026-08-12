@@ -6,33 +6,24 @@
     "development": {
       "developmentClient": true,
       "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://savehere-api-staging.onrender.com",
-        "EXPO_PUBLIC_SUPABASE_URL": "https://REPLACE-WITH-SAVEHERE-DEV.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_REPLACE_WITH_SAVEHERE_DEV_KEY"
-      }
+      "environment": "development"
     },
     "preview": {
       "distribution": "internal",
       "ios": {
         "enterpriseProvisioning": "adhoc"
       },
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://savehere-api-staging.onrender.com",
-        "EXPO_PUBLIC_SUPABASE_URL": "https://REPLACE-WITH-SAVEHERE-DEV.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_REPLACE_WITH_SAVEHERE_DEV_KEY"
-      }
+      "android": {
+        "buildType": "apk"
+      },
+      "environment": "preview"
     },
     "production": {
       "autoIncrement": true,
       "ios": {
         "buildConfiguration": "Release"
       },
-      "env": {
-        "EXPO_PUBLIC_API_URL": "https://savehere-api-prod.onrender.com",
-        "EXPO_PUBLIC_SUPABASE_URL": "https://lukmwwcilrjqqtgqbynq.supabase.co",
-        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_VqxG1D40q4az4nGGIKtDAw_hDwARxou"
-      }
+      "environment": "production"
     }
   },
   "submit": {
