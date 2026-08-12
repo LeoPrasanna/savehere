@@ -10,7 +10,7 @@ from app.routes.models.workout import (
     UpdateExerciseRequest, TaskResponse, TaskListResponse,
     ToggleTaskRequest, UpdateTaskRequest, CreateTaskRequest,
 )
-from app.services import workout_extractor
+from app.services import workout_extractor, extractor
 from app.ratelimit import rate_limit
 from app.quota import charge_ai_action
 from app.auth import get_current_user, AuthUser
@@ -105,6 +105,42 @@ def _task_to_response(t: TaskDB) -> TaskResponse:
     )
 
 
+def _usable_source(reel: ReelDB) -> str:
+    """The reel's real body text, or "" if there is nothing an AI could work from.
+
+    ⚠️ THIS IS THE NO-SUMMARY-BUT-STILL-CHARGED FIX (owner report, 2026-08-12).
+
+    Every generator here already had a preflight, but all three asked only
+    "is `raw_text` non-empty?". That is the wrong question, and it is the same
+    wrong question `_reel_from_info` learned not to ask on the save path: a
+    caption that is entirely "📌 Follow us here:" plus three URLs is ~150
+    characters of nothing. It sails past a non-empty check, so the route
+    charged an AI action, called Claude, and came back with no recipe / no
+    steps / no itinerary — a 422 the user paid for.
+
+    That is exactly why those reels have no summary in the first place: the save
+    path ran `extractor.is_link_only()` and marked them `skipped` without
+    spending anything. Asking the same question here is what makes "no summary"
+    and "no AI action charged" agree with each other, instead of the screen
+    showing an empty summary while the quota meter ticked down.
+
+    Notes are checked SEPARATELY and never link-filtered: a note is something
+    the user typed on purpose, and the whole documented recovery path for an
+    unreadable save is "paste the post text into Notes".
+    """
+    body = (reel.raw_text or "").strip()
+    if body and not extractor.is_link_only(body):
+        return body
+    return (reel.notes or "").strip()
+
+
+NO_CONTENT_DETAIL = (
+    "There's nothing readable in this save to work from — its caption is just "
+    "links or couldn't be read at all, which is why it has no summary either. "
+    "Paste the post text into Notes and try again. No AI action was used."
+)
+
+
 def _source_note(source: str) -> str | None:
     """User-facing disclaimer when steps weren't read from the actual video."""
     if source == "title":
@@ -144,12 +180,12 @@ def generate_workout(reel_id: str, user: AuthUser = Depends(get_current_user), d
             detail=f"You've built a workout for this reel {WORKOUT_LIMIT} times — that's the limit for now (each one uses AI).",
         )
 
-    # Preflight before the charge: a generic placeholder title ("Instagram Reel")
-    # is not content — it can only produce a guaranteed 422, so don't spend an AI
-    # action on it.
-    source = (reel.raw_text or "").strip() or (reel.notes or "").strip()
+    # Preflight before the charge — see _usable_source. A link-only caption or a
+    # generic placeholder title ("Instagram Reel") can only produce a guaranteed
+    # 422, so don't spend an AI action discovering that.
+    source = _usable_source(reel)
     if not source and _weak_title(reel.title):
-        raise HTTPException(status_code=422, detail="No readable content to extract a workout from. Paste the post text into Notes, then try again.")
+        raise HTTPException(status_code=422, detail=NO_CONTENT_DETAIL)
     source = source or (reel.title or "")
 
     # Per-user daily AI budget (shared across all AI actions). Charged after the
@@ -280,11 +316,10 @@ def generate_itinerary(reel_id: str, user: AuthUser = Depends(get_current_user),
             detail=f"You've built an itinerary for this reel {ITINERARY_LIMIT} times — that's the limit for now (each one uses AI).",
         )
 
-    # Preflight before the charge: a generic placeholder title is not content and
-    # can only produce a guaranteed 422 — don't spend an AI action on it.
-    source = (reel.raw_text or "").strip() or (reel.notes or "").strip()
+    # Preflight before the charge — see _usable_source.
+    source = _usable_source(reel)
     if not source and _weak_title(reel.title):
-        raise HTTPException(status_code=422, detail="No readable content to extract an itinerary from. Paste the post text into Notes, then try again.")
+        raise HTTPException(status_code=422, detail=NO_CONTENT_DETAIL)
     source = source or (reel.title or "")
 
     # Per-user daily AI budget (shared across all AI actions). Charged after the
@@ -367,7 +402,7 @@ def generate_tasks(reel_id: str, user: AuthUser = Depends(get_current_user), db:
     # Claude runs the tokens are really spent, so charging first is correct — the
     # fix is to not run it at all for hopeless input. Without this, an unreadable
     # save cost the user an AI action to receive a guaranteed 422.
-    body_text = (reel.raw_text or "").strip() or (reel.notes or "").strip()
+    body_text = _usable_source(reel)
     if is_cooking:
         # Cooking is the looser case on purpose: extract_tasks can infer a recipe
         # from the title alone (_infer_recipe). But a generic placeholder title
@@ -380,10 +415,7 @@ def generate_tasks(reel_id: str, user: AuthUser = Depends(get_current_user), db:
     elif not body_text:
         # Every other category needs real content — inventing steps from a bare
         # headline is exactly the ungrounded output the quality bar forbids.
-        raise HTTPException(
-            status_code=422,
-            detail="There's no readable content in this save to turn into tasks. Paste the post text into Notes, then try again.",
-        )
+        raise HTTPException(status_code=422, detail=NO_CONTENT_DETAIL)
 
     # Per-user daily AI budget (shared across all AI actions). Charged before the call.
     charge_ai_action(db, user, action="recipe" if is_cooking else "tasks",

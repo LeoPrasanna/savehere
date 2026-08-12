@@ -103,4 +103,74 @@ def test_real_content_still_passes_preflight(env):
 
     r = client.post(f"/api/reels/{rid}/tasks")
     # Whatever the AI does, preflight must NOT have been the thing that stopped it.
-    assert "no readable content" not in r.text.lower()
+    assert "nothing readable" not in r.text.lower()
+    assert _charged(Session) == 1, "real content should get past preflight and be charged"
+
+
+# ── Link-only captions (owner report, 2026-08-12) ────────────────────────────
+#
+# The gap the tests above did NOT cover: preflight asked "is raw_text non-empty?"
+# A caption that is entirely "📌 Follow us here:" plus three URLs is ~150
+# characters — non-empty, well past any length bar, and worth nothing. It sailed
+# through, charged an AI action, called Claude and came back with a 422.
+#
+# That is also exactly WHY these reels show no summary: the save path already
+# runs extractor.is_link_only() and marks them 'skipped' without spending
+# anything. "No summary" and "no AI action charged" have to agree.
+
+LINK_ONLY_CAPTION = (
+    "📌Follow us on Instagram here: https://instagram.com/someaccount "
+    "https://linktr.ee/someaccount https://youtube.com/@someaccount"
+)
+
+
+def _link_only_reel(Session, category, *, notes=""):
+    s = Session()
+    reel = ReelDB(user_id=USER, url=f"https://www.instagram.com/reel/lo-{category}",
+                  platform="instagram", title="Instagram Reel",
+                  raw_text=LINK_ONLY_CAPTION, notes=notes,
+                  category=category, summary_status="skipped", summary=[], tags=[])
+    s.add(reel)
+    s.commit()
+    rid = reel.id
+    s.close()
+    return rid
+
+
+@pytest.mark.parametrize("category,path", [
+    ("cooking", "tasks"),
+    ("tech", "tasks"),
+    ("fitness", "workout"),
+    ("travel", "itinerary"),
+])
+def test_link_only_caption_is_refused_without_charging(env, category, path):
+    client, Session = env
+    rid = _link_only_reel(Session, category)
+
+    r = client.post(f"/api/reels/{rid}/{path}")
+
+    assert r.status_code == 422, r.text
+    assert _charged(Session) == 0, (
+        f"{path} charged an AI action for a caption that is only links — "
+        "the same input the save path refuses to summarize for free"
+    )
+
+
+def test_notes_rescue_a_link_only_caption(env):
+    """The documented recovery path must still work.
+
+    Notes are first-party input and are NEVER link-filtered: "paste the post
+    text into Notes" is the advice every unreadable-save message gives, and it
+    would be a lie if the note were then discarded for sitting next to a
+    link-only caption.
+    """
+    client, Session = env
+    rid = _link_only_reel(
+        Session, "cooking",
+        notes="Knead the dough for ten minutes, rest it, then roll thin and pan-fry.",
+    )
+
+    r = client.post(f"/api/reels/{rid}/tasks")
+
+    assert r.status_code == 200, r.text
+    assert _charged(Session) == 1

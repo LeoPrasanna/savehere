@@ -14,7 +14,8 @@ MODEL = "claude-haiku-4-5-20251001"
 # back would be a circular import.
 CATEGORIES = [
     "fitness", "cooking", "tech", "motivation", "education", "entertainment",
-    "fashion", "beauty", "travel", "business", "news", "health", "finance", "other",
+    "fashion", "beauty", "travel", "business", "news", "health", "finance",
+    "hobby", "other",
 ]
 
 # The static rulebook lives in `system`, not in the user turn.

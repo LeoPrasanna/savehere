@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Icon } from './Icon';
 import { Pressable } from './Pressable';
 import { supabase } from '../services/supabase';
+import { signInWithProvider, OAuthProvider } from '../services/oauth';
 import { useAuth } from '../contexts/AuthContext';
 import * as haptics from '../services/haptics';
 
@@ -19,15 +20,23 @@ import { MockReel, MOCK_REEL_H } from './MockReel';
 import { colors, spacing, font, radius, tracking, typeface, themed, gradients, hazeLocations, isDark } from '../constants/theme';
 
 /**
- * Apple and Google are mocked. Say so out loud rather than no-op.
+ * APPLE IS STILL A MOCK; GOOGLE IS REAL (owner, 2026-08-12).
  *
- * Both are real blockers in TODO.md: Apple sign-in needs the $99 developer
- * account, and Apple guideline 4.8 makes Sign in with Apple mandatory the
- * moment Google is offered — so they ship together or not at all.
+ * Apple sign-in cannot work at all until the $99 Apple Developer account exists
+ * (open blocker in TODO.md) — it needs a Services ID and a signing key, neither
+ * of which can be created without it. A button that opens a browser to a 400 is
+ * worse than one that explains itself, so this stays.
+ *
+ * ⚠️ APPLE GUIDELINE 4.8 IS NOT VIOLATED BY SHIPPING GOOGLE FIRST — but it will
+ * be the moment this app is submitted to the App Store. The rule is that an app
+ * offering a third-party social login must ALSO offer Sign in with Apple; it
+ * binds at iOS review, not on Android. Google-only is fine for the Android
+ * builds being tested now, and Apple must be wired before the first iOS
+ * submission. Do not remove this note until it is.
  */
 function notYet(provider: string) {
   haptics.warning();
-  const msg = `${provider} sign-in isn't wired up yet — use email for now.`;
+  const msg = `${provider} sign-in isn't wired up yet — use Google or email for now.`;
   if (Platform.OS === 'web') window.alert(msg);
   else Alert.alert('Not available yet', msg);
 }
@@ -185,10 +194,16 @@ function ReelWallBackdrop() {
 
 /** An underlined field — a rule, not a box. The system has no card chrome, so
  *  an input is defined by the same 1px seam as everything else. */
-type FieldProps = TextInputProps & { label: string; trailing?: ReactNode };
+type FieldProps = TextInputProps & {
+  label: string;
+  trailing?: ReactNode;
+  /** Renders the standard clear (×) affordance while there is text. */
+  onClear?: () => void;
+};
 
-function Field({ label, trailing, ...rest }: FieldProps) {
+function Field({ label, trailing, onClear, ...rest }: FieldProps) {
   const [focused, setFocused] = useState(false);
+  const hasText = !!rest.value;
   return (
     <View style={styles.field}>
       <Label>{label}</Label>
@@ -200,6 +215,20 @@ function Field({ label, trailing, ...rest }: FieldProps) {
           onBlur={() => setFocused(false)}
           {...rest}
         />
+        {/* ⚠️ The clear button is the whole fix for "the field keeps my old
+            text". Emptying a field by holding backspace on a phone keyboard is
+            genuinely tedious, and every mainstream sign-in form gives you a ×.
+            Shown only when there is something to clear and the field is
+            editable, so it never appears on a disabled form mid-submit. */}
+        {onClear && hasText && rest.editable !== false ? (
+          <Pressable
+            hitSlop={10}
+            onPress={() => { haptics.tap(); onClear(); }}
+            accessibilityLabel={`Clear ${label.toLowerCase()}`}
+          >
+            <Icon name="close" size={16} color={colors.textTertiary} />
+          </Pressable>
+        ) : null}
         {trailing}
       </View>
       <View style={[styles.fieldRule, focused && styles.fieldRuleOn]} />
@@ -221,6 +250,9 @@ export function LoginScreen() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [showPw, setShowPw] = useState(false);
+  /** Which social provider is mid-flight, so its button can show a spinner and
+   *  the others deactivate. `null` when nothing is running. */
+  const [social, setSocial] = useState<OAuthProvider | null>(null);
 
   const isSignup = mode === 'signup';
   const shakeX = useRef(new Animated.Value(0)).current;
@@ -237,10 +269,26 @@ export function LoginScreen() {
     ).start();
   };
 
+  /** Empty every field. Used when leaving the form entirely — a half-typed
+   *  credential must not still be sitting there when the screen is reopened. */
+  const resetForm = () => {
+    setEmail(''); setPassword('');
+    setFirstName(''); setLastName(''); setNickname('');
+    setShowPw(false); setError(''); setNotice('');
+  };
+
   const switchMode = (m: Mode) => {
     if (m === mode) return;
     haptics.tap();
     setMode(m);
+    // ⚠️ The PASSWORD is dropped on a mode switch, the email is kept. That is
+    // the industry-standard split and it is not arbitrary: the email is almost
+    // always the same address either way (you mistyped which tab you were on),
+    // while a password typed for "sign in" carried into "create account" is a
+    // silent trap — it becomes your new account's password without you ever
+    // reading it, and any strength feedback shown for it was never evaluated.
+    setPassword('');
+    setShowPw(false);
     setError('');
     setNotice('');
   };
@@ -252,6 +300,28 @@ export function LoginScreen() {
   };
 
   const pwStrength = passwordStrength(password);
+
+  /**
+   * Social sign-in. On success the AuthProvider listener flips the gate, exactly
+   * like the email path — no navigation here.
+   *
+   * A user who backs out of the browser returns `cancelled` and gets NOTHING:
+   * no error, no shake, no haptic. Dismissing a sheet you opened is a decision,
+   * not a failure, and reporting it as one is the most common way this flow is
+   * made to feel broken.
+   */
+  const social_signin = async (provider: OAuthProvider) => {
+    if (social) return;
+    haptics.tap();
+    setSocial(provider);
+    setError(''); setNotice('');
+    const { error: err, cancelled } = await signInWithProvider(provider);
+    setSocial(null);
+    if (cancelled) return;
+    if (err) { fail(err); return; }
+    haptics.success();
+    triggerCelebrate();
+  };
 
   const submit = async () => {
     const e = email.trim();
@@ -342,39 +412,54 @@ export function LoginScreen() {
           </View>
 
           {/*
-            Three entry points. Email is real; Apple and Google are MOCKS —
-            neither provider is wired up yet (both are open blockers in
-            TODO.md), so they say so plainly when tapped rather than failing
-            silently. A button that quietly does nothing is the worst of the
-            three options; one that explains itself is fine.
+            Three entry points. GOOGLE AND EMAIL ARE REAL; Apple is still a mock
+            and says so when tapped rather than failing silently — it cannot work
+            until the Apple Developer account exists (see notYet above).
           */}
           <View style={styles.authRow}>
             <Pressable
-              style={styles.authBtn}
+              style={[styles.authBtn, !!social && styles.authBtnOff]}
               onPress={() => notYet('Apple')}
+              disabled={!!social}
               accessibilityRole="button"
               accessibilityLabel="Continue with Apple — not available yet"
             >
               <Ionicons name="logo-apple" size={24} color={colors.textPrimary} />
             </Pressable>
             <Pressable
-              style={styles.authBtn}
-              onPress={() => notYet('Google')}
+              style={[styles.authBtn, !!social && social !== 'google' && styles.authBtnOff]}
+              onPress={() => social_signin('google')}
+              disabled={!!social}
               accessibilityRole="button"
-              accessibilityLabel="Continue with Google — not available yet"
+              accessibilityLabel="Continue with Google"
             >
-              <Ionicons name="logo-google" size={22} color={colors.textPrimary} />
+              {social === 'google'
+                ? <ActivityIndicator color={colors.textPrimary} />
+                : <Ionicons name="logo-google" size={22} color={colors.textPrimary} />}
             </Pressable>
             <Pressable
-              style={[styles.authBtn, styles.authBtnPrimary]}
+              style={[styles.authBtn, styles.authBtnPrimary, !!social && styles.authBtnOff]}
               onPress={() => { haptics.tap(); setStep('form'); }}
+              disabled={!!social}
               accessibilityRole="button"
               accessibilityLabel="Continue with email"
             >
               <Icon name="mail" size={22} color={colors.background} />
             </Pressable>
           </View>
-          <Label tone="ink" wide style={styles.authHint}>Continue with email</Label>
+          <Label tone="ink" wide style={styles.authHint}>
+            {social === 'google' ? 'Opening Google…' : 'Google or email'}
+          </Label>
+
+          {/* Errors have to be visible on THIS step too. They used to render
+              only on the form step, so a failed Google sign-in shook a screen
+              with no message on it. */}
+          {error ? (
+            <View style={styles.msgRow}>
+              <Icon name="alert-circle" size={14} color={colors.textPrimary} />
+              <Text style={styles.msgText}>{error}</Text>
+            </View>
+          ) : null}
 
           <Text style={styles.legal}>
             By continuing you agree to our <Text style={styles.legalStrong}>Terms</Text> and{' '}
@@ -389,14 +474,26 @@ export function LoginScreen() {
 
   /* ── Step 2: the form ────────────────────────────────────────────────────── */
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    /* ⚠️ `behavior="padding"` ON ANDROID TOO — this used to be
+       `Platform.OS === 'ios' ? 'padding' : undefined`, i.e. a no-op on Android.
+       That was correct when Android windows resized under `adjustResize`, but
+       Expo SDK 54+ forces EDGE-TO-EDGE on Android, and an edge-to-edge window
+       does not resize for the IME. So nothing compensated and the keyboard sat
+       on top of the form — you could not see the field you were typing into.
+       Padding is exactly right here precisely because the window no longer
+       shrinks: KAV adds the keyboard's own height and nothing double-counts.
+       Same fix in app/save.tsx, app/ask.tsx, app/profile.tsx and TodoEditor. */
+    <KeyboardAvoidingView style={styles.container} behavior="padding">
       <ScrollView
         contentContainerStyle={[styles.formInner, { paddingTop: insets.top + spacing.md }]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
         <Pressable
-          onPress={() => { haptics.tap(); setStep('welcome'); setError(''); }}
+          /* Leaving the form clears it. Previously only `error` was reset, so
+             backing out and coming in again showed the last email and password
+             still typed in — which is what "it retains the old data" was. */
+          onPress={() => { haptics.tap(); setStep('welcome'); resetForm(); }}
           hitSlop={12}
           style={styles.back}
         >
@@ -423,16 +520,19 @@ export function LoginScreen() {
             <>
               <Field
                 label="First name" value={firstName} onChangeText={setFirstName}
+                onClear={() => setFirstName('')}
                 placeholder="Required" autoCapitalize="words" editable={!busy}
                 accessibilityLabel="First name"
               />
               <Field
                 label="Last name" value={lastName} onChangeText={setLastName}
+                onClear={() => setLastName('')}
                 placeholder="Optional" autoCapitalize="words" editable={!busy}
                 accessibilityLabel="Last name, optional"
               />
               <Field
                 label="Nickname" value={nickname} onChangeText={setNickname}
+                onClear={() => setNickname('')}
                 placeholder="What we'll call you" autoCapitalize="words" editable={!busy}
                 accessibilityLabel="Nickname, optional"
               />
@@ -441,15 +541,23 @@ export function LoginScreen() {
 
           <Field
             label="Email" value={email} onChangeText={setEmail}
+            onClear={() => setEmail('')}
             placeholder="you@example.com"
             autoCapitalize="none" autoCorrect={false}
             keyboardType="email-address" inputMode="email" editable={!busy}
+            textContentType="emailAddress" autoComplete="email"
             accessibilityLabel="Email"
           />
           <Field
             label="Password" value={password} onChangeText={setPassword}
+            onClear={() => setPassword('')}
             placeholder={isSignup ? `${MIN_PASSWORD}+ characters` : 'Your password'}
             secureTextEntry={!showPw} autoCapitalize="none" editable={!busy}
+            /* Tells the OS password manager which field this is, so it offers to
+               fill/save instead of leaving the user to retype. `newPassword` on
+               signup is what makes Android/iOS offer a generated one. */
+            textContentType={isSignup ? 'newPassword' : 'password'}
+            autoComplete={isSignup ? 'new-password' : 'current-password'}
             onSubmitEditing={submit} returnKeyType="go"
             accessibilityLabel="Password"
             trailing={
@@ -568,6 +676,9 @@ const styles = themed(() => StyleSheet.create({
   // Email is the one that actually works, so it gets the system's inversion —
   // the same emphasis the primary button uses everywhere else.
   authBtnPrimary: { backgroundColor: colors.textPrimary, borderColor: colors.textPrimary },
+  // Dimmed while another provider's flow is in-flight — the system has no
+  // colour to grey with, so opacity is the whole vocabulary for "not now".
+  authBtnOff: { opacity: 0.35 },
   authHint: { textAlign: 'center', marginTop: spacing.md },
   legal: {
     color: colors.textTertiary,

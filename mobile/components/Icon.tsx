@@ -37,7 +37,10 @@ const MAP: Record<string, any> = {
   fitness: Dumbbell, cooking: ChefHat, tech: Cpu, motivation: Rocket,
   education: GraduationCap, entertainment: Clapperboard, fashion: Shirt,
   beauty: Brush, travel: Plane, business: Briefcase, news: Newspaper, health: HeartPulse,
-  finance: Wallet, general: Sparkles, other: Tag, all: Globe,
+  // `hobby` is Palette — crafts/music/painting/model-making. Deliberately not
+  // Leaf (already gardening-flavoured elsewhere) and not Sparkles (taken by
+  // `general`); a category bubble that duplicates another's glyph is unusable.
+  finance: Wallet, hobby: Palette, general: Sparkles, other: Tag, all: Globe,
 
   // ── Workout muscles / types ──
   strength: Dumbbell, cardio: HeartPulse, flexibility: Activity, fitness_repeat: Repeat,

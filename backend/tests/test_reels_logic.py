@@ -32,6 +32,47 @@ class TestWeakTitle:
         assert reels._weak_title("Best Percent Hack - Find Percents Shortcut") is False
 
 
+class TestLoginWallTitles:
+    """Owner report, 2026-08-12: an Instagram save showed its real title for a
+    moment and then changed to "Login • Instagram".
+
+    Instagram does not error when it refuses the phone's preview fetch — it
+    returns 200 with the SIGN-IN PAGE, whose og:title is the wall's own title
+    and whose og:image is Instagram's artwork. Both fields are non-empty, so
+    every "did we get a title?" check said yes and installed the wall's
+    branding on the reel.
+    """
+
+    def test_login_wall_titles_are_detected(self):
+        for t in [
+            "Login • Instagram",
+            "Log in to Facebook",
+            "Login",
+            "Sign in",
+            "Instagram",
+            "facebook",
+            "Content Not Available",
+            "Page Not Found",
+        ]:
+            assert reels._is_login_wall_title(t) is True, t
+
+    def test_real_titles_are_not_login_walls(self):
+        """The screen must not eat legitimate posts that merely mention login."""
+        for t in [
+            "How to make perfect pasta at home",
+            "Login flows that don't annoy users",     # a real post ABOUT logins
+            "Instagram growth tips for small brands",
+            "5 sign-in patterns worth stealing",
+        ]:
+            assert reels._is_login_wall_title(t) is False, t
+
+    def test_login_wall_title_is_always_weak(self):
+        """`_weak_title` is the gate all three fill-sites share, so making the
+        wall weak there is what stops any path installing it."""
+        assert reels._weak_title("Login • Instagram") is True
+        assert reels._weak_title("Log in to Facebook") is True
+
+
 def _fake_reel(**over):
     base = dict(
         id="1", url="u", platform="youtube", title="t", thumbnail_url=None,

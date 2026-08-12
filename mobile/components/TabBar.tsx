@@ -199,13 +199,32 @@ const styles = themed(() => StyleSheet.create({
     // the LinearGradient paints a square behind the rounded border.
     overflow: 'hidden',
   },
-  barFill: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  /**
+   * ⚠️ THE FILL CARRIES ITS OWN RADIUS — do not rely on the parent's
+   * `overflow: 'hidden'` to round it.
+   *
+   * On Android, clipping a child to a parent's ROUNDED shape is not what
+   * `overflow: hidden` does — the child is clipped to the parent's bounding
+   * RECTANGLE. So this gradient painted square corners straight over the pill's
+   * rounded border, and the capsule rendered as a rectangle on device while
+   * looking correct on web (where the browser clips to the border-radius).
+   * That is the "tab capsule is square, not circle" report.
+   */
+  barFill: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: radius.circle,
+  },
   tab: { alignItems: 'center', justifyContent: 'center' },
   slot: {
     width: 42, height: 42,
-    borderRadius: radius.circle,
+    // Exactly half the box, not the 999 sentinel. Both should resolve to the
+    // same circle, but a concrete value cannot be clamped or rounded down by a
+    // renderer, and this is the one mark that says which tab you are on.
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  slotOn: { borderWidth: 1.5, borderColor: colors.textPrimary },
+  // Whole pixels: Android snaps fractional stroke widths inconsistently around
+  // a tight radius, which shows up as flat spots on the ring.
+  slotOn: { borderWidth: 2, borderColor: colors.textPrimary },
 }));

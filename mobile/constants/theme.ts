@@ -277,7 +277,7 @@ export const platformMeta: Record<string, { color: string; gradient: readonly [s
 export const categoryMeta: Record<string, { icon: string; color: string }> = Object.fromEntries(
   ['all', 'fitness', 'cooking', 'tech', 'motivation', 'education', 'entertainment',
    'fashion', 'beauty', 'travel', 'business', 'news', 'health', 'finance',
-   'general', 'other'].map(k => [k, { icon: k, color: PALETTES.dark.textTertiary }]),
+   'hobby', 'general', 'other'].map(k => [k, { icon: k, color: PALETTES.dark.textTertiary }]),
 );
 
 export const categoryFor = (c?: string | null) =>
@@ -424,7 +424,8 @@ _active = resolve(_preference);
  *  'all' filter pseudo-category. Keep in sync with backend ALLOWED_CATEGORIES. */
 export const CATEGORY_OPTIONS = [
   'fitness', 'cooking', 'tech', 'motivation', 'education', 'entertainment',
-  'fashion', 'beauty', 'travel', 'business', 'news', 'health', 'finance', 'other',
+  'fashion', 'beauty', 'travel', 'business', 'news', 'health', 'finance',
+  'hobby', 'other',
 ] as const;
 
 export const spacing = {
@@ -446,8 +447,15 @@ export const spacing = {
  * category switch, and when its spacing didn't match the real grid the whole
  * page visibly re-flowed the moment tiles landed. That was the "doesn't match
  * in every category" symptom: not the tiles, the placeholder underneath them.
+ *
+ * ⚠️ 8 → 12 (owner, 2026-08-12) as part of the library's Pinterest pass.
+ * Measured off four Pinterest screens: gutter and page margin are ~10–12pt and
+ * — the part most people get wrong — they are EQUAL. Pinterest does not use a
+ * wider page margin than its gutter, which is exactly the architecture this
+ * constant already had; only the value was too tight. At 12 a 390pt phone
+ * gives 177pt tiles, within a couple of points of Pinterest's own 181pt.
  */
-export const GRID_GAP = 8;
+export const GRID_GAP = 12;
 
 /**
  * ⚠️ REVERSED (owner, 2026-08-03). These were ALL ZERO — the primary style

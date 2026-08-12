@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, useRef, memo } from 'react';
 import {
   View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform,
   ScrollView, ActivityIndicator, Image,
@@ -102,10 +102,45 @@ export default function ProfileScreen() {
    * cells on every keystroke in the fields above. `busy` is the only dep, and
    * it flips exactly twice per save.
    */
+  /**
+   * ⚠️ A REF, NOT A DEP. `pick` must keep a stable identity — `AvatarCell` is
+   * memoised on it and 102 cells re-render otherwise — but it now needs to know
+   * the CURRENT selection to toggle it. Reading through a ref gives it that
+   * without putting `avatar` in the dependency array.
+   */
+  const avatarRef = useRef(avatar);
+  avatarRef.current = avatar;
+
+  /**
+   * AUTO-SAVES. No Save button for a face (owner, 2026-08-12).
+   *
+   * Picking an avatar is a single, self-describing, instantly-reversible
+   * choice — the picked cell already shows a check, so the screen has ALREADY
+   * told you it is set. Requiring Save after that is the classic trap: it looks
+   * done, you leave, and it isn't. The name fields above still need Save,
+   * because a half-typed name is not a finished intent; a tapped face always is.
+   *
+   * ⚠️ The write is fired here and NOT inside a `setAvatar` updater. A state
+   * updater must stay pure — React invokes it twice under StrictMode, which
+   * would have sent the request twice per tap.
+   *
+   * `null`, not `undefined`, when deselecting — see the long note in `save()`:
+   * JSON.stringify drops undefined keys, so `undefined` would leave the old
+   * avatar on the server and it would reappear at the next token refresh.
+   */
   const pick = useCallback((key: string) => {
     if (busy) return;
-    setAvatar(a => (a === key ? undefined : key));
-  }, [busy]);
+    const previous = avatarRef.current;
+    const next = previous === key ? undefined : key;
+    setAvatar(next);
+    // Optimistic: the grid must answer the tap now. But a failure reverts and
+    // says so — silently keeping a face the server never stored is worse than
+    // the round-trip we just avoided.
+    updateProfile({ avatar: next ?? null }).then(({ error: err }) => {
+      if (err) { haptics.error(); setAvatar(previous); setError(err); }
+      else { haptics.tap(); setError(''); }
+    });
+  }, [busy, updateProfile]);
 
   const save = async () => {
     if (!firstName.trim()) { setError('First name is required.'); return; }
@@ -131,7 +166,8 @@ export default function ProfileScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    /* behavior="padding" on Android too — see the note in LoginScreen.tsx. */
+    <KeyboardAvoidingView style={styles.container} behavior="padding">
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Label wide>Signed in as</Label>
         <Title style={styles.email} numberOfLines={1}>{email ?? '—'}</Title>
@@ -151,7 +187,9 @@ export default function ProfileScreen() {
           onSubmitEditing={save} returnKeyType="done"
         />
 
-        <Label style={styles.avatarLabel}>Profile picture — optional</Label>
+        {/* Says the picture saves itself, so nobody hunts for a Save button
+            that no longer applies to it. The Save below is for the names. */}
+        <Label style={styles.avatarLabel}>Profile picture — saves as you pick</Label>
         {/*
           ⚠️ ALL 92 MOUNT AT ONCE, ON PURPOSE. This grid used to dribble them in
           24 at a time on a 250ms timer, justified by a note claiming a single
