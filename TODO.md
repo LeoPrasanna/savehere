@@ -181,8 +181,10 @@ summary no longer needs a page reload (#20).
 - [x] **Environments: Dev / Staging / Prod — DONE (2026-07-21..24; decided 2026-07-20, no PreProd)** — **Both Supabase projects now exist (2026-07-21):** `SaveHere` = PROD (ref `lukmwwcilrjqqtgqbynq`, ~27 real auth users incl. the seeded test accounts — keep clean), `savehere-dev` = DEV/STAGING (new, empty). Target shape: **dev** = `savehere-dev` Postgres (session pooler :5432) + `savehere-dev` auth (SQLite retired 2026-07-21 for Codespaces persistence — local shares the staging DB); **staging** = same `savehere-dev` Postgres + auth, 2nd Render service auto-deploying from `develop`; **prod** = `SaveHere` Postgres + `SaveHere` auth, Render (Starter+) from `main` + Supabase Pro. Each deployment gets its OWN env-var values (12-factor — no code branching). Mobile: EAS build profiles carry `EXPO_PUBLIC_API_URL` + `EXPO_PUBLIC_SUPABASE_*` per env (dev build → `savehere-dev`). PreProd skipped: with one developer, staging IS preprod. **Ordered next steps** (branch `chore/env-separation`): **Phase A DONE (no secrets):**
 (1) ✅ reverted local root `.env` `DATABASE_URL` → SQLite (data back, `/health` 200);
 (2) ✅ env matrix documented in [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) (+ cross-links
-in DEPLOY/CONTEXT); (5) ✅ mobile per-env structured in `mobile/eas.json` (prod values baked;
-dev/staging = `REPLACE_*` placeholders, publishable so git-safe); (6) ✅ `render.yaml` split
+in DEPLOY/CONTEXT); (5) ✅ mobile per-env structured in `mobile/eas.json` — **as of 2026-08-12 no
+values live in the file at all**: each build profile just names its `"environment"`, and the three
+`EXPO_PUBLIC_*` vars are stored per-environment on EAS (`eas env:list --environment <env>`), so a
+key rotation never touches git; (6) ✅ `render.yaml` split
 into `savehere-api-staging` (←`develop`) + `savehere-api-prod` (←`main`), and the missing
 `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` runtime-auth vars added to each (were absent — a
 deployed backend's auth would have broken). **Phase B — MOSTLY DONE (owner supplied dev secrets):**

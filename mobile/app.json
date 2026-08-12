@@ -50,7 +50,11 @@
     "extra": {
       "router": {
         "origin": false
+      },
+      "eas": {
+        "projectId": "e81a906f-8918-45c6-b743-bd50185b263b"
       }
-    }
+    },
+    "owner": "leo-app-dev-team"
   }
 }
