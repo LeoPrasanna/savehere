@@ -21,7 +21,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.savehere.app"
+      "package": "com.savehere.app",
+      "versionCode": 1
     },
     "web": {
       "favicon": "./assets/favicon.png",
