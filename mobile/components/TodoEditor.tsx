@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, memo } from 'react';
-import { View, Text, StyleSheet, Modal, TextInput, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, TextInput, ScrollView, ActivityIndicator, KeyboardAvoidingView } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { api, Todo, TodoPriority } from '../services/api';
 import { Pressable } from './Pressable';
@@ -75,8 +75,32 @@ function TodoEditorImpl({
   // double-click's second click lands on the freshly mounted overlay.
   const openedAt = useRef(0);
 
+  /**
+   * ⚠️ SEED ONCE PER OPENING, NOT ON EVERY PROP CHANGE.
+   *
+   * This effect used to run whenever any dep changed while the sheet was OPEN,
+   * and every run calls `setDue(editing?.due_date ?? null)` — silently throwing
+   * away the date the user had just tapped. That is the "the date chips don't
+   * update" bug, and it also reset the title mid-typing.
+   *
+   * The deps are not stable in practice:
+   *  • todos.tsx passes `defaultPriority={settings.defaultPriority}`, which
+   *    changes when the settings sheet writes.
+   *  • reel/[id].tsx passes `defaultDescription={reel.summary?.join('\n')}`,
+   *    and that screen RE-FETCHES the reel every 2.5s while the summary is
+   *    pending — so a save whose summary was still generating re-seeded this
+   *    form roughly every two and a half seconds while you were filling it in.
+   *
+   * Latching on the false→true transition is the fix: reopening still seeds
+   * fresh (the latch clears on close), but nothing touches your input while
+   * the sheet is up.
+   */
+  const seeded = useRef(false);
+
   useEffect(() => {
-    if (!visible) return;
+    if (!visible) { seeded.current = false; return; }
+    if (seeded.current) return;
+    seeded.current = true;
     openedAt.current = Date.now();
     setTitle(editing?.title ?? defaultTitle ?? '');
     setDescription(editing?.description ?? defaultDescription ?? '');
@@ -161,6 +185,13 @@ function TodoEditorImpl({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      {/* ⚠️ THE MODAL NEEDS ITS OWN KeyboardAvoidingView. A Modal is a separate
+          Android window, so it is never resized by the IME even where the main
+          window would be — and this sheet centres itself, autofocuses the title
+          and puts WHEN/PRIORITY/Add BELOW that field. The keyboard covered
+          exactly the controls you needed next. `padding` (not `height`) so the
+          card shrinks from the bottom rather than jumping. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
       <Pressable style={styles.overlay} onPress={dismiss} scaleTo={1}>
         {/* Card swallows its own presses so typing inside never bubbles to the
             close-on-press overlay (react-native-web). */}
@@ -194,8 +225,16 @@ function TodoEditorImpl({
               placeholderTextColor={colors.textTertiary}
               maxLength={200}
               autoFocus={!editing}
+              /* ⚠️ Enter must NOT save. This was `returnKeyType="done"` +
+                 `onSubmitEditing={submit}`, so typing a title and hitting
+                 Enter — the reflex on any single-line field — created the task
+                 and closed the sheet before you ever reached WHEN or PRIORITY.
+                 The date chips below then "did nothing" because there was no
+                 sheet left. Enter now just DISMISSES the keyboard, which is the
+                 useful thing to do here — it uncovers WHEN, PRIORITY and the
+                 Add button. Saving is the button, and only the button. */
               returnKeyType="done"
-              onSubmitEditing={submit}
+              submitBehavior="blurAndSubmit"
             />
 
             <Text style={styles.label}>NOTES (OPTIONAL)</Text>
@@ -280,6 +319,7 @@ function TodoEditorImpl({
           </Pressable>
         </Pressable>
       </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

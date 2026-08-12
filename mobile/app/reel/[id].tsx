@@ -245,19 +245,37 @@ export default function ReelDetailScreen() {
     }
   };
 
+  /**
+   * OPTIMISTIC — the pill changes on tap, the request follows.
+   *
+   * ⚠️ This was the "tags/categories take ages to update" report. The old
+   * version awaited a PATCH before touching any state, so on a cold Render free
+   * instance (~50s to wake) the modal sat open with a spinner and the pill did
+   * not move — for what is, from the user's side, a label they already chose.
+   *
+   * The category also drives which AI buttons the screen offers (fitness →
+   * workout, travel → itinerary, cooking → recipe), so the whole section below
+   * re-renders instantly now instead of after the round-trip.
+   *
+   * On failure the PREVIOUS value is restored and the error is shown — never a
+   * silent revert, which would look like the tap simply did nothing.
+   */
   const handleSelectCategory = async (category: string) => {
     if (!reel || category === reel.category) { setCategoryModal(false); return; }
+    const previous = reel.category;
+    setCategoryModal(false);
+    setReel(prev => (prev ? { ...prev, category } : prev));
     setSavingCategory(true);
+    haptics.tap();
     try {
       const updated = await api.updateCategory(id, category);
       setReel(updated);
     } catch (e: any) {
-      let msg = 'Could not update category.';
-      if (e?.message) msg = e.message;   // api.ts already extracted the server detail
-      notify(msg);
+      setReel(prev => (prev ? { ...prev, category: previous } : prev));
+      haptics.error();
+      notify(e?.message || 'Could not update category. Your previous one is still set.');
     } finally {
       setSavingCategory(false);
-      setCategoryModal(false);
     }
   };
 
@@ -635,15 +653,30 @@ export default function ReelDetailScreen() {
                   {generatingItin
                     ? <ActivityIndicator size="small" color={colors.onAction} />
                     : <Icon name="travel" size={20} color={colors.onAction} />}
-                  <Text style={styles.actionBtnText}>
-                    {generatingItin ? 'Planning…' : itinRegensLeft <= 0 ? 'Limit reached' : 'Create Itinerary'}
+                  {/* ⚠️ THE WAITING COPY IS ON THE BUTTON (owner, 2026-08-12).
+                      It used to be a bare "Planning…" here with the rotating
+                      sentence animating in the small grey hint BELOW — so the
+                      thing you were told to read was the furthest, faintest
+                      text on screen while the button itself said nothing. */}
+                  <Text
+                    style={[styles.actionBtnText, generatingItin && styles.actionBtnWorking]}
+                    numberOfLines={2}
+                  >
+                    {generatingItin
+                      ? (itinWaiting ?? 'Planning…')
+                      : itinRegensLeft <= 0 ? 'Limit reached' : 'Create Itinerary'}
                   </Text>
                 </LinearGradient>
               </Pressable>
-              <Text style={styles.actionHint}>
-                {itinWaiting
-                  ?? 'Uses what the reel mentions, then fills the plan in with known highlights of the destination. Prices and opening hours are never guessed — check those yourself. Uses 1 AI action.'}
-              </Text>
+              {/* Standing explainer only — never the waiting copy, which would
+                  now be on screen twice. */}
+              {!generatingItin && (
+                <Text style={styles.actionHint}>
+                  Uses what the reel mentions, then fills the plan in with known highlights of the
+                  destination. Prices and opening hours are never guessed — check those yourself.
+                  Uses 1 AI action.
+                </Text>
+              )}
             </>
           )}
 
@@ -726,8 +759,13 @@ export default function ReelDetailScreen() {
                     {generatingWorkout
                       ? <ActivityIndicator size="small" color={colors.onAction} />
                       : <Icon name="barbell" size={20} color={colors.onAction} />}
-                    <Text style={styles.actionBtnText}>
-                      {generatingWorkout ? 'Building…' : hasWorkout ? 'View Workout' : workoutLimitReached ? 'Limit reached' : 'Build Workout'}
+                    <Text
+                      style={[styles.actionBtnText, generatingWorkout && styles.actionBtnWorking]}
+                      numberOfLines={2}
+                    >
+                      {generatingWorkout
+                        ? (workoutWaiting ?? 'Building…')
+                        : hasWorkout ? 'View Workout' : workoutLimitReached ? 'Limit reached' : 'Build Workout'}
                     </Text>
                   </LinearGradient>
                 </Pressable>
@@ -748,18 +786,24 @@ export default function ReelDetailScreen() {
                   {generatingTasks
                     ? <ActivityIndicator size="small" color={colors.onAction} />
                     : <Icon name={isCooking ? 'restaurant' : 'list'} size={20} color={colors.onAction} />}
-                  <Text style={styles.actionBtnText}>
-                    {generatingTasks ? 'Working…' : (isCooking ? 'Get Recipe' : 'Get Action Steps')}
+                  <Text
+                    style={[styles.actionBtnText, generatingTasks && styles.actionBtnWorking]}
+                    numberOfLines={2}
+                  >
+                    {generatingTasks
+                      ? (tasksWaiting ?? 'Working…')
+                      : (isCooking ? 'Get Recipe' : 'Get Action Steps')}
                   </Text>
                 </LinearGradient>
               </Pressable>
             )}
           </View>
-          {/* Workout has no standing hint line — this only appears while generating. */}
-          {workoutWaiting && <Text style={styles.actionHint}>{workoutWaiting}</Text>}
-          {showTasksAction && (
+          {/* Both waiting messages moved ONTO their buttons above. What is left
+              here is the standing explainer, hidden while generating so the
+              same sentence never appears twice. */}
+          {showTasksAction && !generatingTasks && (
             <Text style={styles.actionHint}>
-              {tasksWaiting ?? (actionLocked ? PRO_HINT : 'Generated once with AI — after that you can add, edit, or delete by hand.')}
+              {actionLocked ? PRO_HINT : 'Generated once with AI — after that you can add, edit, or delete by hand.'}
             </Text>
           )}
           {taskError ? (
@@ -1049,8 +1093,20 @@ const styles = themed(() => StyleSheet.create({
   actionBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
     borderRadius: radius.md, paddingVertical: spacing.md,
+    // Fixed floor so the button does not JUMP when its label swaps from
+    // "Get Recipe" to a two-line waiting message and back.
+    minHeight: 58,
   },
-  actionBtnText: { color: colors.onAction, fontSize: font.sm, fontWeight: '800' },
+  // flexShrink + centre + 2 lines: the waiting copy now lives ON the button
+  // (owner, 2026-08-12) and has to be able to wrap inside it rather than
+  // overflow the gradient or ellipsize halfway through a sentence.
+  actionBtnText: {
+    color: colors.onAction, fontSize: font.sm, fontWeight: '800',
+    flexShrink: 1, textAlign: 'center',
+  },
+  // Slightly lighter and leaded for the rotating sentence — it is a full line of
+  // prose, not a label, and 800-weight at 12px reads as shouting.
+  actionBtnWorking: { fontWeight: '700', lineHeight: 17 },
   actionHint: { color: colors.textTertiary, fontSize: font.xs, lineHeight: 16 },
   inlineError: {
     flexDirection: 'row', alignItems: 'flex-start', gap: spacing.xs,

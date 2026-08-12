@@ -8,7 +8,7 @@ import * as haptics from '../services/haptics';
 import { Pressable } from './Pressable';
 import { Label } from './kit';
 import {
-  colors, spacing, font, tracking, typeface, platformMeta, gradients, onImage, motion, themed,
+  colors, spacing, font, radius, tracking, typeface, platformMeta, gradients, onImage, motion, themed,
 } from '../constants/theme';
 
 interface ReelCardProps {
@@ -174,22 +174,49 @@ export const ReelCard = memo(ReelCardInner, (prev, next) =>
 const styles = themed(() => StyleSheet.create({
   // The tile IS the image. aspectRatio comes from the grid (see aspectFor), so
   // the frame has no intrinsic height of its own and nothing below the picture.
+  // The tile IS the image — no padding, no surface behind it, no inset around
+  // the photo. That is the load-bearing part of the Pinterest read: the rounded
+  // rectangle IS the picture. Wrap it in a padded card and it becomes a sticker.
   frame: {
     flex: 1,
     backgroundColor: colors.card,
     overflow: 'hidden',
-    // ⚠️ Pinned to 0, NOT `radius.*`. Controls and surfaces curve now; a
-    // photograph in a tight mosaic does not — rounded tiles read as stickers,
-    // and the reference grid is square-cornered.
-    borderRadius: 0,
+    /**
+     * ⚠️ ROUNDED — owner direction, 2026-08-12. This was pinned to 0 with a
+     * comment arguing the opposite; the library is now the one surface that
+     * departs from the contact sheet's absolute 0-radius rule. Everything
+     * else in the app is still square. Grep before reusing this.
+     *
+     * 16 (`radius.lg`) is not a taste call — measured across four Pinterest
+     * screens at 14–16pt. Note it is an ABSOLUTE constant, never a fraction of
+     * tile width: Pinterest uses the same ~15pt on a 116pt 3-column tile as on
+     * a 182pt 2-column one. And it does NOT scale up with the gutter — 16 with
+     * generous spacing reads as Pinterest, 24 reads as a widget dashboard.
+     */
+    borderRadius: radius.lg,
   },
   tap: { flex: 1 },
 
-  image: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, width: '100%', height: '100%' },
+  // ⚠️ The radius is repeated on the absolutely-positioned children on purpose.
+  // Android does not reliably clip `position: absolute` descendants to a
+  // parent's ROUNDED shape — `overflow: 'hidden'` clips to its bounding
+  // rectangle — so without these the image's and scrim's square corners poke
+  // out past the frame. Free on iOS/web, and it is the same class of bug that
+  // made the tab bar's gradient render as a rectangle (see TabBar.tsx).
+  image: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    width: '100%', height: '100%',
+    borderRadius: radius.lg,
+  },
   imageEmpty: { alignItems: 'center', justifyContent: 'center' },
 
-  // Inside the picture's bounds — costs the tile no height.
-  scrim: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%' },
+  // Inside the picture's bounds — costs the tile no height. Only the BOTTOM
+  // corners are rounded: the scrim starts mid-tile, so its top edge is straight.
+  scrim: {
+    position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%',
+    borderBottomLeftRadius: radius.lg,
+    borderBottomRightRadius: radius.lg,
+  },
   overlay: {
     position: 'absolute',
     left: spacing.sm, right: spacing.sm, bottom: spacing.sm,

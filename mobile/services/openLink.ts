@@ -56,11 +56,28 @@ export async function openSourceLink(url?: string | null): Promise<boolean> {
     return true;
   }
 
-  // Native: canOpenURL IS a real signal (nothing handles the scheme), so keep
-  // the honest failure popup here.
+  /**
+   * ⚠️ NO `canOpenURL` PRECHECK FOR http/https — it was the bug, not the guard.
+   *
+   * Android 11 (API 30) introduced package visibility: `canOpenURL` returns
+   * FALSE for any scheme the app has not declared in a `<queries>` manifest
+   * block, whether or not something on the device can actually handle it. Our
+   * manifest declares nothing, so on every modern Android phone this returned
+   * false for perfectly ordinary `https://youtube.com/...` links, threw
+   * 'no handler', and showed "Couldn't open this link" — WITHOUT EVER CALLING
+   * openURL. Watch could not work on Android, ever.
+   *
+   * Every Android and iOS device resolves http/https to at least a browser, so
+   * there is nothing to precheck: attempt the open and let a real throw be the
+   * failure signal. That is also strictly more accurate than the old check,
+   * which asked "is a handler declared?" rather than "did it open?".
+   *
+   * Non-web schemes (a bare `instagram://`) genuinely can be unhandled and
+   * genuinely need the manifest, so those keep the precheck.
+   */
+  const isWeb = /^https?:\/\//i.test(url);
   try {
-    const supported = await Linking.canOpenURL(url);
-    if (!supported) throw new Error('no handler');
+    if (!isWeb && !(await Linking.canOpenURL(url))) throw new Error('no handler');
     await Linking.openURL(url);
     return true;
   } catch {

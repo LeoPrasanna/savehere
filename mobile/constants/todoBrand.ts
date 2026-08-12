@@ -53,17 +53,33 @@ export const TODO_ROLL_NAMES: readonly TodoRollName[] = [
  * circulated aphorisms, quoted in full and credited (attributions are the
  * commonly cited ones).
  *
- * Keep each to one line so it fits the roller without wrapping to a third.
+ * ⚠️ HARD BUDGET: ~58 CHARACTERS, ATTRIBUTION INCLUDED.
+ *
+ * The old rule here said "keep each to one line" without saying what a line
+ * was, so entries drifted to 85 characters and got clipped by the roller — the
+ * Carnegie one ("Do the hard jobs first…", 85 chars) was the worst. The real
+ * constraint is measurable: the compact roller is a 42px viewport with
+ * `overflow: hidden` at lineHeight 18, so exactly TWO lines fit, and the
+ * animation translates ±22px through that window — meaning anything that needs
+ * a third line is sliced mid-glyph rather than merely truncated.
+ *
+ * At font.sm (12px, italic) in the dashboard card that works out to ~58
+ * characters. Surname-only attributions are how the longer quotes earn their
+ * place. Do not "fix" an over-long entry by paraphrasing it: a trimmed quote
+ * with the original name still attached is a misquote. Pick a shorter one.
+ *
+ * The roller also clamps to `numberOfLines={2}` at the call site (app/todos.tsx)
+ * so a future over-long line degrades to an ellipsis instead of a sliced word.
  */
 export const TODO_QUOTES = [
-  '"The secret of getting ahead is getting started." — Mark Twain',
-  '"Well done is better than well said." — Benjamin Franklin',
-  '"It always seems impossible until it\'s done." — Nelson Mandela',
-  '"A goal without a plan is just a wish." — Antoine de Saint-Exupéry',
-  '"The way to get started is to quit talking and begin doing." — Walt Disney',
-  '"Start where you are. Use what you have. Do what you can." — Arthur Ashe',
-  '"Lost time is never found again." — Benjamin Franklin',
-  '"Action is the foundational key to all success." — Pablo Picasso',
-  '"Do the hard jobs first. The easy jobs will take care of themselves." — Dale Carnegie',
-  '"You may delay, but time will not." — Benjamin Franklin',
+  '"Well done is better than well said." — Franklin',
+  '"Lost time is never found again." — Franklin',
+  '"You may delay, but time will not." — Franklin',
+  '"It always seems impossible until it\'s done." — Mandela',
+  '"A goal without a plan is just a wish." — Saint-Exupéry',
+  '"The secret of getting ahead is getting started." — Twain',
+  '"Action is the foundational key to all success." — Picasso',
+  '"The best way out is always through." — Frost',
+  '"Well begun is half done." — Aristotle',
+  '"Start where you are." — Arthur Ashe',
 ];

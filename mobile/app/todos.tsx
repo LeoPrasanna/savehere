@@ -564,7 +564,11 @@ export default function TodosScreen() {
               tint={overdueCount > 0 ? colors.danger : undefined}
             />
           </View>
-          <RollingTagline compact shuffle lines={TODO_QUOTES} style={styles.quotes} />
+          {/* numberOfLines={2} matches the compact viewport exactly (42px at
+              lineHeight 18). Without it an over-long quote was sliced through
+              the middle of a word by `overflow: hidden`; with it, the worst
+              case is an honest ellipsis. See TODO_QUOTES for the char budget. */}
+          <RollingTagline compact shuffle numberOfLines={2} lines={TODO_QUOTES} style={styles.quotes} />
         </View>
 
         {error && (

@@ -25,6 +25,9 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 ### Capture & summarize
 
 - One-tap save from Instagram, YouTube, TikTok, LinkedIn, Facebook
+- 📲 **Share directly from the source app** — SaveHere appears in the Android/iOS
+  share sheet, so a reel goes from Instagram into your library without a copy-paste.
+  (Needs a native build; `expo-share-intent`, wired in `mobile/app/_layout.tsx`.)
 - AI bullet summaries + auto tags + auto category (Claude Haiku) — grounded in the actual captions/transcript, never invented
 - Works in any language; summaries match the source
 - Auto-saved personal notes; editable category; re-summarize (capped)
@@ -40,7 +43,7 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 
 ### Find & rediscover
 
-- 🗂️ **Category filtering** across the library — fifteen categories assigned by the summarizer, filterable from the grid. *(A category-aware smart search shipped and was removed in Aug 2026 once the UI entry point went; narrowing is by category today.)*
+- 🗂️ **Category filtering** across the library — sixteen categories assigned by the summarizer, filterable from the grid. *(A category-aware smart search shipped and was removed in Aug 2026 once the UI entry point went; narrowing is by category today.)*
 - 🧭 **Rediscover** — resurfaces older saves so they don't get forgotten
 - 💬 **Ask your library** — natural-language questions answered from your own saves, with sources, **streamed token-by-token** (first words in ~1.4 s instead of a 3 s wall of silence)
 
@@ -60,7 +63,11 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
   weight and letter-spacing rather than colour
 - 🧱 **Staggered masonry library** — tiles go to whichever column is shortest, with
   the aspect seeded by platform (landscape thumbnails from YouTube/LinkedIn,
-  vertical from Instagram/TikTok) so it never reflows when an image loads
+  vertical from Instagram/TikTok) so it never reflows when an image loads.
+  **The library is the one sanctioned exception to the zero-radius rule**
+  (owner, Aug 2026): 16px corners and a 12px gutter, researched against
+  Pinterest, where gutter and page margin are equal and the radius is a constant
+  — never a fraction of tile width. Everything outside the grid is still square.
 - 🎞️ **A live welcome wall** — the signed-out screen drifts three tilted columns
   of mock reel cards in alternating directions. Drawn entirely in code — no
   photography, no bundled assets, nothing anyone else owns; honours "reduce motion"

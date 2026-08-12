@@ -136,6 +136,36 @@ function detectPlatform(url: string): string {
   return 'other';
 }
 
+/**
+ * Is this the platform's LOGIN WALL rather than the post?
+ *
+ * ⚠️ THE INSTAGRAM "Login • Instagram" BUG (owner, 2026-08-12).
+ *
+ * Instagram serves the public og: surface to the `facebookexternalhit` UA most
+ * of the time — but not always, and when it refuses it does NOT return an
+ * error. It returns 200 with the sign-in page, whose `og:title` is
+ * "Login • Instagram" and whose `og:image` is Instagram's own artwork. The old
+ * code checked only "did we get a title / thumbnail?", both of which are
+ * present, so it shipped the wall's branding to the server as if it were the
+ * reel's — which is why the card briefly showed the real title and then flipped
+ * to "Login • Instagram" with a caption that never arrived.
+ *
+ * The server screens this too (`_is_login_wall_title` in routes/reels.py) — this
+ * is the cheaper half, since a wall detected here is never sent at all, so the
+ * wall's og:image can't land on a reel that had no thumbnail yet either.
+ */
+export function isLoginWall(title: string | undefined, html: string): boolean {
+  const t = (title || '').trim().toLowerCase();
+  if (/^(log ?in|sign ?in)\b/.test(t)) return true;
+  if (/^(log|sign) ?in to /.test(t)) return true;
+  // A title that is only the platform's own name is the wall's default.
+  if (['instagram', 'facebook', 'linkedin', 'tiktok'].includes(t.replace(/[\s.•|-]+$/, ''))) return true;
+  // Belt and braces: the wall ships a login form even when the title varies by
+  // locale ("Anmelden • Instagram"), and a real post page never does.
+  return /<input[^>]+name=["'](username|email)["'][^>]*>/i.test(html)
+      && /<input[^>]+type=["']password["']/i.test(html);
+}
+
 /** Parse a fetched page into metadata. Exported for testing the pure part. */
 export function parseMetadata(url: string, html: string): ClientMetadata {
   const ogText = metaContent(html, ['og:description', 'twitter:description', 'description']);
@@ -169,6 +199,10 @@ export async function fetchClientMetadata(url: string): Promise<ClientMetadata |
     const html = await fetchText(url, PREVIEW_UA);
     if (!html) return null;
     const meta = parseMetadata(url, html);
+    // We were served the sign-in page, not the post. Everything on it belongs
+    // to the wall, so send NOTHING — "no opinion" is the honest answer and lets
+    // the server's own result stand. Sending part of it was the bug.
+    if (isLoginWall(meta.title, html)) return null;
     // Nothing useful? Don't send a payload the server will just discard.
     if (!meta.text && !meta.title && !meta.thumbnail_url) return null;
     if (meta.text && meta.text.length < MIN_TEXT) delete meta.text;

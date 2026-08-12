@@ -5,6 +5,54 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ ANDROID TEST ROUND 1 (2026-08-12) — 15 findings from the first real APK
+
+First install from EAS (`preview` profile, Android APK). Branch `fix/android-round-1`.
+⚠️ **The tested APK was commit `0df6ecb`, 5 commits behind `develop`** — but none of
+those 5 touch the UI, so every finding was real against current code.
+
+**Shipped in this round (15/15 owner items + 3 found in the build log):**
+
+| # | Item | Root cause (not the symptom) |
+|---|---|---|
+| 1.1 | Keyboard covers login form | **Expo SDK 54+ forces edge-to-edge on Android, which disables `adjustResize`.** All four `KeyboardAvoidingView`s passed `behavior={undefined}` on Android, so nothing compensated. Now `behavior="padding"` everywhere. |
+| 1.2 | Fields retain old text | No clear affordance + only `error` was reset on leaving the form. Added ×-to-clear, full reset on back, password dropped on mode switch, `autoComplete`/`textContentType` so the OS password manager engages. |
+| 1.3 | Apple + Google login | Google is **real** now (Supabase PKCE OAuth + `expo-web-browser`, `services/oauth.ts`). Apple stays a mock — it cannot work without the $99 Developer account. ⚠️ **Guideline 4.8 binds at iOS review, not on Android**: Apple MUST be wired before the first App Store submission. |
+| 2 | Tab capsule renders square | Android does **not** clip `overflow:hidden` children to a parent's *rounded* shape — only its bounding rect. The pill's `LinearGradient` fill painted square corners over the border. Fill now carries its own radius. |
+| 3 | "Paste copied link" unintuitive | Placeholder is the instruction; tapping the empty field pastes, falls back to focusing for typing. Separate paste button became a Clear button. |
+| 4 | Ask flashes before the lock | `savedCount` started at `null`, and `locked` needs non-null — so the working screen showed for the whole `/usage` round-trip. Now seeded from `services/saveCount`, which already existed for the home screen's identical bug. |
+| 5 | Can't share into the app | `ACTION_SEND` is not a deep link — `Linking` can never see it, so no JS-only fix exists. Added `expo-share-intent@7` (SDK 56 pin) + handler in `_layout.tsx` → `/save?url=`. ⚠️ **Needs a new build; OTA cannot add a native module.** |
+| 6 | Slate quotes clipped | Entries had drifted to 85 chars against a 42px/2-line viewport. Trimmed to a stated ~58-char budget + `numberOfLines={2}` so it can never slice mid-glyph again. |
+| 7 | Todo sheet: keyboard + dates | THREE bugs. (a) a `Modal` is its own Android window and is never IME-resized — added its own KAV. (b) `onSubmitEditing={submit}` on the title meant Enter created the task before you reached the date chips. (c) **the real one**: the seed effect re-ran on every prop change, and `reel/[id]` re-fetches every 2.5s while a summary is pending — so it wiped the date (and title) you had just typed. Now latched to the open transition. |
+| 8 | Instagram title → "Login • Instagram" | Instagram answers the phone's preview fetch with its **sign-in page at HTTP 200**, whose `og:title`/`og:image` are non-empty — so every "did we get a title?" check accepted the wall's branding. Screened client-side (`isLoginWall`) and server-side (`_is_login_wall_title`, folded into `_weak_title` so all three fill-sites are covered). |
+| 9 | Category change is slow | It awaited a PATCH before touching any state; on a cold Render instance that is ~50s of nothing. Now optimistic with an explicit revert + message on failure. |
+| 10 | Add `hobby` | Added to all four in-sync lists (summarizer, `ALLOWED_CATEGORIES`, `CATEGORY_OPTIONS`, `categoryMeta`) + a `Palette` icon. |
+| 11 | Watch button dead | **Android 11 package visibility**: `canOpenURL` returns false for any scheme not declared in a `<queries>` block, so it reported failure *without ever calling `openURL`*. Watch could never have worked on Android. Precheck dropped for http/https. |
+| 12 | Waiting copy below the button | Moved onto the button (2 lines, `minHeight: 58` so it can't jump); the standing hint hides while generating. |
+| 13 | AI charged with no summary | Preflight asked "is `raw_text` non-empty?" — a link-only caption ("Follow us" + 3 URLs) is ~150 chars and passed. New `_usable_source()` applies the same `is_link_only` test the **save** path already uses, so "no summary" and "no charge" finally agree. Notes are exempt (first-party, and they're the documented recovery path). |
+| 14 | Library → Pinterest | Researched on Refero against four Pinterest screens: `GRID_GAP` 8→12 (gutter and page margin are **equal** on Pinterest), tile radius `radius.lg` (16 — a constant, never a fraction of width), no shadow, no border, text stays overlaid inside the frame. Skeleton radius matched so category switches don't flash square. |
+| 15 | Avatar needs Save | Auto-saves on tap, optimistic with revert. Names still need Save. |
+| — | `app.json` splash invalid | Build log: `splash` is not an SDK 56 key — **your splash config was being silently ignored**. Moved to the `expo-splash-screen` plugin. |
+| — | `userInterfaceStyle` a no-op | Build log: needs `expo-system-ui` installed, which it wasn't. Light/dark never applied natively. Installed. |
+| — | 6 packages off SDK pins | `npx expo install --fix`. `expo-doctor` now 21/21. |
+
+**Verified:** 271 backend tests pass (8 new), `npm run typecheck` clean,
+`npx expo export --platform web` clean, `npx expo-doctor` 21/21.
+✅ **EAS `preview` env vars confirmed present** (`eas env:list --environment preview`)
+— the PR #55 concern that the next build would ship pointing at `localhost` is closed.
+
+⚠️ **NOT verified on a device by me.** The Android-specific fixes (2, 5, 11, and the
+keyboard work) cannot be reproduced in a web preview — they are Android platform
+behaviours. They need the next APK to confirm.
+
+⚠️ **Owner action before Google sign-in works:** Google Cloud → OAuth client of type
+**Web application** (not Android — the callback is Supabase's URL), redirect URI
+`https://ymclmbmmwtczspnmccsy.supabase.co/auth/v1/callback`; paste client ID+secret
+into Supabase → Authentication → Providers → Google; add `savehere://auth/callback`
+to Supabase → Authentication → URL Configuration → Redirect URLs.
+
+---
+
 ## ▶ CURRENT FOCUS (2026-07-25) — staging is live; open decisions below need the owner
 
 **Backend is deployed and healthy: https://savehere-api-staging.onrender.com**
@@ -38,9 +86,12 @@ Blueprint apply). See [`docs/ENVIRONMENTS.md`](docs/ENVIRONMENTS.md) and
    not the numbers. Retuning a cap should never turn a test red again.
    ⚠️ Render env vars override these per service — check the dashboard before
    assuming staging/prod match the code.
-2. **Ask-unlock threshold mismatch.** Code uses `ASK_MIN_REELS = 3`
-   (`mobile/components/Landing.tsx`); the 2026-07-20 decision said **5**. It now
-   ALSO drives the home screen's state ladder, so the two must be one number.
+2. ✅ **RESOLVED — this entry was STALE (verified 2026-08-12).** The threshold is a
+   single constant, `ASK_MIN_REELS = 5` in `mobile/constants/limits.ts`, matching
+   the 2026-07-20 decision. It is imported by `Landing.tsx` and `app/ask.tsx`, so
+   there is one number and no drift. (What was genuinely broken was the Ask screen
+   *flashing* the unlocked state before the gate resolved — fixed in the Android
+   round above, item 4.)
 3. **Free auto-summary gating — the biggest lever on unit economics.** A cost
    study (2026-07-24) put break-even at **~4.2% conversion with free auto-summary
    gated vs ~7.8% without**; typical freemium conversion is 2–5%, so ungated is
@@ -157,11 +208,11 @@ summary no longer needs a page reload (#20).
 
 ## Blockers (app does not work on a real phone without these)
 
-- [ ] **iOS Share Extension** — allows sharing URLs directly from Instagram/YouTube/TikTok into SaveHere. Requires Mac + Xcode + `expo-share-extension`. This is the core feature.
+- [~] **Share Extension / share sheet** — **ANDROID DONE (2026-08-12), iOS pending a build.** `expo-share-intent@7` (the SDK 56 pin) is installed and wired: `ShareIntentProvider` at the root of `mobile/app/_layout.tsx`, `ShareIntentHandler` routes an incoming URL to `/save?url=`. `ACTION_SEND text/*` is confirmed in the introspected Android manifest (`npx expo config --type introspect`). The package covers **both** platforms, so this supersedes the old `expo-share-extension` plan — no separate iOS work beyond a Mac/Xcode build. ⚠️ **A native module cannot be added by OTA**: SaveHere only appears in the share sheet once the next EAS build is installed. ⚠️ Handler is mounted inside the signed-in branch on purpose — a share arriving while signed out would otherwise be lost behind the login gate.
 - [x] **Deploy backend — DONE (2026-07-24).** Live at **https://savehere-api-staging.onrender.com** (Render free tier, CI-gated auto-deploy from `develop`, `savehere-dev` Postgres + auth). Prod service is deliberately commented out in `render.yaml` until launch. Walkthrough in [`docs/DEPLOY.md`](docs/DEPLOY.md). Live caveats: free-tier cold starts (~50 s to wake after 15 min idle); `DATABASE_URL` is load-bearing — unset on a Render service means ephemeral SQLite and silent data loss; and YouTube/Instagram bot-block the datacenter IP, which is why extraction leans on the YouTube Data API and the client-side fetch rather than a proxy.
 - [x] **Switch API URL in mobile — DONE.** `EXPO_PUBLIC_API_URL` drives it (`mobile/services/api.ts`); `mobile/.env` and the `eas.json` build profiles point at the staging URL. ⚠️ `EXPO_PUBLIC_*` is inlined at bundle time — restart `expo start` after changing it, a browser refresh keeps the old value.
 - [~] **User authentication** — Supabase Auth (email now; Google/Apple later). **Phases 1–4 done:** (1) `@supabase/supabase-js` client; (2) `get_current_user()` verifies ECC/ES256 tokens vs JWKS, no shared secret (`app/auth.py`); (3) `user_id` on `ReelDB` + **every** reels/workout/ask route scoped to the caller with ownership 404s (tasks/exercises owned via parent reel join) — `url` no longer globally unique (per-user dedup), isolation proven by tests; (4) mobile login/signup screen + auth gate in `_layout.tsx` + `Bearer` token injected in `api.ts` + sign-out in ProfilePanel. **Phase 5 done:** per-user, DB-backed daily AI quota (`ai_usage` table + `app/quota.py` `enforce_daily_ai_quota`) shared across all AI actions (ask/tasks/workout/(re)summarize), env-tunable `AI_DAILY_LIMIT` (default 30/day), replacing the interim per-IP ask cap. **Remaining:** Phase 6 Postgres in prod (`DATABASE_URL`). Email confirmation is OFF for dev — turn ON before launch. Apple Sign-In required for App Store once social login is added.
-- [ ] **Apple + Google sign-in (staging/prod; replaces email there — decided 2026-07-20)** — Supabase social providers; email auth stays enabled in **dev only**. ⚠️ Apple guideline 4.8: offering Google **requires** Sign in with Apple, and Apple sign-in needs the Apple Developer account below — hard dependency. Win: dropping email auth removes the SMTP/sending-domain blocker for signups (see "Production email SMTP" — auth no longer needs it). Caveat: trial-continuity hashes the email; Apple "Hide My Email" relays are stable per app, but revoke+re-auth mints a new relay → fresh trial (accepted residue — IAP raises the cycling cost). Owner setup: Google Cloud OAuth client + consent screen; Apple Services ID + signing key.
+- [~] **Apple + Google sign-in — GOOGLE CODE-COMPLETE 2026-08-12, Apple still blocked.** `mobile/services/oauth.ts` runs Supabase's PKCE OAuth flow through `expo-web-browser` (`openAuthSessionAsync` → Custom Tabs / ASWebAuthenticationSession, so it shares the system cookie jar and a signed-in Google user gets one tap). One code path serves every provider, which is why no native Google SDK was added. Web falls through to Supabase's own redirect (`detectSessionInUrl`). ⚠️ **Owner setup required before it returns a session** — Google Cloud OAuth client of type **Web application**, NOT Android (the callback is Supabase's URL, not the app's): redirect URI `https://ymclmbmmwtczspnmccsy.supabase.co/auth/v1/callback`, then client ID + secret into Supabase → Auth → Providers → Google, and `savehere://auth/callback` added under Auth → URL Configuration → Redirect URLs. ⚠️ **Apple deliberately left as a mock** — it needs the $99 Developer account below for a Services ID + signing key, and a button that opens a browser onto a 400 is worse than one that explains itself. ⚠️ **Guideline 4.8 corrected:** it binds at **iOS review**, not on Android — shipping Google-only on Android is fine, but Apple MUST be wired before the first App Store submission. Supabase social providers; email auth stays enabled in **dev only**. Win: dropping email auth removes the SMTP/sending-domain blocker for signups (see "Production email SMTP" — auth no longer needs it). Caveat: trial-continuity hashes the email; Apple "Hide My Email" relays are stable per app, but revoke+re-auth mints a new relay → fresh trial (accepted residue — IAP raises the cycling cost). Owner setup: Google Cloud OAuth client + consent screen; Apple Services ID + signing key.
 - [ ] **Apple Developer account** — $99/year, required to test on real iPhone and submit to App Store.
 - [x] **Delete the Supabase Auth user on account deletion** — `DELETE /api/account` now wipes the user's data AND deletes the Supabase Auth record via the Admin API (service-role key), so the account truly ceases to exist (Apple 5.1.1(v)). Failures are reported honestly (`auth_deleted:false` + "contact support" message), never a fake success; the admin call can't 500 the wipe. Mobile signs out with `scope:'local'` (the server session is already dead after admin deletion — a server sign-out used to fail and made successful deletions LOOK broken) and errors are now visible on web too (`Alert.alert` is a silent no-op in react-native-web). Locked by tests (mocked admin call).
 - [ ] **Production email SMTP** — Supabase's built-in email sender caps at ~2–4/hour ("email rate limit exceeded"), unusable for real signups. Before re-enabling "Confirm email" for launch, wire a custom SMTP under Authentication → Emails → SMTP. Free options: **Brevo** (300/day), **Resend** (3k/mo, best DX), **SendGrid** (100/day). ⚠️ Real prerequisite: a **verified sending domain** (SPF + DKIM DNS records) — so buy the domain first. Dev for now: keep "Confirm email" OFF (no email sent, no limit).

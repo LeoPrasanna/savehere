@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router/stack';
+import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold,
@@ -81,6 +83,45 @@ function AppProfilePanel() {
   return <ProfilePanel visible={open} onClose={() => setOpen(false)} reels={[]} />;
 }
 
+/**
+ * SHARE-TO-SAVEHERE — the Android/iOS share sheet entry point.
+ *
+ * ⚠️ Why this needed a native module at all. Android delivers a share as an
+ * `ACTION_SEND` Intent carrying `EXTRA_TEXT`; that is NOT a deep link, so
+ * `Linking.getInitialURL()` and expo-router never see it. Declaring
+ * `intentFilters` in app.json alone would have put SaveHere in the share sheet
+ * and then opened it with nothing attached — visible, and broken. Reading the
+ * extra requires native code, which is what `expo-share-intent` supplies.
+ *
+ * Mounted INSIDE the signed-in branch on purpose: a share that arrives while
+ * signed out would otherwise navigate to /save behind the login gate and be
+ * lost when the user finally signs in.
+ *
+ * ⚠️ This only works in a real build. Expo Go cannot load the native module,
+ * and an OTA update cannot add one — the share sheet entry appears only after
+ * the next EAS build is installed.
+ */
+function ShareIntentHandler() {
+  const router = useRouter();
+  const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+
+  useEffect(() => {
+    if (!hasShareIntent) return;
+    // Instagram and YouTube share a bare URL; some apps share "Look at this
+    // <url>" or append a title, so fall back to plucking the first URL out of
+    // the text rather than refusing anything that isn't exactly a link.
+    const raw = shareIntent?.webUrl || shareIntent?.text || '';
+    const url = raw.match(/https?:\/\/\S+/)?.[0];
+    // Reset FIRST. The native module holds the payload until it is cleared, so
+    // an early return on a non-URL share (a photo, a plain note) must still
+    // clear it — otherwise the same dead intent re-fires on every foreground.
+    resetShareIntent();
+    if (url) router.push({ pathname: '/save', params: { url } });
+  }, [hasShareIntent, shareIntent, router, resetShareIntent]);
+
+  return null;
+}
+
 // Gate the whole app on auth: spinner during the initial session check, the login
 // screen when signed out, the app once a session exists. LoginScreen doesn't
 // navigate — AuthProvider's listener flips this gate on sign-in/out.
@@ -128,6 +169,8 @@ function Gate() {
               the ui bus. Previously each screen rendered its own panel. */}
           <TabBar key={`tabs-${schemeEpoch}`} />
           <AppProfilePanel key={`panel-${schemeEpoch}`} />
+          {/* Renders nothing — it just routes an incoming share into /save. */}
+          <ShareIntentHandler />
         </>
       ) : (
         <LoginScreen key={`login-${schemeEpoch}`} />
@@ -142,11 +185,15 @@ function Gate() {
 
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
-      <AuthProvider>
-        <Gate />
-      </AuthProvider>
-    </SafeAreaProvider>
+    // ShareIntentProvider must sit ABOVE the router — expo-share-intent reads
+    // the launch intent as the app starts, before any route mounts.
+    <ShareIntentProvider>
+      <SafeAreaProvider>
+        <AuthProvider>
+          <Gate />
+        </AuthProvider>
+      </SafeAreaProvider>
+    </ShareIntentProvider>
   );
 }
 

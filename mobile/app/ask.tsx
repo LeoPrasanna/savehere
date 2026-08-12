@@ -9,6 +9,7 @@ import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { Disclaimer } from '../components/Disclaimer';
 import { Label, Body, Title, Rule, Index, GhostButton, FilledButton } from '../components/kit';
+import { getSaveCount, hydrateSaveCount, rememberSaveCount } from '../services/saveCount';
 import { ASK_MIN_REELS } from '../constants/limits';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
@@ -40,13 +41,41 @@ export default function AskScreen() {
     const t = setTimeout(() => inputRef.current?.focus(), 350);
     return () => clearTimeout(t);
   }, []);
-  // Save count gate: the entry points already hide Ask below the threshold, but a
-  // deep link / back-navigation could still land here, so guard the screen too.
-  // null = still checking (don't flash the locked state before we know).
-  const [savedCount, setSavedCount] = useState<number | null>(null);
+  /**
+   * Save-count gate. The entry points already hide Ask below the threshold, but
+   * a deep link or back-navigation can still land here, so the screen guards
+   * itself too.
+   *
+   * ⚠️ SEEDED FROM THE REMEMBERED COUNT, NOT `null`.
+   *
+   * This started at `null`, and `locked` requires a non-null count — so for the
+   * whole round-trip to /usage (seconds on a cold Render instance) a brand-new
+   * user was shown the full working Ask screen, which then swapped to the
+   * "save 5 reels first" lock under them. Showing someone a feature and then
+   * taking it away is worse than never showing it.
+   *
+   * services/saveCount already persists this number for the home screen's
+   * identical problem; reusing it means the lock is correct on the FIRST frame
+   * for anyone who has opened the app before. The fetch still runs and
+   * corrects it — and refreshes the stored value for next time.
+   */
+  const [savedCount, setSavedCount] = useState<number | null>(getSaveCount);
 
   useEffect(() => {
-    api.getUsage().then(u => setSavedCount(u.saves.used)).catch(() => setSavedCount(null));
+    let alive = true;
+    // Native can't read the store synchronously at module load, so hydrate
+    // first — otherwise native keeps flashing exactly the way web no longer does.
+    hydrateSaveCount().then(n => {
+      if (alive && n !== null) setSavedCount(c => (c === null ? n : c));
+    });
+    api.getUsage()
+      .then(u => {
+        if (!alive) return;
+        setSavedCount(u.saves.used);
+        rememberSaveCount(u.saves.used);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
   }, []);
   const locked = savedCount !== null && savedCount < ASK_MIN_REELS;
 
@@ -95,7 +124,8 @@ export default function AskScreen() {
 
   return (
     <View style={styles.screen}>
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      {/* behavior="padding" on Android too — see the note in LoginScreen.tsx. */}
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
           <Title>Ask your library.</Title>
           <Body style={styles.sub}>

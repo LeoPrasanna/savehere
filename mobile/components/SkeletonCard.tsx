@@ -1,11 +1,11 @@
 import { useEffect, useRef } from 'react';
 import { Animated, StyleSheet, View } from 'react-native';
-import { colors, spacing, GRID_GAP, themed } from '../constants/theme';
+import { colors, spacing, radius, GRID_GAP, themed } from '../constants/theme';
 
 /**
  * Content-shaped loading placeholder for the library grid.
  *
- * Matches the real frame exactly — 3:4 portrait, no radius, same GRID_GAP — so
+ * Matches the real frame exactly — 3:4 portrait, radius.lg, same GRID_GAP — so
  * nothing shifts when the real tiles land. A gentle opacity pulse
  * (no shimmer sweep); the pulse stops existing the moment real cards replace it,
  * so the loop never competes with content.
@@ -59,6 +59,12 @@ const styles = themed(() => StyleSheet.create({
     aspectRatio: 3 / 4,
     backgroundColor: colors.card,
     justifyContent: 'flex-end',
+    // ⚠️ MUST TRACK ReelCard's frame radius (both `radius.lg`). Without it the
+    // placeholder is square and every category switch flashes square blocks
+    // that pop into rounded tiles — the same class of re-flow the GRID_GAP note
+    // above exists to prevent, just on the corner instead of the gutter.
+    borderRadius: radius.lg,
+    overflow: 'hidden',
   },
   body: { padding: spacing.sm, gap: 6 },
   line: { height: 9, backgroundColor: colors.cardElevated },

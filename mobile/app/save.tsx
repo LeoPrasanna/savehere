@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, StyleSheet, Animated,
   KeyboardAvoidingView, Platform, ScrollView,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Clipboard from 'expo-clipboard';
 import { Icon } from '../components/Icon';
@@ -54,7 +54,18 @@ function parseError(e: any): string {
 export default function SaveScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [url, setUrl] = useState('');
+  /**
+   * `url` arrives prefilled when the app was opened from the SHARE SHEET
+   * (see ShareIntentHandler in app/_layout.tsx). Seeded as the initial state
+   * rather than set in an effect, so the field is already filled on the first
+   * frame — a share should land you on a ready-to-save screen, not on an empty
+   * one that fills itself in a beat later.
+   *
+   * Deliberately NOT auto-submitting. A share is "I want to keep this", not
+   * "spend an AI action now, unreviewed" — and the button is right there.
+   */
+  const { url: sharedUrl } = useLocalSearchParams<{ url?: string }>();
+  const [url, setUrl] = useState(typeof sharedUrl === 'string' ? sharedUrl : '');
   const [loading, setLoading] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
   const [success, setSuccess] = useState(false);
@@ -78,21 +89,36 @@ export default function SaveScreen() {
     return () => { alive = false; };
   }, []);
 
-  // Reads the clipboard only on tap (a user gesture), so no permission prompt
-  // fires on open — works the same on iOS and web.
-  const pasteFromClipboard = async () => {
+  const inputRef = useRef<TextInput>(null);
+
+  /**
+   * TAPPING THE EMPTY FIELD PASTES (owner, 2026-08-12).
+   *
+   * This used to be a separate "Paste copied link" button under the box, which
+   * nobody reads — the field is the thing that looks like where a link goes, so
+   * the field is what people tap. Now the empty field IS the paste target and
+   * says so in its own placeholder.
+   *
+   * It degrades to plain typing rather than trapping you: no URL on the
+   * clipboard just focuses the input and opens the keyboard, so the box still
+   * behaves like a box. The clipboard is only ever read inside this tap — a
+   * real user gesture — so iOS raises no paste-permission prompt on open.
+   */
+  const tapField = async () => {
     try {
       const text = (await Clipboard.getStringAsync())?.trim();
       if (text && /^https?:\/\/\S+$/i.test(text)) {
         setUrl(text);
         setError('');
-        haptics.tap();
-      } else {
-        setError("No link on the clipboard — copy a reel's URL first, then tap Paste.");
+        haptics.success();
+        return;
       }
     } catch {
-      setError("Couldn't read the clipboard. Paste the link into the box manually.");
+      // Clipboard unreadable (permission denied, web without focus) — fall
+      // through to typing rather than showing an error for a tap the user may
+      // have meant as "let me type here".
     }
+    inputRef.current?.focus();
   };
 
   // The one running animation on this screen: the active step's label breathes.
@@ -154,7 +180,9 @@ export default function SaveScreen() {
   };
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    /* behavior="padding" on Android too — see the note in LoginScreen.tsx:
+       edge-to-edge windows (Expo SDK 54+) never resize for the keyboard. */
+    <KeyboardAvoidingView style={styles.container} behavior="padding">
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <Label wide>New save</Label>
         <Title style={styles.title}>Paste a link.</Title>
@@ -164,8 +192,11 @@ export default function SaveScreen() {
             it uses for every other boundary. */}
         <View style={[styles.field, loading && styles.fieldOff]}>
           <TextInput
+            ref={inputRef}
             style={styles.input}
-            placeholder="https://…"
+            /* The placeholder is the instruction now — the old "https://…" told
+               you the format nobody types by hand, not the action. */
+            placeholder="Tap to paste the copied link"
             placeholderTextColor={colors.textTertiary}
             value={url}
             onChangeText={t => { setUrl(t); setError(''); }}
@@ -177,14 +208,28 @@ export default function SaveScreen() {
             multiline
             editable={!loading}
           />
+          {/* Transparent hit layer over the EMPTY field only. Deliberately not
+              wired to the input's own onFocus: that would inject the clipboard
+              at you every time you tried to type, which is the kind of helpful
+              that becomes a fight. Once there is text the layer is gone and the
+              field is an ordinary editable field again. */}
+          {!loading && !url && (
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={tapField}
+              accessibilityRole="button"
+              accessibilityLabel="Tap to paste the copied link"
+            />
+          )}
           <View style={[styles.fieldRule, focused && styles.fieldRuleOn]} />
         </View>
 
-        {/* One-tap paste — reads the clipboard on demand, no permission surprises */}
-        {!loading && !url && (
-          <Pressable style={styles.paste} onPress={pasteFromClipboard}>
-            <Icon name="copy" size={14} color={colors.textSecondary} />
-            <Label tone="ink" wide>Paste copied link</Label>
+        {/* Clearing is its own control — with tap-to-paste owning the empty
+            field, there has to be a way back to empty that isn't backspace. */}
+        {!loading && !!url && (
+          <Pressable style={styles.paste} onPress={() => { haptics.tap(); setUrl(''); setError(''); }}>
+            <Icon name="close" size={14} color={colors.textSecondary} />
+            <Label tone="ink" wide>Clear</Label>
           </Pressable>
         )}
 

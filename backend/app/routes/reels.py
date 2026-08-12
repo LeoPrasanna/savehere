@@ -26,7 +26,8 @@ logger = logging.getLogger(__name__)
 # Keep in sync with the summarizer prompt and mobile CATEGORY_OPTIONS (theme.ts).
 ALLOWED_CATEGORIES = {
     "fitness", "cooking", "tech", "motivation", "education", "entertainment",
-    "fashion", "beauty", "travel", "business", "news", "health", "finance", "other",
+    "fashion", "beauty", "travel", "business", "news", "health", "finance",
+    "hobby", "other",
 }
 
 # Every background extraction/summary runs here, and ONLY here.
@@ -349,7 +350,9 @@ def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
         # returns empty fields, and blindly assigning them would wipe good data.
         # Rule: only ever replace a field with something better, never with less.
         reel.platform = filled.platform if filled.platform != "unknown" else reel.platform
-        if filled.title and _weak_title(reel.title):
+        # Same login-wall screen as client_metadata below — the server's own
+        # extraction can be handed the wall too, and a wall title must never win.
+        if filled.title and not _is_login_wall_title(filled.title) and _weak_title(reel.title):
             reel.title = filled.title
         if filled.thumbnail_url:
             reel.thumbnail_url = filled.thumbnail_url
@@ -597,7 +600,15 @@ def client_metadata(reel_id: str, body: ClientMetadataRequest,
 
     text = (body.text or "").strip()
     # Fill the gaps the server couldn't. Never downgrade a field we already have.
-    if body.title and _weak_title(reel.title):
+    #
+    # ⚠️ The INCOMING title is screened too, not just the one we hold. Instagram
+    # answers the phone's preview fetch with its login wall often enough that
+    # this is the common case, not the edge one: the payload then carries
+    # "Login • Instagram" plus the wall's og:image, and installing that on a
+    # freshly-saved reel (whose own title is still the "Instagram Reel"
+    # placeholder, i.e. weak) is precisely the bug — the card showed a real
+    # title for a second and then changed to "Login • Instagram".
+    if body.title and not _is_login_wall_title(body.title) and _weak_title(reel.title):
         reel.title = body.title.strip()[:300]
     if body.thumbnail_url and not reel.thumbnail_url:
         reel.thumbnail_url = body.thumbnail_url.strip()
@@ -686,12 +697,59 @@ def delete_reel(reel_id: str, user: AuthUser = Depends(get_current_user), db: Se
     return {"message": "Deleted"}
 
 
+# A page that is a LOGIN WALL, not the post. Instagram and Facebook serve these
+# to any fetch they don't like, and their og:title is the wall's own title —
+# "Login • Instagram", "Log in to Facebook".
+#
+# ⚠️ This is the fix for "the reel gets its real title, then a moment later it
+# says Login • Instagram" (owner, 2026-08-12). The client-side metadata fetch
+# runs from the phone about a second after /save; when Instagram answers it with
+# the wall instead of the post, the payload still carries a non-empty title and
+# a non-empty og:image, so the old `_weak_title` — which only rejected SHORT or
+# placeholder titles — happily accepted "Login • Instagram" as an upgrade over
+# the real one. Treating it as weak everywhere means no path can ever install it.
+# ⚠️ TIGHTLY ANCHORED, and it has to stay that way. The first version allowed
+# any trailing text ("Login" + up to 40 chars), which swallowed the real post
+# title "Login flows that don't annoy users" — a caught-in-testing false
+# positive, and the expensive kind: it would have thrown away a GOOD title and
+# left the placeholder. A wall title is a bare keyword, keyword + separator +
+# platform, or "Log in to <platform>". Nothing longer.
+_LOGIN_WALL_TITLE = re.compile(
+    r'''^(
+        (log\s?in|sign\s?in|login\srequired|page\snot\sfound|content\snot\savailable)
+        (\s*[•|·\-—:]\s*\w+)?              # "Login • Instagram"
+      | (log|sign)\s?in\sto\s\w+           # "Log in to Facebook"
+    )$''',
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _is_login_wall_title(t: str | None) -> bool:
+    """True when a title is a platform login/error page rather than the post."""
+    if not t:
+        return False
+    s = t.strip()
+    # "Login • Instagram", "Log in to Facebook", "Login", "Page Not Found".
+    if _LOGIN_WALL_TITLE.match(s):
+        return True
+    # A title that is nothing but the platform's own name is the wall's default.
+    return s.lower().strip(" .•|-") in {
+        "instagram", "facebook", "linkedin", "tiktok", "youtube",
+    }
+
+
 def _weak_title(t: str | None) -> bool:
     """A title we'd rather replace with an AI-generated one (e.g. LinkedIn's
-    'Day352:-' first-line headline, hashtag soup, or too short)."""
+    'Day352:-' first-line headline, hashtag soup, or too short).
+
+    Also true for platform LOGIN-WALL titles — see _is_login_wall_title. Those
+    are never an upgrade over anything, including over nothing.
+    """
     if not t or len(t.strip()) < 6:
         return True
     s = t.strip()
+    if _is_login_wall_title(s):
+        return True
     if re.match(r'^day\s*\d+', s, re.IGNORECASE):
         return True
     # generic platform placeholders like "Facebook Reel", "Instagram Post"
