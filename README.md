@@ -276,6 +276,7 @@ Plus: **retrieval, not dumping** — ask sends only the most relevant saves to t
 cd backend && python -m pytest tests/ -q     # 250 tests across 24 files
 cd mobile  && npm run typecheck              # mobile type check (uses --stack-size=16000)
 cd mobile  && npx expo export --platform web # validate the web build
+cd mobile  && npm run test:library           # library reconciliation (in-flight deletes, patches)
 cd mobile  && npm run test:notifications     # notification-drawer list ops + tolerant parse
 cd mobile  && npm run test:todos             # to-do list reconciliation
 cd mobile  && npm run test:roll              # tagline roll geometry

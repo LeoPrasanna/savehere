@@ -6,6 +6,7 @@ import { supabase } from '../services/supabase';
 import { api } from '../services/api';
 import { resetSessionFlags } from '../services/sessionFlags';
 import { refreshUsage, clearUsage } from '../services/usageCache';
+import { clearLibraryEdits } from '../services/libraryEdits';
 import { ensureShareKey, clearShareKey } from '../services/shareKey';
 
 /**
@@ -136,9 +137,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
        * backend still gets their app.
        */
       if (event === 'SIGNED_IN') { refreshUsage(); ensureShareKey(); }
-      // Never let the next account inherit the previous one's tier or counts —
-      // nor the ability to keep saving into it silently from the share sheet.
-      if (event === 'SIGNED_OUT') { clearUsage(); clearShareKey(); }
+      // Never let the next account inherit the previous one's tier or counts,
+      // a pending delete / category override from their library, or the
+      // ability to keep saving into their account silently from the share sheet.
+      if (event === 'SIGNED_OUT') { clearUsage(); clearLibraryEdits(); clearShareKey(); }
 
       setSession(next);
       setLoading(false);

@@ -5,7 +5,8 @@ import { MascotLoader } from '../components/MascotLoader';
 import { ReelCard } from '../components/ReelCard';
 import { Label, Body, Title, Rule } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
-import { colors, spacing, font, GRID_GAP, themed } from '../constants/theme';
+import { markDeleted, unmarkDeleted } from '../services/libraryEdits';
+import { colors, spacing, font, GRID_GAP, columnsForWidth, themed } from '../constants/theme';
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -18,7 +19,11 @@ function shuffle<T>(arr: T[]): T[] {
 
 export default function RediscoverScreen() {
   const { width } = useWindowDimensions();
-  const numColumns = width < 600 ? 2 : width < 1024 ? 3 : 4;
+  // ⚠️ WAS `width < 600 ? 2 : width < 1024 ? 3 : 4` — the exact formula round 1
+  // identified as the reason grids looked wrong on a tablet. That fix was
+  // applied to app/index.tsx and never to this screen, so Rediscover kept the
+  // bug the whole time. One shared function now, so it cannot drift again.
+  const numColumns = columnsForWidth(width);
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -88,7 +93,16 @@ export default function RediscoverScreen() {
         renderItem={({ item, index }) => (
           item.__ghost
             ? <View style={{ flex: 1 }} />
-            : <ReelCard reel={item} index={index} onDelete={id => setReels(prev => prev.filter(r => r.id !== id))} />
+            /* ⚠️ The API call lives HERE, not in ReelCard — the card stopped
+               firing it (and silently swallowing failures) so the screen that
+               owns the list can report the outcome. `markDeleted` keeps the
+               row out of the library's own refetch while the request is in
+               flight. */
+            : <ReelCard reel={item} index={index} onDelete={id => {
+                markDeleted(id);
+                setReels(prev => prev.filter(r => r.id !== id));
+                api.deleteReel(id).catch(() => unmarkDeleted(id));
+              }} />
         )}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}

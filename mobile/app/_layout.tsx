@@ -18,7 +18,7 @@ import { TabBar } from '../components/TabBar';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { OnboardingModal } from '../components/OnboardingModal';
-import { onUi } from '../services/uiBus';
+import { onUi, emitUi } from '../services/uiBus';
 import { consumeReopenPanel } from '../services/sessionFlags';
 import {
   colors, font, typeface, themed, onSchemeChange, setScheme, isDark, SCHEME_STORAGE_KEY,
@@ -86,6 +86,9 @@ function AppProfilePanel() {
   // Reopens itself after a scheme switch remounts the tree (one-shot flag).
   const [open, setOpen] = useState(consumeReopenPanel);
   useEffect(() => onUi('openProfile', () => setOpen(true)), []);
+  // A share arriving from another app closes it — see the note on the event in
+  // services/uiBus.ts for why the share overlay cannot simply cover it.
+  useEffect(() => onUi('closeProfile', () => setOpen(false)), []);
   return <ProfilePanel visible={open} onClose={() => setOpen(false)} reels={[]} />;
 }
 
@@ -148,6 +151,18 @@ function ShareIntentHandler() {
     // deliberately navigated rather than hijack the screen a second time.
     if (handled.current.has(url)) return;
     handled.current.add(url);
+
+    /**
+     * ⚠️ CLOSE THE PROFILE PANEL (owner report, 2026-08-13: sharing while the
+     * panel was open showed the panel, not the save).
+     *
+     * The overlay below cannot solve this. `ProfilePanel` renders inside a
+     * `Modal`, which on both platforms is its OWN window — an absolutely
+     * positioned sibling View is in a different window and can never paint over
+     * it, whatever its zIndex. So the panel has to be told to go away, and the
+     * app-global panel lives above the router, hence the bus.
+     */
+    emitUi('closeProfile');
 
     /**
      * ⚠️ SAVES IN THE BACKGROUND — IT DOES NOT OPEN THE SAVE SCREEN.

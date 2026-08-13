@@ -155,6 +155,25 @@ export default function ProfileScreen() {
     });
   }, [busy, updateProfile]);
 
+  /**
+   * Has anything actually changed? (owner, 2026-08-13: "the Save button is
+   * misleading" — it was always live, so it looked like there was something to
+   * save even when you had only opened the screen to look.)
+   *
+   * ⚠️ THE AVATAR IS NOT IN HERE, and that is not an oversight. Picking a face
+   * writes itself immediately (see `pick` above), so it can never be an unsaved
+   * change — including it would light the button up for something already
+   * saved, which is the exact confusion this removes.
+   *
+   * Trimmed on both sides so typing a space and deleting it doesn't count, and
+   * `?? ''` because the stored value is null for a cleared field while the
+   * input holds ''.
+   */
+  const dirty =
+    firstName.trim() !== (profile.first_name ?? '').trim() ||
+    lastName.trim() !== (profile.last_name ?? '').trim() ||
+    nickname.trim() !== (profile.nickname ?? '').trim();
+
   const save = async () => {
     if (!firstName.trim()) { setError('First name is required.'); return; }
     setBusy(true); setError('');
@@ -217,7 +236,11 @@ export default function ProfileScreen() {
         {busy ? (
           <View style={styles.busy}><ActivityIndicator color={colors.textPrimary} /></View>
         ) : (
-          <FilledButton label="Save" onPress={save} style={styles.save} />
+          /* Disabled until one of the three name fields differs from what is
+             stored. Kept as a real (dimmed) button rather than hidden — a
+             control that disappears is harder to find than one that is plainly
+             not needed yet. */
+          <FilledButton label="Save" onPress={save} disabled={!dirty} style={styles.save} />
         )}
 
         <Rule style={{ marginTop: spacing.xl }} />
