@@ -183,6 +183,23 @@ class ProfileDB(Base):
     trial_extra_days = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # ── Share key (Android invisible share) ────────────────────────────────
+    # The no-display share Activity runs OUTSIDE the JS runtime and cannot use
+    # the Supabase session: access tokens live ~1 h and only refresh while the
+    # app is open, so a share at lunch after opening the app at breakfast would
+    # always 401. Refreshing from native code was rejected — Supabase rotates
+    # refresh tokens, so a native refresh revokes the token the app still holds
+    # and signs the user out. See app/sharekey.py for the whole rationale.
+    #
+    # SHA-256 of the key, never the key itself. The tier/subject snapshots are
+    # taken from the VERIFIED JWT at mint time, because a share-key request has
+    # no JWT to read `app_metadata.tier` or the email from — without them a Pro
+    # user's silent share would be entitled as free, and its AI usage would
+    # charge a different quota bucket than a normal save.
+    share_key_hash = Column(String, index=True)
+    share_key_tier = Column(String)
+    share_key_subject = Column(String)
+
 
 class TrialGrantDB(Base):
     """One row per normalized-email hash that has ever consumed a trial.

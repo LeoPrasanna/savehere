@@ -19,6 +19,7 @@ from app.ratelimit import rate_limit
 from app.quota import charge_ai_action
 from app.entitlements import entitlements_for
 from app.auth import get_current_user, AuthUser
+from app.sharekey import user_for_share
 
 logger = logging.getLogger(__name__)
 
@@ -426,6 +427,27 @@ def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
     # ponytail: re-summarize and cache-hit saves get no pacing hint. Add a JSON
     # `meta` column on ReelDB + ExtractionCacheDB if that quality gap shows up.
     _summarize_reel(reel_id, meta=meta)
+
+
+@router.post("/share-save", response_model=ReelResponse,
+             dependencies=[Depends(rate_limit(20, 60, "save"))])
+def share_save_reel(body: ReelSaveRequest,
+                    user: AuthUser = Depends(user_for_share),
+                    db: Session = Depends(get_db)):
+    """The Android invisible-share entry point. Identical work to `/save`,
+    reached with a share key instead of a Supabase JWT.
+
+    ⚠️ WHY A SECOND URL RATHER THAN `/save` ACCEPTING EITHER CREDENTIAL. The
+    no-display share Activity runs outside the JS runtime and has no Supabase
+    session to send (app/sharekey.py explains why reading or refreshing the
+    access token natively were both rejected). Giving the share key its own
+    route is what makes its scope checkable by reading the routing table: it
+    authenticates exactly one endpoint, and that endpoint only creates. No
+    read, no delete, no AI action, no account access.
+
+    The body is `save_reel` itself, so the two paths cannot drift.
+    """
+    return save_reel(body, user, db)
 
 
 @router.get("", response_model=ReelListResponse)

@@ -165,6 +165,75 @@ alert-circle icon in `reel/[id].tsx`), not a `window.alert()`. Locked by
 - **Key win (2026-06-23): the ungated link-preview surface needs a crawler UA.** Instagram/Facebook serve the public `og:` caption (the text that unfurls in iMessage/Slack) **only to recognized preview bots** — a normal browser UA from a server IP gets the login wall. Fetching `_extract_from_page` with UA `facebookexternalhit/1.1` returns the **full caption** (e.g. a whole recipe) even from a datacenter IP, no auth/proxy. So IG/FB **captions are readable** for free; only the video/transcript stays gated. yt-dlp still fails on IG (that's the player API) — the caption comes from the page meta. Implemented in `extractor._PREVIEW_HEADERS`. (Two parser bugs fixed alongside: `_og` catastrophic backtracking on 600 KB minified HTML → scan per-`<meta>`; and missing `DOTALL` dropped multi-line captions.)
 - **Async save (2026-06-23):** `/save` now persists the card with `summary_status='pending'` and returns in ~2 s; a FastAPI BackgroundTask runs Claude (and the slow audio fallback) off the request path, flipping to `ready`/`skipped`/`failed`. Detail screen polls; `/api/reels/{id}/summarize` retries. `EXTRACT_TIMEOUT` cut 50→20 s. **Run uvicorn WITHOUT `--reload`** — the reloader's child process dodges `pkill -f uvicorn`, leaving a zombie holding port 8000 (the recurring "Can't reach the server").
 
+### Android invisible share — Phase B (2026-08-13, branch `feat/android-invisible-share`)
+
+Phase A worked but **flashed the app for 1–2 s**: Android delivers `ACTION_SEND`
+by launching whatever component declares the filter, and Phase A's was
+MainActivity. Phase B moves the filter to a **translucent, content-less
+`ShareActivity`** that hands the URL to a short foreground service and finishes,
+so the user never leaves Instagram. Added by a custom config plugin
+(`mobile/plugins/withInvisibleShare.js` + one Kotlin file).
+
+- **⚠️ The brief's binary — mirror the token to SharedPreferences vs. read the
+  SQLite store — was the easy half, and neither option works on its own.** Both
+  hand the Activity a Supabase **access token that has usually already
+  expired**: they live ~1 h and only auto-refresh while the app is open, so
+  someone who opened SaveHere at breakfast and shares at lunch gets a 401. That
+  is the majority case, not an edge case.
+- **Refreshing from Kotlin was rejected, and this is the load-bearing reason.**
+  Supabase rotates refresh tokens, so a native refresh revokes the one the JS
+  app still holds and the next launch **signs the user out**. Trading a 1 s
+  flash for a random logout is a bad trade. `[Likely]` — rotation is the
+  Supabase default; it was not verified against the project's dashboard setting.
+- **Decision (owner, 2026-08-13): a dedicated save-scoped share key.** The app
+  mints one while it holds a valid JWT (`POST /api/account/share-key`), and the
+  Activity carries it. No expiry, no refresh, no rotation hazard, so the
+  invisible path works **every** time rather than only within an hour of
+  opening the app. Backend: `app/sharekey.py`.
+- **Scope is enforced by the routing table, not by a claim.** The key
+  authenticates exactly one route, `POST /api/reels/share-save`, which is a
+  three-line delegation to the normal `save_reel`. `/save` itself was
+  deliberately NOT taught to accept either credential — a stolen key can create
+  a saved link and nothing else, and that is checkable by reading the routes.
+  `tests/test_sharekey.py` asserts it against list/usage/ask/delete/save.
+- **⚠️ Two snapshots are stored with the key and they are not optional.** A
+  share-key request carries no JWT, so `tier_for()` would read the caller as
+  **free** (a paying Pro user's silent share would hit the 20-save free cap)
+  and `quota_subject()` would fall back to `user_id` instead of the
+  normalized-email hash — **a separate daily AI bucket, i.e. share a reel to
+  dodge the quota**. `share_key_tier` and `share_key_subject` are taken from
+  the verified JWT at mint time. They go stale between mints, which is why the
+  app re-mints on **every launch**, not just at sign-in.
+- Stored as SHA-256 on `profiles` (an existing table, so **no new RLS line** —
+  the trap `ai_action_log` and `todos` each fell into). Dies with the account
+  automatically, because deletion already drops the profile row.
+- **One key per user, latest device wins.** A second device supersedes the
+  first, which then degrades to the visible launch path rather than failing.
+  Fine while Android is the only platform with the Activity.
+- **`expo-share-intent` is now `disableAndroid: true`.** Two components
+  advertising the same `ACTION_SEND` filter puts **two SaveHere entries in the
+  share sheet**. Its iOS half and its JS handler both stay — the handler is
+  still the fallback path (no key yet → forward the intent to MainActivity) and
+  the eventual iOS path.
+- **The Kotlin does NOT call `saveSharedLink`** — there is no JS runtime in that
+  Activity. It reproduces the POST, the notification and the drawer append. It
+  deliberately does **not** reproduce the client-side metadata fetch: since
+  2026-08-13 the server reads IG captions via the embed route and FB via oEmbed
+  (`EXTRACTION_ROUTES.md`), so the phone no longer has to lend its residential IP.
+- **AsyncStorage on Android is the SQLite file `RKStorage`** (table
+  `catalystLocalStorage`), not SharedPreferences — which is what lets the
+  Activity read `@savehere:sharekey:v1` and append to `@savehere:notifications:v1`
+  with no bridge at all. Both keys and their JSON shapes are contracts.
+- **A foreground service, not a bare thread.** Once the Activity finishes the
+  process is cached and can be reaped mid-request; a cold free-tier Render
+  instance takes ~50 s to wake, which is exactly that window. The user would
+  get no save and no notification having seen nothing. ⚠️ Costs a
+  `FOREGROUND_SERVICE_DATA_SYNC` declaration in the Play Console at launch.
+- **iOS remains blocked** on the $99 Apple Developer account: a Share Extension
+  needs an App Group to share the session, and that entitlement can't be
+  provisioned without it. The share key is the piece that will make it easy —
+  an extension can carry the same key.
+
 ### Visual identity — "Nocturnal Dimension" (2026-08-09, branch `design/nocturnal-dimension`)
 
 Replaces the monochrome ink system, which itself had already replaced (undocumented)
