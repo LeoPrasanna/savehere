@@ -9,6 +9,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Icon } from '../components/Icon';
 import { api } from '../services/api';
 import { fetchClientMetadata } from '../services/clientExtract';
+import { getCachedUsage, refreshUsage } from '../services/usageCache';
 import * as haptics from '../services/haptics';
 import { Pressable } from '../components/Pressable';
 import { Label, Body, Title, Rule, Index, GhostButton, FilledButton } from '../components/kit';
@@ -73,19 +74,20 @@ export default function SaveScreen() {
   const [focused, setFocused] = useState(false);
   // null = don't know yet (or the check failed). Only a hard 0 shows the notice,
   // so a slow or broken usage call never invents a limit the user isn't at.
-  const [aiRemaining, setAiRemaining] = useState<number | null>(null);
+  const [aiRemaining, setAiRemaining] = useState<number | null>(
+    () => getCachedUsage()?.remaining ?? null,
+  );
   const aiExhausted = aiRemaining === 0;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const pulse = useRef(new Animated.Value(1)).current;
 
-  // One read on mount. Cheap (no AI charge — /usage is read-only) and it is the
-  // difference between "your summary silently never appeared" and knowing why
-  // before you even paste.
+  // Seeded from the login-time fetch, then refreshed. The seed matters here:
+  // this drives the "you're out of AI actions for today" notice, and the whole
+  // point of that notice is to be read BEFORE you paste — a warning that
+  // arrives after you've already tapped Save has missed its moment.
   useEffect(() => {
     let alive = true;
-    api.getUsage()
-      .then(u => { if (alive) setAiRemaining(u.remaining ?? null); })
-      .catch(() => {});
+    refreshUsage().then(u => { if (alive && u) setAiRemaining(u.remaining ?? null); });
     return () => { alive = false; };
   }, []);
 

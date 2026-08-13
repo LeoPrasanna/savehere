@@ -10,6 +10,7 @@ import { Icon } from '../components/Icon';
 import { Disclaimer } from '../components/Disclaimer';
 import { Label, Body, Title, Rule, Index, GhostButton, FilledButton } from '../components/kit';
 import { getSaveCount, hydrateSaveCount, rememberSaveCount } from '../services/saveCount';
+import { getCachedUsage, refreshUsage } from '../services/usageCache';
 import { ASK_MIN_REELS } from '../constants/limits';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
@@ -59,7 +60,9 @@ export default function AskScreen() {
    * for anyone who has opened the app before. The fetch still runs and
    * corrects it — and refreshes the stored value for next time.
    */
-  const [savedCount, setSavedCount] = useState<number | null>(getSaveCount);
+  const [savedCount, setSavedCount] = useState<number | null>(
+    () => getCachedUsage()?.saves?.used ?? getSaveCount(),
+  );
 
   useEffect(() => {
     let alive = true;
@@ -68,13 +71,11 @@ export default function AskScreen() {
     hydrateSaveCount().then(n => {
       if (alive && n !== null) setSavedCount(c => (c === null ? n : c));
     });
-    api.getUsage()
-      .then(u => {
-        if (!alive) return;
-        setSavedCount(u.saves.used);
-        rememberSaveCount(u.saves.used);
-      })
-      .catch(() => {});
+    refreshUsage().then(u => {
+      if (!alive || !u) return;
+      setSavedCount(u.saves.used);
+      rememberSaveCount(u.saves.used);
+    });
     return () => { alive = false; };
   }, []);
   const locked = savedCount !== null && savedCount < ASK_MIN_REELS;

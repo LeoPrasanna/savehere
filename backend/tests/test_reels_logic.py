@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from datetime import datetime
 
 from app.routes import reels
+from app.services import extractor
 
 
 class TestWeakTitle:
@@ -96,3 +97,45 @@ class TestToResponse:
         resp = reels._to_response(_fake_reel(summary=None, tags=None))
         assert resp.summary == []
         assert resp.tags == []
+
+
+class TestLoginWallContent:
+    """The other half of the login-wall problem (owner, 2026-08-12).
+
+    Screening the TITLE was not enough. Instagram serves its sign-in page at
+    HTTP 200 and its og:description is real prose of real length, so it was
+    stored as `raw_text` and handed to Claude — which correctly summarized
+    Instagram's login page and titled it "Login • Instagram". That AI title
+    then overwrote the good one, which is why the title looked right until the
+    summary finished and then got worse.
+    """
+
+    def test_platform_login_blurbs_are_detected(self):
+        for t in [
+            "Log in to see photos and videos from friends and discover other accounts you'll love.",
+            "Sign up to see photos and videos from your friends.",
+            "You must log in to continue.",
+            "Sorry, this page isn't available.",
+            "This content isn't available right now",
+        ]:
+            assert extractor.is_login_wall(t) is True, t
+
+    def test_real_captions_are_not_login_walls(self):
+        """Must not eat a genuine caption that happens to mention logging in."""
+        for t in [
+            "Here's my 5-minute high-protein breakfast: two eggs, oats, and a scoop of yoghurt.",
+            "Day 12 of learning Python. Today I built a login screen and it actually works!",
+            "Three things I wish I knew before I started lifting. Save this one.",
+        ]:
+            assert extractor.is_login_wall(t) is False, t
+
+    def test_only_the_head_of_the_text_is_searched(self):
+        """Positional, not just a substring match — that constraint is what
+        stops a long real caption tripping it near the end."""
+        caption = ("My honest review of this cafe after three visits. " * 6
+                   + "you must log in to continue")
+        assert extractor.is_login_wall(caption) is False
+
+    def test_empty_text_is_not_a_login_wall(self):
+        assert extractor.is_login_wall("") is False
+        assert extractor.is_login_wall(None) is False

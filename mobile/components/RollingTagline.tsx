@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, memo } from 'react';
 import { View, Text, StyleSheet, StyleProp, ViewStyle, TextStyle } from 'react-native';
 import { MotiView, AnimatePresence } from 'moti';
+import { rollTravel } from './rollGeometry';
 import { colors, spacing, font, themed } from '../constants/theme';
 
 /**
@@ -26,6 +27,13 @@ export const APP_TAGLINES = [
 ];
 
 const INTERVAL_MS = 4000;
+
+/** Viewport heights. These are the budget the roll's travel is derived from —
+ *  see the note at the `travel` calculation. COMPACT was 42, which fits two
+ *  18px lines with 3px to spare and therefore could not roll them without
+ *  slicing; 60 leaves 12px each side, enough for a real roll. */
+const DEFAULT_H = 52;
+const COMPACT_H = 60;
 
 interface Props {
   style?: StyleProp<ViewStyle>;
@@ -101,21 +109,57 @@ function RollingTaglineImpl({
   // A shorter list swapped in after mount could leave the index out of range.
   const line = lines[i % lines.length];
 
+  const textStyles = [styles.text, compact && styles.textCompact, textStyle];
+
+  /**
+   * ⚠️ THE TRAVEL DISTANCE IS DERIVED, NOT A CONSTANT. This is the real fix for
+   * "the Slate lines are cut off" (owner, reported twice).
+   *
+   * The roll worked by translating ±22px inside a fixed-height viewport with
+   * `overflow: hidden`. That is fine for ONE line — a 42px window holding 18px
+   * of text has 12px of slack each side. It is impossible for TWO: 36px of text
+   * in the same window leaves 3px, so an 11px offset (the midpoint of the
+   * animation, where opacity is still ~0.5) sliced roughly a fifth of the text
+   * clean off. No amount of shortening the quotes fixed that, because it was
+   * never about the text — it was about the geometry. It only *looked* fixed
+   * whenever a quote happened to fit on one line.
+   *
+   * So the travel is now whatever actually fits: half the leftover space, never
+   * more. Worst case the headroom is zero and this degrades to a pure
+   * crossfade, which is the correct thing to do when there is no room to move.
+   * A caller can no longer configure a clipping roll.
+   *
+   * ⚠️ The knock-on: the to-do HERO (height 40, ~30px of display type) had only
+   * ~5px of slack, so it was quietly being clipped too — nobody reported it
+   * because a big single line flies out fast. Its roll is now subtler and
+   * correct. Give it more `height` if it should be dramatic again.
+   */
+  // ⚠️ Both numbers come from the SAME flattened style arrays the Text and the
+  // View actually render with — not from the props. `app/index.tsx` sets the
+  // viewport height through `style` rather than the `height` prop, and the
+  // to-do hero overrides lineHeight through `textStyle`; reading the props
+  // alone would have computed a travel for a box that isn't the rendered one,
+  // which is the same "looks fixed until it isn't" trap as before.
+  const viewportStyles = [styles.viewport, compact && styles.viewportCompact, height ? { height } : null, style];
+  const flatViewport = StyleSheet.flatten(viewportStyles);
+  const lineHeight = StyleSheet.flatten(textStyles)?.lineHeight ?? (compact ? 18 : 22);
+  const viewportH = typeof flatViewport?.height === 'number'
+    ? flatViewport.height
+    : (compact ? COMPACT_H : DEFAULT_H);
+  const travel = rollTravel(viewportH, lineHeight, numberOfLines ?? 2);
+
   return (
-    <View style={[styles.viewport, compact && styles.viewportCompact, height ? { height } : null, style]}>
+    <View style={viewportStyles}>
       <AnimatePresence>
         <MotiView
           key={i}
           style={[styles.slot, alignLeft && styles.slotLeft]}
-          from={{ opacity: 0, translateY: 22, scale: 0.94 }}
+          from={{ opacity: 0, translateY: travel, scale: 0.94 }}
           animate={{ opacity: 1, translateY: 0, scale: 1 }}
-          exit={{ opacity: 0, translateY: -22, scale: 0.94 }}
+          exit={{ opacity: 0, translateY: -travel, scale: 0.94 }}
           transition={{ type: 'timing', duration: 600 }}
         >
-          <Text
-            style={[styles.text, compact && styles.textCompact, textStyle]}
-            numberOfLines={numberOfLines}
-          >
+          <Text style={textStyles} numberOfLines={numberOfLines}>
             {line}
           </Text>
         </MotiView>
@@ -125,8 +169,8 @@ function RollingTaglineImpl({
 }
 
 const styles = themed(() => StyleSheet.create({
-  viewport: { height: 52, overflow: 'hidden', alignSelf: 'stretch' },
-  viewportCompact: { height: 42 },
+  viewport: { height: DEFAULT_H, overflow: 'hidden', alignSelf: 'stretch' },
+  viewportCompact: { height: COMPACT_H },
   slotLeft: { alignItems: 'flex-start' },
   textCompact: { fontSize: font.sm, lineHeight: 18, fontStyle: 'italic', fontWeight: '500' },
   slot: {

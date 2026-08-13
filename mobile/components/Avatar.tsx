@@ -1,6 +1,6 @@
 import { Image, Text, StyleSheet } from 'react-native';
 import { Icon } from './Icon';
-import { avatarSource, isLegacyAvatar } from '../constants/avatars';
+import { avatarSource, isLegacyAvatar, DEFAULT_AVATAR_KEY } from '../constants/avatars';
 import { colors, themed } from '../constants/theme';
 
 /**
@@ -56,7 +56,34 @@ export function Avatar({ value, size, iconSize }: {
     );
   }
 
-  // Nobody has picked one. The neutral mark, never an invented identity.
+  /**
+   * Nobody has picked one — so they get the FIRST avatar (owner, 2026-08-12).
+   *
+   * ⚠️ This reverses the previous rule here, which was "the neutral mark, never
+   * an invented identity". The owner's call, and it holds up: a generic person
+   * glyph was not neutral so much as unfinished-looking, and it is the first
+   * thing on the home header, the profile panel and the to-do dashboard.
+   *
+   * Nothing is written to the profile — see DEFAULT_AVATAR_KEY. So this also
+   * covers every existing account that never picked a face, with no backfill.
+   *
+   * It also catches WITHDRAWN keys (the ten pulled for trademark reasons): they
+   * are not legacy emoji and resolve to no image, and this branch is where they
+   * land. A default face beats an empty frame there too.
+   */
+  const fallback = avatarSource(DEFAULT_AVATAR_KEY);
+  if (fallback) {
+    return (
+      <Image
+        source={fallback}
+        style={{ width: size, height: size }}
+        resizeMode="contain"
+        fadeDuration={0}
+      />
+    );
+  }
+
+  // Only reachable if the avatar set is empty — keep a real mark rather than a hole.
   return <Icon name="user" size={iconSize ?? Math.round(size * 0.5)} color={colors.textPrimary} />;
 }
 

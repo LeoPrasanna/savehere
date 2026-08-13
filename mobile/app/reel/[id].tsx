@@ -13,6 +13,7 @@ import { formatDue } from '../../services/todoDates';
 import { TODO_ADD_LABEL, TODO_ADDED_LABEL } from '../../constants/todoBrand';
 import { useWaitingMessage } from '../../constants/waitingMessages';
 import { openSourceLink } from '../../services/openLink';
+import { getCachedUsage, refreshUsage } from '../../services/usageCache';
 import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
 import { goHome } from '../../components/HomeButton';
@@ -57,7 +58,10 @@ export default function ReelDetailScreen() {
   // Drives the locked-Pro button states. The server enforces the gates with
   // 403s regardless — this only decides what the button LOOKS like, so a failed
   // fetch just falls back to the normal (unlocked) rendering.
-  const [usage, setUsage] = useState<Usage | null>(null);
+  // Seeded from the login-time fetch. This one decides whether the AI buttons
+  // render as locked-PRO or normal, so an empty first frame meant a paid user
+  // could watch their buttons flip state under them.
+  const [usage, setUsage] = useState<Usage | null>(getCachedUsage);
   const [categoryModal, setCategoryModal] = useState(false);
   // Shown before the FIRST workout generation: sets expectations that the plan
   // is a generic template, not personalized coaching.
@@ -97,7 +101,7 @@ export default function ReelDetailScreen() {
     api.getTasks(id).then(setTaskList).catch(() => {});
     api.getWorkout(id).then((plan) => setHasWorkout(plan.exercises.length > 0)).catch(() => {});
     api.getItinerary(id).then(setItin).catch(() => {});
-    api.getUsage().then(setUsage).catch(() => {});
+    refreshUsage().then(u => { if (u) setUsage(u); });
   }, [id]);
 
   // Refetched on FOCUS, not just mount: the task can be completed (or deleted)
@@ -616,6 +620,22 @@ export default function ReelDetailScreen() {
         defaultTitle={reel.title || 'Saved reel'}
         defaultDescription={reel.summary?.join('\n') || ''}
         onClose={() => setTodoOpen(false)}
+        /* ⚠️ The FAST PATH was supported by TodoEditor all along and simply
+           never wired up here, so "Add to your slate" from a reel sat on a
+           spinner for the whole round-trip while the to-do screen's own New
+           Task button returned instantly. Same sheet, two different speeds,
+           for no reason. The sheet now closes immediately and the row is
+           written behind it. */
+        onOptimistic={(draft) => setReelTodo(prev => ({
+          reel_id: id,
+          open_todo: draft,
+          completed_count: prev?.completed_count ?? 0,
+        }))}
+        onFailed={(_draftId, message) => {
+          // Take the optimistic row back out and say why — never a silent revert.
+          setReelTodo(prev => (prev ? { ...prev, open_todo: null } : prev));
+          notify(message);
+        }}
         onSaved={(t) => setReelTodo(prev => ({
           reel_id: id,
           open_todo: t,
@@ -822,12 +842,11 @@ export default function ReelDetailScreen() {
             <Icon name={isCooking ? 'restaurant' : taskList.kind === 'steps' ? 'footsteps' : 'list'} size={15} color={colors.accent} />
             <Text style={styles.cardTitle}>{isCooking ? 'Recipe' : taskList.kind === 'steps' ? 'Steps' : 'Tasks'}</Text>
           </View>
-          {taskList.note ? (
-            <View style={styles.disclaimer}>
-              <Icon name="information-circle" size={14} color={colors.warning} />
-              <Text style={styles.disclaimerText}>{taskList.note}</Text>
-            </View>
-          ) : null}
+          {/* ⚠️ ONE notice, not two. `taskList.note` was rendered here AND
+              again below the disclaimers, so an inferred recipe showed
+              "couldn't read this video…" twice in the same card. The copy is
+              the server's (`_source_note`), so the fix is to render it once —
+              kept at the LOWER site, immediately above the steps it qualifies. */}
           {/* Steps are the riskiest surface for these categories — this is where
               content becomes a checklist someone might actually follow. */}
           {category === 'health' && <Disclaimer variant="health" style={{ marginTop: spacing.sm }} />}
@@ -854,10 +873,14 @@ export default function ReelDetailScreen() {
                 ...prev,
                 tasks: prev.tasks.map(t => t.id === updated.id ? updated : t),
               } : prev)}
-              onAdd={created => setTaskList(prev => prev ? {
+              /* `replaces` swaps the optimistic draft row for the server's,
+                 instead of leaving both. Filtering by BOTH ids also makes this
+                 idempotent — re-adding a row that is somehow already present
+                 cannot duplicate it. */
+              onAdd={(created, replaces) => setTaskList(prev => prev ? {
                 ...prev,
-                total: prev.tasks.length + 1,
-                tasks: [...prev.tasks, created],
+                total: prev.tasks.filter(t => t.id !== created.id && t.id !== replaces).length + 1,
+                tasks: [...prev.tasks.filter(t => t.id !== created.id && t.id !== replaces), created],
               } : prev)}
               onDelete={delId => setTaskList(prev => prev ? {
                 ...prev,

@@ -627,6 +627,60 @@ def is_link_only(text: str) -> bool:
     return len(prose) < _MIN_PROSE
 
 
+# Boilerplate a platform serves INSTEAD of the post when it decides it doesn't
+# like the request. These are the sign-in wall's own words, not a creator's.
+_LOGIN_WALL_PHRASES = (
+    "log in to see photos and videos",
+    "sign up to see photos and videos",
+    "log in to see this",
+    "you must log in to continue",
+    "log into facebook to see",
+    "log in or sign up to view",
+    "create an account or log in",
+    "see posts, photos and more on facebook",
+    "this content isn't available right now",
+    "sorry, this page isn't available",
+)
+
+# The wall's blurb lands right at the top of the description. A real caption
+# that happens to discuss logging in will not.
+_LOGIN_WALL_WINDOW = 160
+
+
+def is_login_wall(text: str) -> bool:
+    """True when `text` is a platform's sign-in page rather than the post.
+
+    ⚠️ WHY THIS EXISTS AT THE EXTRACTOR LEVEL (owner report, 2026-08-12: an
+    Instagram save showed its real title, then flipped to "Login • Instagram"
+    the moment the AI summary finished).
+
+    Instagram and Facebook do not error when they refuse us — they return HTTP
+    200 with the sign-in page. Its `og:description` is real prose of real
+    length, so it sails past every "do we have text?" check, gets stored as
+    `raw_text`, and is then handed to Claude as if it were the reel. The model
+    dutifully summarizes Instagram's login page and titles it accordingly, so
+    the AI-generated title OVERWRITES the good one — which is exactly why the
+    title looked correct until summarization completed and then got worse.
+
+    Screening it here means such a save is marked `skipped` and costs ZERO AI
+    actions, instead of paying for a summary of somebody's login form. Same
+    principle as `is_link_only` above: refuse input that cannot produce output
+    BEFORE spending anything on it.
+
+    ponytail: a phrase list, not a classifier. It is checked only against the
+    first {window} characters, because the wall leads with its blurb while a
+    real caption that mentions logging in does not — that positional constraint
+    is what keeps it from eating legitimate content. If a platform reworks its
+    wall copy this silently stops matching, which fails SAFE (back to the old
+    behaviour, one wasted AI action) rather than eating good captions. Revisit
+    only if that shows up in the logs.
+    """
+    if not text:
+        return False
+    head = text[:_LOGIN_WALL_WINDOW].lower()
+    return any(p in head for p in _LOGIN_WALL_PHRASES)
+
+
 def _build_meta(info: dict, duration: int, transcript: str,
                 cue_starts: list[float], caption: str) -> dict:
     """Structural signals about the parts of the video we cannot watch.

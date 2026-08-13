@@ -8,7 +8,7 @@ import { Icon } from '../components/Icon';
 import { Pressable } from '../components/Pressable';
 import { Label, Body, Title, Rule, FilledButton } from '../components/kit';
 import { useAuth, AVATAR_OPTIONS } from '../contexts/AuthContext';
-import { AVATARS, avatarLabel } from '../constants/avatars';
+import { AVATARS, avatarLabel, DEFAULT_AVATAR_KEY } from '../constants/avatars';
 import * as haptics from '../services/haptics';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { colors, spacing, font, typeface, themed } from '../constants/theme';
@@ -89,7 +89,11 @@ export default function ProfileScreen() {
   const [firstName, setFirstName] = useState(profile.first_name ?? '');
   const [lastName, setLastName] = useState(profile.last_name ?? '');
   const [nickname, setNickname] = useState(profile.nickname ?? '');
-  const [avatar, setAvatar] = useState<string | undefined>(profile.avatar ?? undefined);
+  // Falls back to the default face so the GRID agrees with what the rest of the
+  // app is already drawing for this user (Avatar.tsx applies the same default).
+  // A picker showing nothing selected while the header showed a panda would be
+  // the app disagreeing with itself.
+  const [avatar, setAvatar] = useState<string | undefined>(profile.avatar ?? DEFAULT_AVATAR_KEY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -131,7 +135,16 @@ export default function ProfileScreen() {
   const pick = useCallback((key: string) => {
     if (busy) return;
     const previous = avatarRef.current;
-    const next = previous === key ? undefined : key;
+    /**
+     * ⚠️ NO TOGGLE-OFF ANY MORE. Tapping the selected face used to clear it
+     * ("choosing is never a one-way door"). That made sense when un-chosen
+     * meant a neutral glyph — it does not now that un-chosen renders the FIRST
+     * avatar (see Avatar.tsx). Clearing would have silently jumped you to a
+     * different picture rather than to "none", which is not a door at all.
+     * There is always a face; you only ever change which one.
+     */
+    if (previous === key) return;
+    const next = key;
     setAvatar(next);
     // Optimistic: the grid must answer the tap now. But a failure reverts and
     // says so — silently keeping a face the server never stored is worse than
@@ -187,8 +200,30 @@ export default function ProfileScreen() {
           onSubmitEditing={save} returnKeyType="done"
         />
 
-        {/* Says the picture saves itself, so nobody hunts for a Save button
-            that no longer applies to it. The Save below is for the names. */}
+        {/* ── Save, ABOVE the picture grid (owner, 2026-08-12) ──────────────
+            It used to sit at the very bottom, below 92 avatars — roughly four
+            screens of scrolling past content that does not need saving to
+            reach the button for the three fields that do. Now it sits directly
+            under those fields, which is the only thing it acts on: the picture
+            writes itself the moment you tap it. Errors surface here too, next
+            to the inputs that caused them. */}
+        {error ? (
+          <View style={styles.errorRow}>
+            <Icon name="alert-circle" size={14} color={colors.textPrimary} />
+            <Body tone="primary" style={styles.errorText}>{error}</Body>
+          </View>
+        ) : null}
+
+        {busy ? (
+          <View style={styles.busy}><ActivityIndicator color={colors.textPrimary} /></View>
+        ) : (
+          <FilledButton label="Save" onPress={save} style={styles.save} />
+        )}
+
+        <Rule style={{ marginTop: spacing.xl }} />
+
+        {/* Says the picture saves itself, so nobody hunts for the Save button
+            above and wonders why it is not needed here. */}
         <Label style={styles.avatarLabel}>Profile picture — saves as you pick</Label>
         {/*
           ⚠️ ALL 92 MOUNT AT ONCE, ON PURPOSE. This grid used to dribble them in
@@ -216,19 +251,9 @@ export default function ProfileScreen() {
             <AvatarCell key={key} name={key} selected={avatar === key} onPress={pick} />
           ))}
         </View>
-
-        {error ? (
-          <View style={styles.errorRow}>
-            <Icon name="alert-circle" size={14} color={colors.textPrimary} />
-            <Body tone="primary" style={styles.errorText}>{error}</Body>
-          </View>
-        ) : null}
-
-        {busy ? (
-          <View style={styles.busy}><ActivityIndicator color={colors.textPrimary} /></View>
-        ) : (
-          <FilledButton label="Save" onPress={save} style={styles.save} />
-        )}
+        {/* ⚠️ No Save button down here any more — it moved ABOVE the grid.
+            Do not "restore" it: a second Save at the bottom would imply the
+            avatar grid needs saving, and it does not. */}
       </ScrollView>
     </KeyboardAvoidingView>
   );
