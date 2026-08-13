@@ -23,6 +23,17 @@ import { refreshUsage } from './usageCache';
  * a rewrite.
  */
 
+/**
+ * How long we hold the app open waiting to deliver device-fetched metadata.
+ *
+ * Instagram's page is ~670 KB and this runs on mobile data, so a couple of
+ * seconds is normal. Capped because the alternative — waiting indefinitely —
+ * keeps the user in SaveHere, which is the exact thing this feature exists to
+ * avoid. The save is already committed by this point; only the caption is at
+ * stake, and the server re-summarises on demand.
+ */
+const META_DELIVERY_MS = 8000;
+
 /** Human name for the notification, from the URL alone — the server's platform
  *  field is not back yet when we post it, and waiting for it would defeat the
  *  purpose. */
@@ -53,6 +64,31 @@ async function canNotify(): Promise<boolean> {
     return false;
   }
 }
+
+/**
+ * ⚠️ WITHOUT THIS, A NOTIFICATION POSTED WHILE THE APP IS FOREGROUNDED IS
+ * SILENTLY SWALLOWED — which is exactly our case: we post it and then exit, so
+ * at the moment it fires SaveHere is still the app on screen. expo-notifications
+ * defaults to "don't interrupt the user in the app they're already looking at",
+ * a sensible default that is wrong for a notification whose entire job is to be
+ * the receipt for work the user is about to walk away from.
+ *
+ * This, plus the missing `expo-notifications` entry in app.json's `plugins`
+ * (which is what puts POST_NOTIFICATIONS in the Android manifest, so the
+ * permission could never even be requested), is why the first Phase A build
+ * saved correctly and notified nobody.
+ *
+ * Module scope on purpose: it must be registered before any notification is
+ * scheduled, and importing this module is what guarantees that.
+ */
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldPlaySound: false,   // a save is not worth a noise
+    shouldSetBadge: false,
+  }),
+});
 
 async function notify(title: string, body: string) {
   if (!(await canNotify())) return;
@@ -98,9 +134,27 @@ export async function saveSharedLink(url: string): Promise<boolean> {
     // the server's datacenter IP is served a login wall.
     const metaPromise = fetchClientMetadata(url);
     const reel = await api.saveReel(url);
-    metaPromise
-      .then(meta => (meta ? api.sendClientMetadata(reel.id, meta) : null))
-      .catch(() => {});
+
+    /**
+     * ⚠️ AWAITED, NOT FIRE-AND-FORGET — and that is the bug that made the very
+     * first shared Instagram reel arrive with no summary at all.
+     *
+     * On the /save SCREEN this can be fire-and-forget: the app stays alive and
+     * the promise settles in its own time. Here it cannot. The caller exits the
+     * app the moment this function resolves, and `BackHandler.exitApp()` tears
+     * the JS runtime down with the fetch still in flight — so the one payload
+     * that Instagram content DEPENDS on (the server's datacenter IP is served a
+     * login wall; the phone's is not) was killed every single time.
+     *
+     * Bounded so a slow page can never strand the user in our app: whatever has
+     * not arrived by then is abandoned, and the save itself already succeeded.
+     */
+    await Promise.race([
+      metaPromise
+        .then(meta => (meta ? api.sendClientMetadata(reel.id, meta) : null))
+        .catch(() => null),
+      new Promise(resolve => setTimeout(resolve, META_DELIVERY_MS)),
+    ]);
 
     // The AI budget just moved; keep the cache honest for the next screen.
     refreshUsage();

@@ -17,9 +17,16 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.database import Base, ReelDB, TaskDB, WorkoutExerciseDB, AiUsageDB, get_db
+from app.quota import quota_subject
 from app.auth import get_current_user, AuthUser
 
 USER_A = "user-aaaa"
+
+# The daily AI counter is keyed on a STABLE subject (hash of the normalized
+# email), not the raw user id — see quota.quota_subject. That is what stops
+# "delete the account, get a fresh quota". Assert against the same key the
+# app writes, or these tests pass while the real counter goes unread.
+QUOTA_KEY = quota_subject(AuthUser(id=USER_A, email=f"{USER_A}@e.co"))
 USER_B = "user-bbbb"
 
 
@@ -48,7 +55,7 @@ def env():
         TaskDB(id="t2", reel_id="a1", text="add salt"),
         TaskDB(id="t3", reel_id="b1", text="b's task"),
         WorkoutExerciseDB(id="w1", reel_id="a2", name="Squat"),
-        AiUsageDB(user_id=USER_A, day=datetime.utcnow().date(), count=5),
+        AiUsageDB(user_id=QUOTA_KEY, day=datetime.utcnow().date(), count=5),
     ])
     db.commit()
     db.close()
@@ -63,7 +70,7 @@ def env():
     app.dependency_overrides[get_db] = _override_get_db
 
     def _client(user_id: str) -> TestClient:
-        app.dependency_overrides[get_current_user] = lambda: AuthUser(id=user_id, email="t@e.co")
+        app.dependency_overrides[get_current_user] = lambda: AuthUser(id=user_id, email=f"{user_id}@e.co")
         return TestClient(app)
 
     yield _client, TestingSession
@@ -106,7 +113,7 @@ class TestAccountDeletion:
             assert db.query(ReelDB).filter(ReelDB.user_id == USER_B).count() == 1
             assert db.query(TaskDB).filter(TaskDB.reel_id == "b1").count() == 1
             # quota history survives — deleting data must not reset the daily budget
-            assert db.query(AiUsageDB).filter(AiUsageDB.user_id == USER_A).count() == 1
+            assert db.query(AiUsageDB).filter(AiUsageDB.user_id == QUOTA_KEY).count() == 1
         finally:
             db.close()
 

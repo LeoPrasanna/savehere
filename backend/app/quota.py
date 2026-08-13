@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.auth import AuthUser
 from app.database import AiUsageDB, AiActionLogDB
-from app.entitlements import entitlements_for, tier_for  # noqa: F401  (tier_for re-exported for compat)
+from app.entitlements import entitlements_for, tier_for, _email_hash  # noqa: F401  (tier_for re-exported for compat)
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +111,45 @@ def log_ai_action(db: Session, user_id: str, action: str, label: str | None = No
         db.rollback()
 
 
+def quota_subject(user: AuthUser) -> str:
+    """The identity the daily AI counter is charged against.
+
+    ⚠️ THIS IS A FRAUD FIX, NOT A REFACTOR (owner report, 2026-08-12: "I finished
+    my quota, deleted the account, signed up with the same Gmail and got 10 AI
+    usages back").
+
+    The counter was keyed on `user_id`. Deleting an account and signing up again
+    mints a BRAND NEW Supabase user id, so the lookup found no row, created a
+    fresh one, and handed back a full day's budget. Repeat at will — unlimited
+    Claude spend for the price of re-registering, which takes about fifteen
+    seconds with Google sign-in.
+
+    The account-deletion path already tried to stop this by NOT deleting
+    `ai_usage` rows, but preserving a row that nothing will ever look up again
+    achieves nothing: the new account never queries the old key.
+
+    So the counter now hangs off the same stable identity the TRIAL clock
+    already uses — a hash of the normalized email (see entitlements._email_hash
+    and TrialGrantDB). Same person, same email, same bucket, regardless of how
+    many times the account is recreated.
+
+    ⚠️ The action LOG deliberately stays keyed on the real `user_id`, and is
+    still deleted with the account. That is not an inconsistency: the log holds
+    reel titles — the user's actual content — and the deletion promise has to
+    mean something. This counter holds an integer and a date, which is why it
+    can honestly outlive the account.
+
+    Users with no readable email claim fall back to `user_id`, i.e. exactly the
+    old behaviour. That residue is the same one `_get_or_create_profile`
+    documents for the trial clock.
+
+    ⚠️ ONE-OFF ON DEPLOY: existing users' keys change from user_id to email
+    hash, so everyone gets one counter reset the day this ships. Self-limiting
+    and not worth a migration.
+    """
+    return _email_hash(user.email) if user.email else user.id
+
+
 def charge_ai_action(db: Session, user: AuthUser, *, action: str = "ai",
                      label: str | None = None, today: date | None = None) -> int:
     """Charge one AI action against the user's daily budget for their EFFECTIVE
@@ -123,7 +162,8 @@ def charge_ai_action(db: Session, user: AuthUser, *, action: str = "ai",
     optional so an endpoint that forgets them still charges correctly — it just
     shows up generically in the list."""
     ent = entitlements_for(user, db)
-    count = enforce_daily_ai_quota(db, user.id, ent.ai_daily_limit, today=today)
+    # Charged against the STABLE subject, not the account id — see quota_subject.
+    count = enforce_daily_ai_quota(db, quota_subject(user), ent.ai_daily_limit, today=today)
     # Only reached when the charge succeeded — refused actions are never logged.
     # Guarded HERE as well as inside log_ai_action: past this line the user has
     # already been charged and the Claude call is imminent, so ANY exception

@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from app.config import settings
 from app.database import get_db, ReelDB, TaskDB, WorkoutExerciseDB, ProfileDB, AiActionLogDB, TodoDB
 from app.auth import get_current_user, AuthUser
-from app.quota import usage_today, _utc_today
+from app.quota import usage_today, quota_subject, _utc_today
 from app.entitlements import entitlements_for
 
 logger = logging.getLogger(__name__)
@@ -53,7 +53,7 @@ def get_usage(user: AuthUser = Depends(get_current_user), db: Session = Depends(
     Lets the app show honest meters (AI budget, trial countdown, save cap)
     instead of surprising users with a 429/403."""
     ent = entitlements_for(user, db)
-    used = usage_today(db, user.id)
+    used = usage_today(db, quota_subject(user))
     saves_used = db.query(ReelDB).filter(ReelDB.user_id == user.id).count()
     # Distinct counts across the user's WHOLE library — the client's stat cards used
     # to compute these from the loaded page (a ~12-reel sample), so they undercounted.
@@ -127,7 +127,7 @@ def get_usage_log(user: AuthUser = Depends(get_current_user), db: Session = Depe
     )
     return {
         "day": day.isoformat(),
-        "used": usage_today(db, user.id),          # the meter's number
+        "used": usage_today(db, quota_subject(user)),   # the meter's number
         "logged": len(rows),                        # how many we can describe
         "items": [
             {
@@ -174,8 +174,17 @@ def delete_account(user: AuthUser = Depends(get_current_user), db: Session = Dep
         .filter(ReelDB.user_id == user_id)
         .delete(synchronize_session=False)
     )
-    # The AI action log is per-user descriptive data — goes with the account.
-    # (ai_usage counters stay: deleting them would reset the daily quota.)
+    # The AI action log is per-user DESCRIPTIVE data — it holds reel titles, so
+    # it goes with the account and the deletion promise means something.
+    #
+    # ⚠️ ai_usage counters stay, and as of 2026-08-12 that finally MATTERS.
+    # Keeping them used to be pointless: the counter was keyed on user_id, so a
+    # re-signup got a new id, never looked at the preserved row, and was handed
+    # a full daily budget — "delete the account, get 10 more AI actions",
+    # repeatable in about fifteen seconds via Google sign-in. The counter is now
+    # keyed on the normalized-email hash (see quota.quota_subject), the same
+    # stable identity that already protects the trial clock, so preserving these
+    # rows is what actually closes the hole. Do not add them to this wipe.
     db.query(AiActionLogDB).filter(AiActionLogDB.user_id == user_id).delete(synchronize_session=False)
     # Profile (trial clock) goes with the account. trial_grants stays: it holds
     # only a hash of the normalized email and exists precisely so that deleting

@@ -16,11 +16,18 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.database import Base, ReelDB, AiUsageDB, get_db
+from app.quota import quota_subject
 from app.auth import get_current_user, AuthUser
 from app.routes import reels as reels_module
 from app import ratelimit
 
 USER = "user-clientmeta"
+
+# The daily AI counter is keyed on a STABLE subject (hash of the normalized
+# email), not the raw user id — see quota.quota_subject. That is what stops
+# "delete the account, get a fresh quota". Assert against the same key the
+# app writes, or these tests pass while the real counter goes unread.
+QUOTA_KEY = quota_subject(AuthUser(id=USER, email="t@e.co"))
 OTHER = "user-someone-else"
 IG_URL = "https://www.instagram.com/reel/DbFk4JxgYkT"
 LONG_TEXT = ("Teri roti thandi hote hi pathar kyun ban jaati hai? "
@@ -93,7 +100,7 @@ def test_fills_and_summarizes_when_server_extraction_found_nothing(env):
     assert reel.thumbnail_url == "https://cdninstagram.com/x.jpg"
     assert reel.uploader == "thebombaydon"
     # The AI action was charged exactly once.
-    assert s.query(AiUsageDB).filter(AiUsageDB.user_id == USER).first().count == 1
+    assert s.query(AiUsageDB).filter(AiUsageDB.user_id == QUOTA_KEY).first().count == 1
     s.close()
 
 
@@ -139,7 +146,7 @@ def test_server_data_wins_and_costs_nothing(env):
     s = Session()
     reel = s.query(ReelDB).filter(ReelDB.id == rid).first()
     assert reel.raw_text == server_text          # untouched
-    assert s.query(AiUsageDB).filter(AiUsageDB.user_id == USER).first() is None  # no charge
+    assert s.query(AiUsageDB).filter(AiUsageDB.user_id == QUOTA_KEY).first() is None  # no charge
     s.close()
 
 
@@ -206,5 +213,5 @@ def test_short_client_text_stays_skipped_but_keeps_title(env):
     reel = s.query(ReelDB).filter(ReelDB.id == rid).first()
     assert reel.title == "Chef Prasad on Instagram"   # weak title was upgraded
     assert reel.thumbnail_url == "https://cdninstagram.com/x.jpg"
-    assert s.query(AiUsageDB).filter(AiUsageDB.user_id == USER).first() is None  # no charge
+    assert s.query(AiUsageDB).filter(AiUsageDB.user_id == QUOTA_KEY).first() is None  # no charge
     s.close()

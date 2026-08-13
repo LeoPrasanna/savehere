@@ -19,12 +19,19 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.database import Base, ReelDB, AiUsageDB, get_db
+from app.quota import quota_subject
 from app.auth import get_current_user, AuthUser
 from app.routes import workout as workout_route
 from app.routes.workout import SENSITIVE_DETAIL, ITINERARY_LIMIT
 from app.services import workout_extractor as we
 
 USER = "u-itin"
+
+# The daily AI counter is keyed on a STABLE subject (hash of the normalized
+# email), not the raw user id — see quota.quota_subject. That is what stops
+# "delete the account, get a fresh quota". Assert against the same key the
+# app writes, or these tests pass while the real counter goes unread.
+QUOTA_KEY = quota_subject(AuthUser(id=USER, email="i@e.co"))
 
 GOOD_PLAN = {
     "trip_name": "Bali Highlights",
@@ -79,7 +86,7 @@ def env():
 def _charges(Session) -> int:
     s = Session()
     try:
-        return sum(r.count for r in s.query(AiUsageDB).filter(AiUsageDB.user_id == USER).all())
+        return sum(r.count for r in s.query(AiUsageDB).filter(AiUsageDB.user_id == QUOTA_KEY).all())
     finally:
         s.close()
 
