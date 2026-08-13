@@ -25,6 +25,11 @@ import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGO
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
 const PAGE = 24;
 
+/** The width a tile WANTS to be, in points. Measured off Pinterest: ~181pt on
+ *  a 390pt phone at 2 columns. The column count is solved for this rather than
+ *  the other way round — see `numColumns` below. */
+const TARGET_TILE = 180;
+
 /** Module-level so the reference is stable — RollingTagline is memoized and an
  *  inline array would defeat that on every render. */
 const LIBRARY_CAPABILITIES = [
@@ -41,7 +46,26 @@ export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const { profile, displayName } = useAuth();
   const { width } = useWindowDimensions();
-  const numColumns = width < 600 ? 2 : width < 1024 ? 3 : 4;
+  /**
+   * Columns are derived from a TARGET TILE WIDTH, not from device breakpoints.
+   *
+   * ⚠️ This was `width < 600 ? 2 : width < 1024 ? 3 : 4`, which is why the grid
+   * looked right on a phone and wrong on a tablet (owner, 2026-08-12). Fixed
+   * breakpoints hold the COLUMN COUNT steady and let the tiles stretch, so a
+   * 10" tablet at 3 columns rendered ~330pt-wide tiles — nearly double a
+   * phone's — and a wall of vast thumbnails with 12px gutters reads as a
+   * broken layout rather than a denser one.
+   *
+   * Pinterest does the opposite, and it is the whole trick: tile width stays
+   * roughly constant (~180pt) and the column count grows to fill the screen.
+   * A tablet then shows MORE of your library at the size the tiles were
+   * designed for, instead of fewer, larger ones.
+   *
+   * Clamped at 2 so a small phone never drops to a single column (that is a
+   * list, not a mosaic), and at 6 so a desktop browser does not shred the grid
+   * into a filmstrip.
+   */
+  const numColumns = Math.max(2, Math.min(6, Math.round((width - GRID_GAP) / (TARGET_TILE + GRID_GAP))));
   const [reels, setReels] = useState<Reel[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
