@@ -826,12 +826,11 @@ export default function ReelDetailScreen() {
             <Icon name={isCooking ? 'restaurant' : taskList.kind === 'steps' ? 'footsteps' : 'list'} size={15} color={colors.accent} />
             <Text style={styles.cardTitle}>{isCooking ? 'Recipe' : taskList.kind === 'steps' ? 'Steps' : 'Tasks'}</Text>
           </View>
-          {taskList.note ? (
-            <View style={styles.disclaimer}>
-              <Icon name="information-circle" size={14} color={colors.warning} />
-              <Text style={styles.disclaimerText}>{taskList.note}</Text>
-            </View>
-          ) : null}
+          {/* ⚠️ ONE notice, not two. `taskList.note` was rendered here AND
+              again below the disclaimers, so an inferred recipe showed
+              "couldn't read this video…" twice in the same card. The copy is
+              the server's (`_source_note`), so the fix is to render it once —
+              kept at the LOWER site, immediately above the steps it qualifies. */}
           {/* Steps are the riskiest surface for these categories — this is where
               content becomes a checklist someone might actually follow. */}
           {category === 'health' && <Disclaimer variant="health" style={{ marginTop: spacing.sm }} />}

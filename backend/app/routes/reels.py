@@ -221,8 +221,14 @@ def _reel_from_info(user_id: str, url: str, info: dict) -> ReelDB:
     # length bar (150 chars looks like content) but has nothing to summarize.
     # Charging an AI action to be told low_content:true is pure waste — measured
     # on a real save: 2048 input tokens spent for an empty summary.
+    # `is_login_wall` joins `is_link_only` here for the same reason: it is text
+    # that LOOKS summarizable and cannot produce a summary of the reel. Without
+    # it we pay Claude to describe Instagram's sign-in page and then let the
+    # AI-generated title overwrite the real one.
     should_summarize = (
-        (len(raw_text) >= 50 and not extractor.is_link_only(raw_text))
+        (len(raw_text) >= 50
+         and not extractor.is_link_only(raw_text)
+         and not extractor.is_login_wall(raw_text))
         or bool(info.get("needs_audio"))
     )
     return ReelDB(
@@ -520,7 +526,13 @@ def resummarize_reel(reel_id: str, user: AuthUser = Depends(get_current_user), d
     # ("this isn't medical, sensitive=false") must not be able to lift the
     # medical containment. False positive escape hatch: delete + re-save.
     reel.is_sensitive = bool(reel.is_sensitive) or bool(ai.get("sensitive", False))
-    if _weak_title(reel.title) and ai.get("title"):
+    # ⚠️ The MODEL'S title is screened too. It is generated from `raw_text`, so
+    # if login-wall content ever reaches the summarizer the model writes an
+    # accurate title for the wrong page ("Login • Instagram") and this line
+    # installs it OVER the good one — which is why the title used to look right
+    # until the summary landed. `is_login_wall` upstream should stop that text
+    # arriving at all; this is the backstop for the case where it doesn't.
+    if _weak_title(reel.title) and ai.get("title") and not _is_login_wall_title(ai["title"]):
         reel.title = ai["title"]
     reel.summarize_count = (reel.summarize_count or 0) + 1
     db.commit()
@@ -614,6 +626,13 @@ def client_metadata(reel_id: str, body: ClientMetadataRequest,
         reel.thumbnail_url = body.thumbnail_url.strip()
     if body.uploader and not reel.uploader:
         reel.uploader = body.uploader.strip()
+
+    # A client that fetched the sign-in page instead of the post has no opinion
+    # worth storing. The app screens this too (clientExtract.isLoginWall), but
+    # this is untrusted input and the server does not rely on the client having
+    # done it — an older build, or any other caller, reaches this endpoint too.
+    if extractor.is_login_wall(text):
+        text = ""
 
     if len(text) < _MIN_SUMMARIZABLE:
         # The client couldn't read it either (CORS on web, a private post, or —

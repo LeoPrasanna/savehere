@@ -144,7 +144,11 @@ NO_CONTENT_DETAIL = (
 def _source_note(source: str) -> str | None:
     """User-facing disclaimer when steps weren't read from the actual video."""
     if source == "title":
-        return "Couldn't read this video — these are general steps based on the title, not the actual recipe."
+        # Owner wording, 2026-08-12. "…not the actual recipe" alone read as if
+        # the recipe existed somewhere and we had picked the wrong one; naming
+        # the SOURCE we failed to read says what actually happened.
+        return ("Couldn't read this video — these are general steps based on the title, "
+                "not the actual recipe from the short/reel.")
     if source == "notes":
         return "Based on the note you added, not the video itself."
     return None
