@@ -5,6 +5,7 @@ import type { Session } from '@supabase/supabase-js';
 import { supabase } from '../services/supabase';
 import { api } from '../services/api';
 import { resetSessionFlags } from '../services/sessionFlags';
+import { refreshUsage, clearUsage } from '../services/usageCache';
 
 /**
  * ⚠️ The optional fields are `string | null`, and the null is the point.
@@ -95,6 +96,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!mounted) return;
       setSession(data.session);
       setLoading(false);
+      // Warm the account state (tier, AI budget, counts) the moment we know who
+      // this is — see the note on the SIGNED_IN branch below.
+      if (data.session) refreshUsage();
     });
 
     // React to sign-in / sign-out / token refresh for the app's lifetime.
@@ -103,6 +107,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // starts at the Landing screen (not wherever the last user navigated).
       // Token refreshes must NOT reset — they fire mid-session.
       if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') resetSessionFlags();
+
+      /**
+       * ⚠️ FETCH ACCOUNT STATE AT LOGIN, NOT WHEN A SCREEN ASKS FOR IT.
+       *
+       * The profile panel, the save screen and the reel screen each fetched
+       * `/usage` on open/mount, so every one of them painted placeholder
+       * numbers first and corrected them a moment later — "0 saved" and no
+       * tier badge, for the length of a round-trip. On a cold Render free
+       * instance that is ~50 seconds of the panel stating things that are
+       * simply untrue.
+       *
+       * Nothing about that data is screen-specific; only the moment we asked
+       * for it was. Fetching here means it is already in hand before the user
+       * can reach any of those screens, and each one reads the cache
+       * synchronously for its first paint.
+       *
+       * Not awaited, and failure is swallowed inside refreshUsage: the gate
+       * must not wait on a meter, and a signed-in user with an unreachable
+       * backend still gets their app.
+       */
+      if (event === 'SIGNED_IN') refreshUsage();
+      // Never let the next account inherit the previous one's tier or counts.
+      if (event === 'SIGNED_OUT') clearUsage();
+
       setSession(next);
       setLoading(false);
     });

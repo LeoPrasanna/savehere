@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, Platform, Sc
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, Reel, Usage, UsageLog } from '../services/api';
+import { getCachedUsage, refreshUsage } from '../services/usageCache';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { Label, Body, Title, Rule, GhostButton, FilledButton, Index } from './kit';
@@ -53,7 +54,10 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const { email, displayName, profile, signOut, deleteAccount } = useAuth();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [usage, setUsage] = useState<Usage | null>(null);
+  // Seeded from the login-time fetch (services/usageCache), so the stats row
+  // and the tier badge are already correct on the panel's FIRST frame instead
+  // of reading "0 saved" until a round-trip lands.
+  const [usage, setUsage] = useState<Usage | null>(getCachedUsage);
   // Tap-to-expand drill-down: what today's AI actions were spent on. Lazy —
   // only fetched the first time the user opens it, kept until the panel closes.
   const [logOpen, setLogOpen] = useState(false);
@@ -63,7 +67,10 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   // Refresh the AI budget each time the panel opens; quietly keep the last known
   // value if the request fails (the meter is informative, never blocking).
   useEffect(() => {
-    if (visible) api.getUsage().then(setUsage).catch(() => {});
+    // Still refreshes on open — the AI budget moves while the app is running.
+    // The difference is that a stale-but-real number is on screen meanwhile,
+    // rather than a placeholder that reads as fact.
+    if (visible) refreshUsage().then(u => { if (u) setUsage(u); });
     else { setLogOpen(false); setLog(null); }   // reset the drill-down on close
   }, [visible]);
 

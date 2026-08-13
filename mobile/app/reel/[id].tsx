@@ -13,6 +13,7 @@ import { formatDue } from '../../services/todoDates';
 import { TODO_ADD_LABEL, TODO_ADDED_LABEL } from '../../constants/todoBrand';
 import { useWaitingMessage } from '../../constants/waitingMessages';
 import { openSourceLink } from '../../services/openLink';
+import { getCachedUsage, refreshUsage } from '../../services/usageCache';
 import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
 import { goHome } from '../../components/HomeButton';
@@ -57,7 +58,10 @@ export default function ReelDetailScreen() {
   // Drives the locked-Pro button states. The server enforces the gates with
   // 403s regardless — this only decides what the button LOOKS like, so a failed
   // fetch just falls back to the normal (unlocked) rendering.
-  const [usage, setUsage] = useState<Usage | null>(null);
+  // Seeded from the login-time fetch. This one decides whether the AI buttons
+  // render as locked-PRO or normal, so an empty first frame meant a paid user
+  // could watch their buttons flip state under them.
+  const [usage, setUsage] = useState<Usage | null>(getCachedUsage);
   const [categoryModal, setCategoryModal] = useState(false);
   // Shown before the FIRST workout generation: sets expectations that the plan
   // is a generic template, not personalized coaching.
@@ -97,7 +101,7 @@ export default function ReelDetailScreen() {
     api.getTasks(id).then(setTaskList).catch(() => {});
     api.getWorkout(id).then((plan) => setHasWorkout(plan.exercises.length > 0)).catch(() => {});
     api.getItinerary(id).then(setItin).catch(() => {});
-    api.getUsage().then(setUsage).catch(() => {});
+    refreshUsage().then(u => { if (u) setUsage(u); });
   }, [id]);
 
   // Refetched on FOCUS, not just mount: the task can be completed (or deleted)

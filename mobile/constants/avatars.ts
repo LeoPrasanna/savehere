@@ -139,6 +139,24 @@ export const AVATARS: Record<string, number> = {
 export const AVATAR_KEYS: string[] = Object.keys(AVATARS);
 
 /**
+ * The face everyone starts with (owner, 2026-08-12) — the first one in the
+ * picker, so "the default" and "the top-left cell" are the same thing and the
+ * grid never disagrees with the header.
+ *
+ * ⚠️ THIS IS A RENDER-TIME DEFAULT, NOT A WRITE. Nothing is stored when a user
+ * has not chosen: `profile.avatar` stays empty until they actually pick one.
+ * That is what makes it apply to the ~27 EXISTING accounts as well as new
+ * signups, with no backfill, no migration, and nothing to go half-done — the
+ * same reasoning that governs the emoji-avatar migration above.
+ *
+ * ⚠️ Reordering AVATARS changes what every un-chosen user's face is. The keys
+ * are stable because they are stored; this constant's VALUE is not, so if the
+ * first entry ever changes, everyone who never picked changes with it. Pin a
+ * specific key here instead if that ever matters.
+ */
+export const DEFAULT_AVATAR_KEY: string = AVATAR_KEYS[0];
+
+/**
  * Resolve a stored `profile.avatar` to an image source.
  *
  * ⚠️ Returns undefined for values saved BEFORE this change, which are emoji
