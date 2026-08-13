@@ -28,6 +28,9 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 - 📲 **Share directly from the source app** — SaveHere appears in the Android/iOS
   share sheet, so a reel goes from Instagram into your library without a copy-paste.
   (Needs a native build; `expo-share-intent`, wired in `mobile/app/_layout.tsx`.)
+- 👻 **…and on Android it's invisible** — a translucent no-display Activity
+  (`mobile/plugins/withInvisibleShare.js`) saves the link and finishes, so you
+  never leave Instagram. No app flash, just a notification when it's kept.
 - 🔔 **Notification centre** — a background share posts a local notification, and
   the last 10 are kept in the hamburger menu with read/unread and per-item delete.
   The OS shade is not a record; this is the only place a save made while you were
@@ -206,11 +209,13 @@ savehere/
 
 ## 📡 API reference
 
-All `/api/*` routes require a Supabase `Bearer` token and are scoped to the caller (someone else's id returns **404**, never 403 — that would leak its existence).
+All `/api/*` routes require a Supabase `Bearer` token and are scoped to the caller (someone else's id returns **404**, never 403 — that would leak its existence). The single exception is `/api/reels/share-save`, which takes an `X-Share-Key` instead — see below.
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `POST` | `/api/reels/save` | Save a URL — returns instantly; extraction + summary run in the background |
+| `POST` | `/api/reels/share-save` | Same work, authenticated by `X-Share-Key` — the Android invisible-share Activity, which runs outside the JS runtime and has no Supabase session |
+| `POST` / `DELETE` | `/api/account/share-key` | Mint / revoke that key. It is save-scoped **because it authenticates only the route above** — no read, no delete, no AI, no account access |
 | `GET` | `/api/reels` | List saved reels (category filter, `limit`/`offset`, returns `total`) |
 | `GET` | `/api/reels/{id}` | Get a single reel |
 | `POST` | `/api/reels/{id}/summarize` | Run/retry the first summary |

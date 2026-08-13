@@ -480,4 +480,17 @@ export const api = {
 
   deleteAccount: () =>
     request<{ deleted: boolean; reels_removed: number; message: string }>(`/api/account`, { method: 'DELETE' }),
+
+  /** Mint the save-scoped key the Android share Activity carries. See
+   *  services/shareKey.ts for why the Supabase session can't be used there. */
+  createShareKey: () =>
+    request<{ key: string }>('/api/account/share-key', { method: 'POST' }),
+
+  revokeShareKey: () =>
+    request<{ revoked: boolean }>('/api/account/share-key', { method: 'DELETE' }),
 };
+
+/** The backend the app is talking to. The Android share Activity runs outside
+ *  the JS runtime, where `EXPO_PUBLIC_API_URL` (inlined at bundle time) does
+ *  not exist — so it has to be handed the value rather than read it. */
+export const apiBaseUrl = () => BASE_URL;

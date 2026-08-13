@@ -6,6 +6,7 @@ import { supabase } from '../services/supabase';
 import { api } from '../services/api';
 import { resetSessionFlags } from '../services/sessionFlags';
 import { refreshUsage, clearUsage } from '../services/usageCache';
+import { ensureShareKey, clearShareKey } from '../services/shareKey';
 
 /**
  * ⚠️ The optional fields are `string | null`, and the null is the point.
@@ -98,7 +99,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
       // Warm the account state (tier, AI budget, counts) the moment we know who
       // this is — see the note on the SIGNED_IN branch below.
-      if (data.session) refreshUsage();
+      if (data.session) {
+        refreshUsage();
+        // Re-minted on EVERY launch, not only at sign-in. The server snapshots
+        // the tier and quota identity into the key (a share-key request has no
+        // JWT to read them from), so re-minting is what keeps a user who just
+        // upgraded to Pro from sharing on a stale free-tier snapshot.
+        ensureShareKey();
+      }
     });
 
     // React to sign-in / sign-out / token refresh for the app's lifetime.
@@ -127,9 +135,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
        * must not wait on a meter, and a signed-in user with an unreachable
        * backend still gets their app.
        */
-      if (event === 'SIGNED_IN') refreshUsage();
-      // Never let the next account inherit the previous one's tier or counts.
-      if (event === 'SIGNED_OUT') clearUsage();
+      if (event === 'SIGNED_IN') { refreshUsage(); ensureShareKey(); }
+      // Never let the next account inherit the previous one's tier or counts —
+      // nor the ability to keep saving into it silently from the share sheet.
+      if (event === 'SIGNED_OUT') { clearUsage(); clearShareKey(); }
 
       setSession(next);
       setLoading(false);

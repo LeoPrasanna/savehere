@@ -33,8 +33,14 @@
       "expo-status-bar",
       "expo-font",
       "expo-web-browser",
-      "expo-share-intent",
+      [
+        "expo-share-intent",
+        {
+          "disableAndroid": true
+        }
+      ],
       "expo-notifications",
+      "./plugins/withInvisibleShare",
       [
         "expo-splash-screen",
         {
