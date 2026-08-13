@@ -16,11 +16,18 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.database import Base, ReelDB, AiUsageDB, get_db
+from app.quota import quota_subject
 from app.auth import get_current_user, AuthUser
 from app.routes import workout as workout_route
 from app import ratelimit
 
 USER = "user-preflight"
+
+# The daily AI counter is keyed on a STABLE subject (hash of the normalized
+# email), not the raw user id — see quota.quota_subject. That is what stops
+# "delete the account, get a fresh quota". Assert against the same key the
+# app writes, or these tests pass while the real counter goes unread.
+QUOTA_KEY = quota_subject(AuthUser(id=USER, email="t@e.co"))
 
 
 @pytest.fixture
@@ -65,7 +72,7 @@ def _unreadable_reel(Session, category):
 def _charged(Session):
     s = Session()
     try:
-        row = s.query(AiUsageDB).filter(AiUsageDB.user_id == USER).first()
+        row = s.query(AiUsageDB).filter(AiUsageDB.user_id == QUOTA_KEY).first()
         return row.count if row else 0
     finally:
         s.close()

@@ -12,7 +12,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.quota import enforce_daily_ai_quota, charge_ai_action, tier_for, daily_limit_for, _utc_today
+from app.quota import enforce_daily_ai_quota, charge_ai_action, quota_subject, tier_for, daily_limit_for, _utc_today
 from app.database import Base, AiUsageDB, get_db
 from app.config import settings
 from app.auth import get_current_user, AuthUser
@@ -185,7 +185,7 @@ class TestQuotaWiredIntoAskRoute:
         app.dependency_overrides[get_db] = _override_get_db
 
         def _factory(user_id: str) -> TestClient:
-            app.dependency_overrides[get_current_user] = lambda: AuthUser(id=user_id, email="t@e.co")
+            app.dependency_overrides[get_current_user] = lambda: AuthUser(id=user_id, email=f"{user_id}@e.co")
             return TestClient(app)
 
         yield _factory
@@ -206,3 +206,60 @@ class TestQuotaWiredIntoAskRoute:
         assert a.post("/api/ask", json={"question": "mine?"}).status_code == 429
         # A different user still has a full budget.
         assert make_client(USER_B).post("/api/ask", json={"question": "mine?"}).status_code == 200
+
+
+class TestQuotaSurvivesAccountDeletion:
+    """Owner report, 2026-08-12: "I finished my quota, deleted the account,
+    signed up with the same Gmail and got 10 AI usages back."
+
+    The counter was keyed on `user_id`. Deleting an account mints a BRAND NEW
+    Supabase user id, so the lookup found no row, created a fresh one, and
+    handed back a full day's budget — repeatable in about fifteen seconds with
+    Google sign-in, for unbounded Claude spend.
+
+    The fix keys it on the same stable identity the trial clock already uses.
+    These tests are the ones that would have caught it.
+    """
+
+    EMAIL = "recycler@example.com"
+
+    def test_same_email_new_account_id_shares_one_budget(self):
+        """THE FRAUD CASE. Two different Supabase ids, one person."""
+        before = quota_subject(AuthUser(id="user-original", email=self.EMAIL))
+        after = quota_subject(AuthUser(id="user-recreated", email=self.EMAIL))
+        assert before == after, "re-signing up with the same email must reuse the same counter"
+
+    def test_the_subject_is_not_the_raw_user_id(self):
+        """Guards against a well-meaning revert to `user.id` — which looks
+        harmless and silently reopens the hole."""
+        u = AuthUser(id="user-original", email=self.EMAIL)
+        assert quota_subject(u) != u.id
+
+    def test_email_normalization_is_applied(self):
+        """Casing and the dots/plus-tag tricks must not mint a new bucket —
+        otherwise the fix is one Gmail alias away from being bypassed."""
+        a = quota_subject(AuthUser(id="u1", email="Recycler@Example.com"))
+        b = quota_subject(AuthUser(id="u2", email=self.EMAIL))
+        assert a == b
+
+    def test_different_emails_stay_independent(self):
+        """The property the old keying got right, which must not regress."""
+        a = quota_subject(AuthUser(id="u1", email="alice@example.com"))
+        b = quota_subject(AuthUser(id="u2", email="bob@example.com"))
+        assert a != b
+
+    def test_no_email_falls_back_to_user_id(self):
+        """Accepted residue, documented in quota_subject: a caller with no
+        readable email claim gets exactly the old behaviour rather than sharing
+        a bucket with every other emailless user."""
+        assert quota_subject(AuthUser(id="u-no-email", email=None)) == "u-no-email"
+
+    def test_charging_after_recreation_continues_the_same_count(self, db):
+        """End-to-end through the real charge path, not just the key helper."""
+        original = quota_subject(AuthUser(id="user-original", email=self.EMAIL))
+        recreated = quota_subject(AuthUser(id="user-recreated", email=self.EMAIL))
+        enforce_daily_ai_quota(db, original, limit=2)
+        enforce_daily_ai_quota(db, recreated, limit=2)
+        with pytest.raises(HTTPException) as exc:
+            enforce_daily_ai_quota(db, recreated, limit=2)
+        assert exc.value.status_code == 429

@@ -17,10 +17,16 @@ from app.database import Base, ReelDB, AiActionLogDB, AiUsageDB, get_db
 from app.auth import get_current_user, AuthUser
 from app.config import settings
 from app import quota
-from app.quota import charge_ai_action, log_ai_action, AI_LOG_RETENTION_DAYS, _utc_today
+from app.quota import charge_ai_action, log_ai_action, AI_LOG_RETENTION_DAYS, _utc_today, quota_subject
 from app.routes import workout as workout_route
 
 USER = "u-log"
+
+# The daily AI counter is keyed on a STABLE subject (hash of the normalized
+# email), not the raw user id — see quota.quota_subject. That is what stops
+# "delete the account, get a fresh quota". Assert against the same key the
+# app writes, or these tests pass while the real counter goes unread.
+QUOTA_KEY = quota_subject(AuthUser(id=USER, email="l@e.co"))
 
 
 @pytest.fixture
@@ -93,7 +99,7 @@ class TestLoggingRidesAlongWithTheCharge:
         assert res.status_code == 200                 # feature still works
         s = Session()
         try:                                          # and the charge still stands
-            assert s.query(AiUsageDB).filter(AiUsageDB.user_id == USER).one().count == 1
+            assert s.query(AiUsageDB).filter(AiUsageDB.user_id == QUOTA_KEY).one().count == 1
         finally:
             s.close()
 
@@ -143,7 +149,7 @@ class TestUsageLogEndpoint:
         client, Session = env
         db = Session()
         try:
-            db.add(AiUsageDB(user_id=USER, day=_utc_today(), count=5))
+            db.add(AiUsageDB(user_id=QUOTA_KEY, day=_utc_today(), count=5))
             db.commit()
             log_ai_action(db, USER, "ask", "only one described")
         finally:

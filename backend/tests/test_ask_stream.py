@@ -10,11 +10,18 @@ from sqlalchemy.pool import StaticPool
 
 from app.main import app
 from app.database import Base, ReelDB, AiUsageDB, get_db
+from app.quota import quota_subject
 from app.auth import get_current_user, AuthUser
 from app.routes import ask as ask_module
 from app.routes.ask import SOURCES_MARKER
 
 USER = "user-stream"
+
+# The daily AI counter is keyed on a STABLE subject (hash of the normalized
+# email), not the raw user id — see quota.quota_subject. That is what stops
+# "delete the account, get a fresh quota". Assert against the same key the
+# app writes, or these tests pass while the real counter goes unread.
+QUOTA_KEY = quota_subject(AuthUser(id=USER, email="t@e.co"))
 
 
 @pytest.fixture
@@ -72,7 +79,7 @@ class TestAskStream:
         client.post("/api/ask/stream", json={"question": "any workouts?"})
         db = Session()
         try:
-            row = db.query(AiUsageDB).filter(AiUsageDB.user_id == USER).first()
+            row = db.query(AiUsageDB).filter(AiUsageDB.user_id == QUOTA_KEY).first()
             assert row is not None and row.count == 1
         finally:
             db.close()

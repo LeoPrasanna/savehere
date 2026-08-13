@@ -22,7 +22,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.savehere.app",
-      "versionCode": 2
+      "versionCode": 3
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -34,6 +34,7 @@
       "expo-font",
       "expo-web-browser",
       "expo-share-intent",
+      "expo-notifications",
       [
         "expo-splash-screen",
         {
