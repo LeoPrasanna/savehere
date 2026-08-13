@@ -457,6 +457,36 @@ export const spacing = {
  */
 export const GRID_GAP = 12;
 
+/** The width a tile WANTS to be, in points. Measured off Pinterest: ~181pt on a
+ *  390pt phone at 2 columns. The column count is solved for this, not the other
+ *  way round — see `columnsForWidth`. */
+export const TARGET_TILE = 180;
+
+/**
+ * How many columns a grid of `width` points gets. **The one copy.**
+ *
+ * ⚠️ THIS LIVES HERE BECAUSE THE LAST FIX WENT TO ONE CALL SITE AND MISSED THE
+ * OTHER. Round 1 diagnosed `width < 600 ? 2 : width < 1024 ? 3 : 4` as the
+ * reason the grid looked right on a phone and wrong on a tablet, and replaced
+ * it — in `app/index.tsx` only. `app/rediscover.tsx` still had the original
+ * line, so the Rediscover grid kept the exact bug that was reported as fixed.
+ * Two screens cannot hold "the same" formula; one of them is always the stale
+ * one. Import this instead.
+ *
+ * Tile width stays roughly constant and the COLUMN COUNT grows to fill the
+ * screen — that is the whole Pinterest trick. Fixed breakpoints do the
+ * opposite: they hold the count steady and let tiles stretch, so a 10" tablet
+ * at 3 columns rendered ~330pt tiles, nearly double a phone's, and a wall of
+ * vast thumbnails with 12px gutters reads as broken rather than denser.
+ *
+ * Clamped at 2 so a small phone never collapses to a single column (that is a
+ * list, not a mosaic) and at 6 so a desktop browser does not shred the grid
+ * into a filmstrip.
+ */
+export function columnsForWidth(width: number): number {
+  return Math.max(2, Math.min(6, Math.round((width - GRID_GAP) / (TARGET_TILE + GRID_GAP))));
+}
+
 /**
  * ⚠️ REVERSED (owner, 2026-08-03). These were ALL ZERO — the primary style
  * reference's one absolute rule was "never round corners; 0px is

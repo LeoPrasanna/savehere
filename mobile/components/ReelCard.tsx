@@ -192,6 +192,27 @@ const styles = themed(() => StyleSheet.create({
   // the photo. That is the load-bearing part of the Pinterest read: the rounded
   // rectangle IS the picture. Wrap it in a padded card and it becomes a sticker.
   frame: {
+    /**
+     * ⚠️ `flex: 1` HERE MEANS TWO DIFFERENT THINGS, depending on who renders
+     * the card. Read this before "simplifying" it.
+     *
+     *   app/index.tsx      the parent is a masonry COLUMN, so flex is the
+     *                      HEIGHT axis. Height should really come from
+     *                      `aspectRatio` against the column's width, and
+     *                      `flex: 1` (i.e. flexBasis 0) is a competing opinion
+     *                      about the same dimension. Yoga resolves it correctly
+     *                      when the parent's main axis is undefined — which a
+     *                      ScrollView's content always is — which is why this
+     *                      renders correctly today.
+     *   app/rediscover.tsx the parent is a FlatList ROW (`numColumns`), so flex
+     *                      is the WIDTH axis and is LOAD-BEARING: without it
+     *                      the items do not divide the row evenly.
+     *
+     * So it cannot simply become `width: '100%'` — that fixes the ambiguity in
+     * one screen and breaks the other. ponytail: if the tablet grid is ever
+     * traced to this, the fix is for each grid to supply its own sizing rather
+     * than sharing one style across two flex axes, not a value tweak here.
+     */
     flex: 1,
     backgroundColor: colors.card,
     overflow: 'hidden',

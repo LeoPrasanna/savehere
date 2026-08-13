@@ -6,7 +6,7 @@ import { ReelCard } from '../components/ReelCard';
 import { Label, Body, Title, Rule } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { markDeleted, unmarkDeleted } from '../services/libraryEdits';
-import { colors, spacing, font, GRID_GAP, themed } from '../constants/theme';
+import { colors, spacing, font, GRID_GAP, columnsForWidth, themed } from '../constants/theme';
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -19,7 +19,11 @@ function shuffle<T>(arr: T[]): T[] {
 
 export default function RediscoverScreen() {
   const { width } = useWindowDimensions();
-  const numColumns = width < 600 ? 2 : width < 1024 ? 3 : 4;
+  // ⚠️ WAS `width < 600 ? 2 : width < 1024 ? 3 : 4` — the exact formula round 1
+  // identified as the reason grids looked wrong on a tablet. That fix was
+  // applied to app/index.tsx and never to this screen, so Rediscover kept the
+  // bug the whole time. One shared function now, so it cannot drift again.
+  const numColumns = columnsForWidth(width);
   const [reels, setReels] = useState<Reel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
