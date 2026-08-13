@@ -15,6 +15,7 @@ import { TODO_ADD_LABEL, TODO_ADDED_LABEL } from '../../constants/todoBrand';
 import { useWaitingMessage } from '../../constants/waitingMessages';
 import { openSourceLink } from '../../services/openLink';
 import { getCachedUsage, refreshUsage } from '../../services/usageCache';
+import { markDeleted, unmarkDeleted, patchReel } from '../../services/libraryEdits';
 import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
 import { goHome } from '../../components/HomeButton';
@@ -275,6 +276,14 @@ export default function ReelDetailScreen() {
     try {
       const updated = await api.updateCategory(id, category);
       setReel(updated);
+      /**
+       * ⚠️ TELL THE LIBRARY TOO. This screen was optimistic, the GRID was not:
+       * the card behind you still showed the category you just replaced until
+       * its own refetch landed — which is the "tags don't update on saved
+       * cards" report. The patch is applied to the next server list and retires
+       * itself once the server agrees (services/libraryEdits.ts).
+       */
+      patchReel(id, { category: updated.category });
     } catch (e: any) {
       setReel(prev => (prev ? { ...prev, category: previous } : prev));
       haptics.error();
@@ -297,7 +306,28 @@ export default function ReelDetailScreen() {
   };
 
   const handleDelete = async () => {
-    const doDelete = async () => { await api.deleteReel(id); goHome(); };
+    /**
+     * ⚠️ LEAVE FIRST, DELETE AFTER — this used to `await api.deleteReel(id)`
+     * before navigating.
+     *
+     * Same shape as the category bug fixed on 2026-08-12: the user has already
+     * confirmed, so there is nothing left to decide, and on a cold Render free
+     * instance (~50 s to wake) they sat looking at the reel they just deleted.
+     *
+     * `markDeleted` is what makes leaving first SAFE. The library refetches on
+     * focus, so without it the card we are deleting comes straight back from a
+     * server that has not processed the DELETE yet. On failure the mark is
+     * lifted and the row honestly reappears.
+     */
+    const doDelete = async () => {
+      markDeleted(id);
+      goHome();
+      try {
+        await api.deleteReel(id);
+      } catch {
+        unmarkDeleted(id);
+      }
+    };
     haptics.warning();
     if (Platform.OS === 'web') {
       if (window.confirm('Remove this saved reel?')) doDelete();

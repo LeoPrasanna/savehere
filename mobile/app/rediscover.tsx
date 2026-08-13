@@ -5,6 +5,7 @@ import { MascotLoader } from '../components/MascotLoader';
 import { ReelCard } from '../components/ReelCard';
 import { Label, Body, Title, Rule } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
+import { markDeleted, unmarkDeleted } from '../services/libraryEdits';
 import { colors, spacing, font, GRID_GAP, themed } from '../constants/theme';
 
 function shuffle<T>(arr: T[]): T[] {
@@ -88,7 +89,16 @@ export default function RediscoverScreen() {
         renderItem={({ item, index }) => (
           item.__ghost
             ? <View style={{ flex: 1 }} />
-            : <ReelCard reel={item} index={index} onDelete={id => setReels(prev => prev.filter(r => r.id !== id))} />
+            /* ⚠️ The API call lives HERE, not in ReelCard — the card stopped
+               firing it (and silently swallowing failures) so the screen that
+               owns the list can report the outcome. `markDeleted` keeps the
+               row out of the library's own refetch while the request is in
+               flight. */
+            : <ReelCard reel={item} index={index} onDelete={id => {
+                markDeleted(id);
+                setReels(prev => prev.filter(r => r.id !== id));
+                api.deleteReel(id).catch(() => unmarkDeleted(id));
+              }} />
         )}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}

@@ -6,6 +6,7 @@ import { supabase } from '../services/supabase';
 import { api } from '../services/api';
 import { resetSessionFlags } from '../services/sessionFlags';
 import { refreshUsage, clearUsage } from '../services/usageCache';
+import { clearLibraryEdits } from '../services/libraryEdits';
 
 /**
  * ⚠️ The optional fields are `string | null`, and the null is the point.
@@ -128,8 +129,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
        * backend still gets their app.
        */
       if (event === 'SIGNED_IN') refreshUsage();
-      // Never let the next account inherit the previous one's tier or counts.
-      if (event === 'SIGNED_OUT') clearUsage();
+      // Never let the next account inherit the previous one's tier or counts —
+      // nor a pending delete / category override from their library.
+      if (event === 'SIGNED_OUT') { clearUsage(); clearLibraryEdits(); }
 
       setSession(next);
       setLoading(false);

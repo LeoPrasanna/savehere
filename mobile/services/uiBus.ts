@@ -19,10 +19,19 @@
  * reach for something real.
  */
 
-type Event = 'openProfile' | 'libraryState';
+/**
+ *   closeProfile  a share arrived from another app and the panel is open.
+ *                 ⚠️ The panel is a `Modal`, i.e. its OWN native window — so
+ *                 the share overlay in _layout.tsx, which is an absolutely
+ *                 positioned sibling View, can never cover it. No amount of
+ *                 zIndex fixes that. The only way to get the panel off the
+ *                 screen is to tell it to close, which is what this is for.
+ */
+type Event = 'openProfile' | 'closeProfile' | 'libraryState';
 
 const subs: Record<Event, Set<() => void>> = {
   openProfile: new Set(),
+  closeProfile: new Set(),
   libraryState: new Set(),
 };
 

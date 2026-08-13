@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, FlatList, ScrollView, StyleSheet, ActivityIndicator,
   RefreshControl, useWindowDimensions, Platform,
@@ -14,6 +14,7 @@ import { Landing } from '../components/Landing';
 import { Label, Body, Title, Rule, GhostButton, Wordmark } from '../components/kit';
 import { hasEnteredLibrary, markEnteredLibrary } from '../services/sessionFlags';
 import { onUi, emitUi } from '../services/uiBus';
+import { applyEdits, markDeleted, unmarkDeleted } from '../services/libraryEdits';
 import { ASK_MIN_REELS } from '../constants/limits';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -67,6 +68,9 @@ export default function HomeScreen() {
    */
   const numColumns = Math.max(2, Math.min(6, Math.round((width - GRID_GAP) / (TARGET_TILE + GRID_GAP))));
   const [reels, setReels] = useState<Reel[]>([]);
+  // Read by the focus effect below, which must not depend on the list itself.
+  const reelsRef = useRef<Reel[]>(reels);
+  reelsRef.current = reels;
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -90,7 +94,10 @@ export default function HomeScreen() {
         limit: PAGE,
         offset: 0,
       });
-      setReels(data.items);
+      // Reconcile with what this device knows and the server doesn't yet: a
+      // delete still in flight, a category just changed. Without this the
+      // focus refetch below hands a deleted card straight back.
+      setReels(applyEdits(data.items));
       setTotal(data.total);
     } catch (e: any) {
       setError('Could not connect to backend. Make sure the server is running on port 8000.');
@@ -109,7 +116,7 @@ export default function HomeScreen() {
         limit: PAGE,
         offset: reels.length,
       });
-      setReels(prev => [...prev, ...data.items]);
+      setReels(prev => [...prev, ...applyEdits(data.items)]);
       setTotal(data.total);
     } catch {
       // transient failure
@@ -117,6 +124,31 @@ export default function HomeScreen() {
       setLoadingMore(false);
     }
   }, [loadingMore, reels.length, total, activeCategory]);
+
+  /**
+   * The tile is gone the instant you let go of the long-press; the request
+   * follows.
+   *
+   * ⚠️ THE SCREEN OWNS THIS, NOT THE CARD. `ReelCard` used to fire the DELETE
+   * itself and swallow the error, which meant a failed delete was invisible:
+   * the tile vanished, the save survived, and it reappeared at the next refresh
+   * with no explanation. A card should not be making API calls — the screen
+   * that owns the list is the only thing that can honestly report the outcome.
+   */
+  const removeReel = useCallback(async (id: string) => {
+    markDeleted(id);
+    setReels(prev => prev.filter(r => r.id !== id));
+    setTotal(t => Math.max(0, t - 1));
+    try {
+      await api.deleteReel(id);
+    } catch (e: any) {
+      // Stop hiding it and put it back. Saying so matters more than the tidy
+      // animation — the user believes this save is gone.
+      unmarkDeleted(id);
+      setError(e?.message || "Couldn't delete that save — it's still in your library.");
+      load();
+    }
+  }, [load]);
 
   useEffect(() => {
     if (Platform.OS !== 'web' || typeof window === 'undefined') return;
@@ -131,7 +163,26 @@ export default function HomeScreen() {
     };
   }, []);
 
-  useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
+  /**
+   * ⚠️ IT REFRESHES IN PLACE — IT DOES NOT WIPE TO A SKELETON.
+   *
+   * This was `setLoading(true); load()`, so every return from a reel screen
+   * blanked the whole grid to skeleton tiles and rebuilt it. Against a cold
+   * Render free instance that is seconds of staring at placeholders instead of
+   * the library you already had on screen a moment ago — the single biggest
+   * reason the app "feels slow" on the way back from a card.
+   *
+   * The spinner is only honest when there is nothing to show. With reels in
+   * hand the right behaviour is to keep showing them and swap in the fresh list
+   * when it lands.
+   */
+  useFocusEffect(useCallback(() => {
+    if (reelsRef.current.length === 0) setLoading(true);
+    load();
+    // `load` alone: reading the count through a ref keeps this effect from
+    // re-firing every time the list changes, which would refetch on its own
+    // result.
+  }, [load]));
 
   const hasPending = reels.some(r => r.summary_status === 'pending');
   useEffect(() => {
@@ -359,7 +410,7 @@ export default function HomeScreen() {
                     reel={reel}
                     index={idx}
                     aspect={aspect}
-                    onDelete={id => { setReels(prev => prev.filter(r => r.id !== id)); setTotal(t => Math.max(0, t - 1)); }}
+                    onDelete={removeReel}
                   />
                 ))}
               </View>

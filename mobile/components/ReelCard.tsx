@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Platform, Animated, ActivityIndicator } from 'r
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from './Icon';
-import { Reel, api, thumbCandidates } from '../services/api';
+import { Reel, thumbCandidates } from '../services/api';
 import * as haptics from '../services/haptics';
 import { Pressable } from './Pressable';
 import { Label } from './kit';
@@ -77,12 +77,26 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
     const confirmed = Platform.OS === 'web' ? window.confirm('Remove this save?') : true;
     if (!confirmed) return;
     haptics.tap();
+    /**
+     * ⚠️ `onDelete` FIRES IMMEDIATELY, not in the animation's completion
+     * callback, and this card no longer calls the API at all.
+     *
+     * Two reasons. The owner asked for delete to feel instant, and waiting for
+     * a fade before even telling the list is a delay we chose to add. And the
+     * DELETE used to be fired here with `.catch(() => {})` — so a failure was
+     * invisible: the tile vanished, the save survived on the server, and it
+     * came back at the next refresh with no explanation. The screen that owns
+     * the list is the only thing that can report that honestly, so it owns the
+     * request now (see `removeReel` in app/index.tsx).
+     *
+     * The fade still runs; it just no longer gates anything.
+     */
     Animated.timing(opacity, {
       toValue: 0,
       duration: motion.micro,
       useNativeDriver: true,
-    }).start(() => onDelete?.(reel.id));
-    api.deleteReel(reel.id).catch(() => {});
+    }).start();
+    onDelete?.(reel.id);
   };
 
   const platform = platformMeta[reel.platform] ?? platformMeta.unknown;

@@ -5,6 +5,20 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ ANDROID TEST ROUND 3 (2026-08-13) — 5 owner findings
+
+| # | Item | Status / root cause |
+|---|---|---|
+| 1 | Tablet/iPad library overlaps, "not Pinterest at all" | ❌ **NOT FIXED — needs a screenshot, deliberately not guessed.** The column math was already "fixed" once (round 1, item 14 → `TARGET_TILE`), and it computes correctly: 768pt → 4 cols at 177pt, 834pt → 4 at 193pt, i.e. the same tile size as a phone. Two theories were examined and **both discarded**: `styles.frame`'s `flex: 1` + `aspectRatio` is a genuine Yoga ambiguity but resolves correctly when the parent's main axis is undefined (which is why the phone is right), and the shortest-column distribution is correct at every column count. Reproducing a NATIVE tablet layout is not possible on this dev box, and a web measurement would not be evidence for Yoga. **Do not apply a third speculative fix without a screenshot.** |
+| 2 | Profile panel still on screen when a share opens the app | ✅ **`ProfilePanel` is a `Modal` — its own native window.** The share overlay in `_layout.tsx` is an absolutely positioned sibling `View`, so it can never paint over it at any zIndex; that is why "cover it with the saving overlay" was never going to work. The panel is now *told* to close via a new `closeProfile` bus event. |
+| 3 | EAS build doesn't fire on merge to `develop` | ⚠️ **OWNER ACTION — not a code bug.** `eas workflow:validate` says the YAML is valid, and `eas workflow:list` returns **nothing**, i.e. EAS has never registered a workflow for this project. The file is at `mobile/.eas/workflows/`, but EAS reads `.eas/workflows/` relative to the **base directory** configured for the GitHub connection, which defaults to the repo root. Fix: expo.dev → project → GitHub settings → set **base directory to `mobile`**. `[Likely]` — the evidence is that no workflow is registered; the specific setting is inferred. If it still doesn't fire, the fallback is to run `eas build` from the existing GitHub Actions CI with an `EXPO_TOKEN` secret (~20 lines, no dashboard dependency) — say the word and it gets built. |
+| 4 | Delete a save should feel instant; tags don't update on cards | ✅ **Three causes, all fixed.** (a) `reel/[id]` *awaited* the DELETE before navigating — on a cold Render instance that is ~50 s staring at the reel you just deleted (same shape as the category bug from round 1). (b) `app/index.tsx` refetches in a `useFocusEffect`, so an optimistic delete would have flickered straight back from a server that hadn't processed it — new `services/libraryEdits.ts` holds in-flight deletes out of any server list, exactly as `todoMerge.ts` does for to-dos. (c) That same focus effect did `setLoading(true)`, **blanking the whole grid to skeletons on every return from a card** — the single biggest "feels slow" moment in the app. It now refreshes in place and only shows skeletons when there is genuinely nothing to show. Category changes are also pushed to the grid as a self-retiring patch, which is the "tags don't update" half. ⚠️ `ReelCard` no longer calls the API itself (it swallowed delete failures with `.catch(() => {})`, so a failed delete was invisible) — both call sites now own it. |
+| 5 | Edit-profile Save button always enabled | ✅ Disabled until one of the three name fields differs from what's stored. The avatar is deliberately excluded — it auto-saves, so including it would light the button for something already saved. |
+
+**Verified:** `npm run test:library` (new), typecheck, web export. ⚠️ Items 2 and 4 are behind the auth gate, so no logged-in visual pass — owner confirmation needed on a real build.
+
+---
+
 ## ▶ ANDROID TEST ROUND 1 (2026-08-12) — 15 findings from the first real APK
 
 First install from EAS (`preview` profile, Android APK). Branch `fix/android-round-1`.
