@@ -146,7 +146,15 @@ def quota_subject(user: AuthUser) -> str:
     ⚠️ ONE-OFF ON DEPLOY: existing users' keys change from user_id to email
     hash, so everyone gets one counter reset the day this ships. Self-limiting
     and not worth a migration.
+
+    `user.subject`, when set, is this same value resolved at share-key mint time
+    from a verified JWT (app/sharekey.py) — the Android share Activity carries
+    no JWT, so there is no email claim to hash here, and falling through to
+    `user_id` would give silent shares their own separate daily budget. It is
+    server-set only; nothing a client sends can reach it.
     """
+    if getattr(user, "subject", None):
+        return user.subject
     return _email_hash(user.email) if user.email else user.id
 
 

@@ -10,6 +10,7 @@ from app.database import get_db, ReelDB, TaskDB, WorkoutExerciseDB, ProfileDB, A
 from app.auth import get_current_user, AuthUser
 from app.quota import usage_today, quota_subject, _utc_today
 from app.entitlements import entitlements_for
+from app.sharekey import mint_share_key, revoke_share_key
 
 logger = logging.getLogger(__name__)
 
@@ -143,6 +144,30 @@ def get_usage_log(user: AuthUser = Depends(get_current_user), db: Session = Depe
 
 # Registered on both "" and "/" so DELETE /api/account works without a 307
 # redirect (some HTTP clients drop the Authorization header on redirects).
+@router.post("/share-key")
+def create_share_key(user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Mint the save-scoped key the Android no-display share Activity carries.
+
+    That Activity runs outside the JS runtime and cannot use the Supabase
+    session — see `app/sharekey.py` for why reading or refreshing the access
+    token natively were both rejected. The app calls this on sign-in and on
+    each launch, which is also what keeps the tier/quota snapshots fresh.
+
+    Replaces any previous key, so this doubles as "rotate". Nothing but the
+    save route accepts the result.
+    """
+    return {"key": mint_share_key(db, user)}
+
+
+@router.delete("/share-key")
+def revoke_share_key_route(user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Sign-out. The device drops its copy anyway, but a credential that
+    outlives the session it was minted from is exactly the kind of thing you
+    want revocable from the server side too."""
+    revoke_share_key(db, user)
+    return {"revoked": True}
+
+
 @router.delete("")
 @router.delete("/", include_in_schema=False)
 def delete_account(user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):

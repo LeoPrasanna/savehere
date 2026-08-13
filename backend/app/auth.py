@@ -53,6 +53,12 @@ class AuthUser:
     id: str                       # Supabase user UUID (the JWT `sub` claim)
     email: str | None = None
     claims: dict = field(default_factory=dict)
+    # Pre-resolved quota identity, set ONLY by the server (app/sharekey.py) for
+    # a caller authenticated without a JWT. A share-key request has no email
+    # claim to hash, so without this `quota_subject` would fall back to
+    # `user_id` and charge a DIFFERENT daily AI bucket than the same person's
+    # normal saves. Never populated from anything a client sends.
+    subject: str | None = None
 
 
 def verify_token(token: str) -> AuthUser:

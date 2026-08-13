@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { api } from './api';
 import { fetchClientMetadata } from './clientExtract';
+import { recordNote } from './notifyStore';
 import { refreshUsage } from './usageCache';
 
 /**
@@ -91,6 +92,17 @@ Notifications.setNotificationHandler({
 });
 
 async function notify(title: string, body: string) {
+  /**
+   * ⚠️ RECORDED BEFORE THE PERMISSION CHECK, AND BEFORE THE POST.
+   *
+   * The OS shade is not a record — it is swiped away, often by accident, and
+   * these are LOCAL notifications with no server copy behind them. A user who
+   * declined the runtime permission gets no banner at all, so the drawer in
+   * ProfilePanel is the ONLY place they will ever learn that a share was
+   * saved (or that one failed). Gating the record on the same permission would
+   * hide the receipt from exactly the people who have nothing else.
+   */
+  await recordNote(title, body);
   if (!(await canNotify())) return;
   try {
     await Notifications.scheduleNotificationAsync({
