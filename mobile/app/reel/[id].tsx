@@ -620,6 +620,22 @@ export default function ReelDetailScreen() {
         defaultTitle={reel.title || 'Saved reel'}
         defaultDescription={reel.summary?.join('\n') || ''}
         onClose={() => setTodoOpen(false)}
+        /* ⚠️ The FAST PATH was supported by TodoEditor all along and simply
+           never wired up here, so "Add to your slate" from a reel sat on a
+           spinner for the whole round-trip while the to-do screen's own New
+           Task button returned instantly. Same sheet, two different speeds,
+           for no reason. The sheet now closes immediately and the row is
+           written behind it. */
+        onOptimistic={(draft) => setReelTodo(prev => ({
+          reel_id: id,
+          open_todo: draft,
+          completed_count: prev?.completed_count ?? 0,
+        }))}
+        onFailed={(_draftId, message) => {
+          // Take the optimistic row back out and say why — never a silent revert.
+          setReelTodo(prev => (prev ? { ...prev, open_todo: null } : prev));
+          notify(message);
+        }}
         onSaved={(t) => setReelTodo(prev => ({
           reel_id: id,
           open_todo: t,
@@ -857,10 +873,14 @@ export default function ReelDetailScreen() {
                 ...prev,
                 tasks: prev.tasks.map(t => t.id === updated.id ? updated : t),
               } : prev)}
-              onAdd={created => setTaskList(prev => prev ? {
+              /* `replaces` swaps the optimistic draft row for the server's,
+                 instead of leaving both. Filtering by BOTH ids also makes this
+                 idempotent — re-adding a row that is somehow already present
+                 cannot duplicate it. */
+              onAdd={(created, replaces) => setTaskList(prev => prev ? {
                 ...prev,
-                total: prev.tasks.length + 1,
-                tasks: [...prev.tasks, created],
+                total: prev.tasks.filter(t => t.id !== created.id && t.id !== replaces).length + 1,
+                tasks: [...prev.tasks.filter(t => t.id !== created.id && t.id !== replaces), created],
               } : prev)}
               onDelete={delId => setTaskList(prev => prev ? {
                 ...prev,

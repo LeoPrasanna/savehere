@@ -47,6 +47,16 @@ interface Props {
    */
   onOptimistic?: (draft: Todo) => void;
   onFailed?: (draftId: string, message: string) => void;
+  /**
+   * A failed EDIT, after the sheet has already closed.
+   *
+   * Deliberately separate from `onFailed`: that one removes a row by id, which
+   * is right for a create that never landed and catastrophically wrong for an
+   * edit — it would delete the user's existing task because renaming it
+   * failed. This one only reports; the editor has already restored the
+   * original row via `onSaved`.
+   */
+  onError?: (message: string) => void;
   /** Create-from-a-save: links the todo to this reel and lets the server copy
    *  in the reel's title + summary when the fields are left untouched. */
   reelId?: string;
@@ -60,7 +70,7 @@ interface Props {
 }
 
 function TodoEditorImpl({
-  visible, onClose, onSaved, onOptimistic, onFailed, reelId, defaultTitle, defaultDescription, editing,
+  visible, onClose, onSaved, onOptimistic, onFailed, onError, reelId, defaultTitle, defaultDescription, editing,
   defaultPriority = 'medium',
 }: Props) {
   const [title, setTitle] = useState('');
@@ -165,13 +175,41 @@ function TodoEditorImpl({
       return;
     }
 
+    /**
+     * ── EDIT: optimistic too (owner, 2026-08-12) ──────────────────────────
+     *
+     * Changing a due date is the most common edit there is, and it sat behind
+     * a spinner for a full round-trip — on a cold backend, several seconds to
+     * change a date the user had already picked, on a row that is already on
+     * screen. The new values are entirely the user's own input; there is
+     * nothing the server needs to tell us before showing them.
+     *
+     * The ORIGINAL row is kept and restored if the write fails, and the reason
+     * is surfaced through `onError`. Note the failure mode differs from a
+     * create: a failed create removes a row that never existed, a failed edit
+     * must put the OLD row back — which is why `onFailed` (which deletes by id)
+     * would be exactly wrong here.
+     */
+    if (editing) {
+      const previous = editing;
+      haptics.success();
+      onSaved({ ...editing, ...body, description: body.description ?? null });
+      onClose();
+      try {
+        onSaved(await api.updateTodo(editing.id, body));
+      } catch (e: any) {
+        haptics.error();
+        onSaved(previous);
+        onError?.(e?.message || 'Could not save that change. Try again.');
+      }
+      return;
+    }
+
     setSaving(true);
     try {
-      const saved = editing
-        ? await api.updateTodo(editing.id, body)
-        : reelId
-          ? await api.createTodoFromReel(reelId, body)
-          : await api.createTodo({ ...body, title: body.title });
+      const saved = reelId
+        ? await api.createTodoFromReel(reelId, body)
+        : await api.createTodo({ ...body, title: body.title });
       haptics.success();
       onSaved(saved);
       onClose();

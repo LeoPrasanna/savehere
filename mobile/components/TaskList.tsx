@@ -10,7 +10,10 @@ interface Props {
   tasks: Task[];
   reelId: string;
   onUpdate: (updated: Task) => void;
-  onAdd: (created: Task) => void;
+  /** `replaces` is the temporary id handed over by the optimistic add, if that
+   *  path ran — swap the draft row for the server's rather than appending a
+   *  duplicate. Same convention as TodoEditor's `onOptimistic`. */
+  onAdd: (created: Task, replaces?: string) => void;
   onDelete: (id: string) => void;
   kind?: 'steps' | 'tasks';
 }
@@ -168,41 +171,73 @@ export function TaskList({ tasks, reelId, onUpdate, onAdd, onDelete, kind = 'tas
   // Takes the text from the row rather than reading `editText` from scope —
   // otherwise this handler's identity changed on every keystroke and re-rendered
   // every row while typing, which is the thing the memo is meant to prevent.
+  /**
+   * Optimistic, like the checkbox above. Closes the editor and shows the new
+   * text immediately — the row is the user's own words, so there is nothing to
+   * wait for the server to tell us.
+   *
+   * ⚠️ Also FIXES A SILENT FAILURE: this had a `finally` and no `catch`, so a
+   * failed edit closed the editor and reverted with no message at all. The
+   * server rejecting your change and the app saying nothing is worse than the
+   * spinner this replaces.
+   */
   const saveEdit = useCallback(async (task: Task, raw: string) => {
     const text = raw.trim();
     if (!text || text === task.text) return cancelEdit();
-    setSavingEdit(true);
+    onUpdate({ ...task, text });
+    cancelEdit();
     try {
-      const updated = await api.editTask(task.id, text);
-      onUpdate(updated);
-      cancelEdit();
-    } finally {
-      setSavingEdit(false);
+      onUpdate(await api.editTask(task.id, text));
+    } catch (e: any) {
+      onUpdate(task);
+      notify(e?.message || `Could not save that ${noun}. Please try again.`);
     }
-  }, [onUpdate, cancelEdit]);
+  }, [onUpdate, cancelEdit, noun]);
 
+  /** Optimistic delete — the row goes on confirm, comes back if the server
+   *  refuses. Same silent-failure fix as saveEdit: a failed delete used to
+   *  leave the row in place with no explanation, which reads as an ignored tap. */
   const handleDelete = useCallback(async (task: Task) => {
     if (!(await confirmDialog(`Delete this ${noun}?`))) return;
-    setRemoving(task.id);
+    onDelete(task.id);
     try {
       await api.deleteTask(task.id);
-      onDelete(task.id);
-    } finally {
-      setRemoving(null);
+    } catch (e: any) {
+      onAdd(task);   // put it back exactly as it was
+      notify(e?.message || `Could not delete that ${noun}. Please try again.`);
     }
-  }, [noun, onDelete]);
+  }, [noun, onDelete, onAdd]);
 
-  const handleAdd = async () => {
+  /**
+   * Optimistic add. The row appears the instant you hit enter, under a
+   * temporary id, and is swapped for the server's row when it lands.
+   *
+   * The `replaces` argument mirrors TodoEditor's existing convention rather
+   * than inventing a second one — see `onOptimistic` there.
+   */
+  const handleAdd = () => {
     const text = newText.trim();
     if (!text) return;
-    setAdding(true);
-    try {
-      const created = await api.addTask(reelId, text);
-      onAdd(created);
-      setNewText('');
-    } finally {
-      setAdding(false);
-    }
+    const draft: Task = {
+      id: `draft-${Date.now()}`,
+      reel_id: reelId,
+      text,
+      // The server picks an emoji; a neutral bullet stands in for the moment
+      // the draft is on screen rather than guessing one that then changes.
+      emoji: '•',
+      estimated_minutes: null,
+      completed: false,
+      sort_order: tasks.length,
+    };
+    onAdd(draft);
+    setNewText('');
+    api.addTask(reelId, text)
+      .then(created => onAdd(created, draft.id))
+      .catch((e: any) => {
+        onDelete(draft.id);
+        setNewText(text);   // hand their typing back rather than losing it
+        notify(e?.message || `Could not add that ${noun}. Please try again.`);
+      });
   };
 
   return (

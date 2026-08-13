@@ -663,6 +663,9 @@ export default function TodosScreen() {
         onClose={closeEditor}
         onOptimistic={onOptimistic}
         onFailed={onFailed}
+        /* Edit failures only REPORT — the editor has already put the original
+           row back. Routing them through onFailed would delete the task. */
+        onError={setError}
         onSaved={onSaved}
       />
 
