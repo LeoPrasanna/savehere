@@ -11,6 +11,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { Avatar } from './Avatar';
 import { markReopenPanel } from '../services/sessionFlags';
 import { clearSaveCount } from '../services/saveCount';
+import { clearNotes } from '../services/notifyStore';
+import { NotificationCentre } from './NotificationCentre';
 import {
   colors, spacing, font, tracking, typeface, themed,
   SchemePreference, getSchemePreference, setScheme,
@@ -110,8 +112,10 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
     setShowDeleteConfirm(false);
     onClose();
     // The home screen seeds its stage from a remembered count; the next person
-    // to open the app on this device must not inherit a stranger's number.
+    // to open the app on this device must not inherit a stranger's number —
+    // nor their save receipts.
     clearSaveCount();
+    clearNotes();
     if (result.error) {
       // Alert.alert is a silent no-op on react-native-web — errors must be
       // visible on every platform or deletion failures look like nothing.
@@ -322,6 +326,12 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                 <Rule style={{ marginTop: spacing.md }} />
               </>
             )}
+
+            {/* ── Notifications ──
+                Sits under the budget meter because both answer "what has this
+                app done lately?", and above Explore because it is a receipt,
+                not a destination. ── */}
+            <NotificationCentre visible={visible} />
 
             {/* ── Explore ── */}
             <Label wide style={styles.section}>Explore</Label>
