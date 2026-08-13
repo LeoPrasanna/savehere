@@ -49,6 +49,10 @@ function AppStack() {
       }}
     >
       <Stack.Screen name="index" options={{ headerShown: false }} />
+      {/* The OAuth deep-link landing route. headerShown:false so the redirect
+          through it never flashes a header + hamburger. See auth/callback.tsx
+          for why the route has to exist at all. */}
+      <Stack.Screen name="auth/callback" options={{ headerShown: false }} />
       <Stack.Screen name="landing" options={{ headerShown: false }} />
       <Stack.Screen name="save" options={{ title: headerTitle('Save'), presentation: 'modal' }} />
       <Stack.Screen name="ask" options={{ title: headerTitle('Ask your library') }} />
