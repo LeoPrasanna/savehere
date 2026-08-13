@@ -11,6 +11,7 @@ import pytest
 
 from app.services import extractor
 from app.routes import reels as reels_module
+from app import main
 
 
 class TestVttPacing:
@@ -316,3 +317,39 @@ class TestHealthProbeReportsCurrentBreakerState:
         out = main.health_extract(live=False)
         assert out["breakers"]["instagram"]["fails"] == 1
         assert "probe_ok" not in out
+
+
+class TestProbeUrlAllowlist:
+    """`/health/extract?url=` is UNAUTHENTICATED and makes an outbound request
+    on the caller's behalf, so the host allowlist is the only thing standing
+    between it and an SSRF gadget.
+
+    Uses DOMAIN-SUFFIX matching, not substring — the exact distinction that was
+    already a real bug once in the thumbnail proxy, where `ytimg.com.evil.example`
+    passed a substring check and turned it into an open proxy.
+    """
+
+    def test_supported_platform_hosts_pass(self):
+        for u in [
+            "https://youtube.com/shorts/abc",
+            "https://www.youtube.com/shorts/abc",
+            "https://youtu.be/abc",
+            "https://www.instagram.com/reel/abc",
+            "https://fb.watch/abc",
+        ]:
+            assert main._probe_host_allowed(u) is True, u
+
+    def test_lookalike_and_internal_hosts_are_refused(self):
+        for u in [
+            "https://youtube.com.evil.example/x",   # suffix-confusion
+            "https://notyoutube.com/x",
+            "http://169.254.169.254/latest/meta-data/",   # cloud metadata
+            "http://localhost:8000/health",
+            "http://127.0.0.1/",
+            "file:///etc/passwd",
+        ]:
+            assert main._probe_host_allowed(u) is False, u
+
+    def test_malformed_url_is_refused_not_raised(self):
+        assert main._probe_host_allowed("") is False
+        assert main._probe_host_allowed("not a url") is False

@@ -79,15 +79,57 @@ def health():
 _PROBE_URL = "https://www.youtube.com/shorts/SXHMnicI6Pg"
 
 
-@app.get("/health/extract")
-def health_extract(live: bool = False):
+# Hosts `?url=` may point at. This endpoint is UNAUTHENTICATED and makes an
+# outbound request on the caller's behalf, so without an allowlist it is a
+# straightforward SSRF gadget — the same reasoning (and the same domain-suffix
+# matching, not substring) as the thumbnail proxy's `_THUMB_HOSTS` below.
+_PROBE_HOSTS = (
+    "youtube.com", "youtu.be", "instagram.com", "facebook.com", "fb.watch",
+    "tiktok.com", "linkedin.com",
+)
+
+
+def _probe_host_allowed(url: str) -> bool:
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return False
+    # Suffix match on a DOTTED boundary: "youtube.com.evil.example" must not pass.
+    return any(host == h or host.endswith("." + h) for h in _PROBE_HOSTS)
+
+
+@app.get("/health/extract", dependencies=[Depends(rate_limit(10, 60, "health_extract"))])
+def health_extract(live: bool = False, url: str | None = None):
     """Reports the installed yt-dlp version (the single biggest factor in save
     success rate). With ?live=1 it runs a real lightweight extraction against a
     known Short so breakage is caught before users hit it — wire this to uptime
-    monitoring."""
+    monitoring.
+
+    ⚠️ `?url=` RUNS THE PROBE AGAINST A SPECIFIC LINK, FROM THE SERVER'S OWN IP.
+    That is the whole point of it: extraction that works from a laptop proves
+    nothing, because YouTube and Instagram bot-block datacenter ranges and a
+    residential connection is not the environment that fails (see docs/CONTEXT.md
+    §4 and the TODO gotcha "Testing locally does NOT prove it works on Render").
+    Reproducing a user's failing save previously meant guessing; now it is
+        GET /health/extract?live=1&url=<the link that failed>
+    and the response says how much text came back and why it was rejected.
+
+    Restricted to known platform hosts (SSRF) and rate-limited. It reports
+    LENGTHS and verdicts, never the extracted content — this is a diagnostic,
+    not an open scraping proxy.
+    """
     import time
     import yt_dlp
     from app.services import extractor
+
+    target = _PROBE_URL
+    if url:
+        if not _probe_host_allowed(url):
+            raise HTTPException(
+                status_code=400,
+                detail="Probe URL must be a supported platform link (YouTube, Instagram, Facebook, TikTok, LinkedIn).",
+            )
+        target = url
 
     # Circuit state is the difference between "a user says saves are broken" and
     # a dashboard telling you Instagram started refusing us 40 minutes ago.
@@ -102,15 +144,37 @@ def health_extract(live: bool = False):
 
     started = time.monotonic()
     try:
-        result = extractor.extract_info(_PROBE_URL)
-        ok = bool((result.get("best_text") or "").strip() or result.get("thumbnail_url"))
+        result = extractor.extract_info(target)
+        text = (result.get("best_text") or "").strip()
+        has_thumb = bool(result.get("thumbnail_url"))
+
+        # ⚠️ `probe_ok` USED TO PASS ON A THUMBNAIL ALONE — TODO.md called this
+        # out as a known blind spot, and it is exactly why "YouTube descriptions
+        # fail 9 times out of 10" could not be confirmed or denied from
+        # production: the one instrument pointed at the problem could not see
+        # it. A green probe meant "we got *something*", which for a bot-blocked
+        # extraction is a thumbnail and nothing else — the precise failure being
+        # investigated.
+        #
+        # `probe_ok` is now TEXT-based, and every input to that judgement is
+        # reported separately so a degraded result says WHICH half broke.
+        # A thumbnail-only result is `degraded`, not `ok`.
+        text_ok = len(text) >= 50 and not extractor.is_link_only(text)
         info.update({
-            "status": "ok" if ok else "degraded",
-            "probe_ok": ok,
+            "status": "ok" if text_ok else ("degraded" if has_thumb else "down"),
+            "probe_ok": text_ok,
+            "probe_url": target,
+            "probe_text_len": len(text),
+            "probe_link_only": extractor.is_link_only(text) if text else False,
+            "probe_login_wall": extractor.is_login_wall(text) if text else False,
+            "probe_title_len": len((result.get("title") or "").strip()),
+            "probe_has_thumbnail": has_thumb,
+            "probe_needs_audio": bool(result.get("needs_audio")),
             "probe_ms": int((time.monotonic() - started) * 1000),
         })
     except Exception as e:
-        info.update({"status": "down", "probe_ok": False, "error": f"{type(e).__name__}: {e}"})
+        info.update({"status": "down", "probe_ok": False, "probe_url": target,
+                     "error": f"{type(e).__name__}: {e}"})
     # Re-read AFTER the probe. `breakers` was captured when `info` was built —
     # i.e. BEFORE extract_info ran and called record_result — so a failing probe
     # was returned next to a breaker count that hadn't registered it yet. Two
