@@ -353,3 +353,65 @@ class TestProbeUrlAllowlist:
     def test_malformed_url_is_refused_not_raised(self):
         assert main._probe_host_allowed("") is False
         assert main._probe_host_allowed("not a url") is False
+
+
+class TestPlatformNativeSurfaces:
+    """Instagram's own embed iframe and Meta's own tokenless oEmbed.
+
+    ⚠️ WHY THESE EXIST. The page fallback asks for the normal web page, which
+    Instagram serves to a residential IP and refuses to a datacenter one — so it
+    worked perfectly in local testing and returned NOTHING from Render, every
+    time. That is the whole "Instagram saves have no summary" report.
+
+    `/embed/captioned/` has to carry the caption for third-party embeds to
+    render, so it is served without cookies, without a token, to any honest
+    non-empty User-Agent. No network here — the parsing is what regresses.
+    """
+
+    IG_EMBED = (
+        '<div class="Caption"><a class="CaptionUsername">bigleg_._</a> '
+        'Heat the pan first, then add the oil. #cooking</div>'
+        '<script>{"display_url":"https://scontent.cdninstagram.com/v/pic.jpg"}</script>'
+    )
+
+    def test_caption_is_extracted(self, monkeypatch):
+        monkeypatch.setattr(extractor._http, "get",
+                            lambda *a, **k: httpx.Response(200, text=self.IG_EMBED))
+        out = extractor.instagram_embed("https://www.instagram.com/reel/ABC123/")
+        assert "Heat the pan first" in out["description"]
+
+    def test_the_username_is_split_out_not_left_in_the_caption(self, monkeypatch):
+        """The embed prefixes the handle inside the caption div. Left in, it
+        becomes the first thing the summarizer reads as content."""
+        monkeypatch.setattr(extractor._http, "get",
+                            lambda *a, **k: httpx.Response(200, text=self.IG_EMBED))
+        out = extractor.instagram_embed("https://www.instagram.com/reel/ABC123/")
+        assert out["uploader"] == "bigleg_._"
+        assert not out["description"].startswith("bigleg_._")
+
+    def test_private_or_deleted_post_yields_empty_not_garbage(self, monkeypatch):
+        """An empty Caption div is a clean 'not public' signal — it must not be
+        mistaken for content, or we pay Claude to summarize nothing."""
+        monkeypatch.setattr(extractor._http, "get",
+                            lambda *a, **k: httpx.Response(200, text='<div class="Caption"></div>'))
+        assert extractor.instagram_embed("https://www.instagram.com/reel/ABC123/")["description"] == ""
+
+    def test_non_instagram_url_is_ignored(self):
+        assert extractor.instagram_embed("https://youtube.com/shorts/x") == {}
+
+    def test_facebook_reel_url_is_normalized_to_watch(self, monkeypatch):
+        """⚠️ THE URL FORM MATTERS. `facebook.com/reel/<id>` returns an EMPTY
+        blockquote with no description — it does not even validate the id —
+        while `/watch/?v=<id>` returns the full text. This pins the rewrite."""
+        seen = {}
+
+        def _fake_get(url, params=None, **k):
+            seen["url"] = params.get("url") if params else None
+            return httpx.Response(200, json={"html": "<blockquote><p>The real description</p></blockquote>",
+                                             "author_name": "Some Page"})
+
+        monkeypatch.setattr(extractor._http, "get", _fake_get)
+        out = extractor.facebook_oembed("https://www.facebook.com/reel/835321340249928")
+        assert seen["url"] == "https://www.facebook.com/watch/?v=835321340249928"
+        assert out["description"] == "The real description"
+        assert out["uploader"] == "Some Page"

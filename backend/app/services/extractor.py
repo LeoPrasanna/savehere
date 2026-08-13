@@ -409,6 +409,118 @@ def _youtube_oembed(url: str) -> dict:
     return {}
 
 
+# An HONEST User-Agent. Meta's Automated Data Collection Terms require that you
+# "only use IP addresses, user-agent strings, and other identifiers that identify
+# your services" — so the `facebookexternalhit` spoof in _PREVIEW_HEADERS is a
+# named violation of the one clause that is unambiguous. The endpoints below
+# serve the caption to ANY non-empty UA (verified: curl, python-requests and
+# SaveHere/1.0 all return 200), so there was never anything to gain by lying.
+# Bonus: a non-browser UA gets a 128 KB response instead of 605 KB.
+_HONEST_UA = {"User-Agent": "SaveHere/1.0 (+https://savehere.app)"}
+
+_IG_SHORTCODE = re.compile(r"instagram\.com/(?:reel|reels|p|tv)/([A-Za-z0-9_-]+)", re.I)
+_FB_VIDEO_ID = re.compile(r"facebook\.com/(?:reel/|watch/?\?v=|[^/]+/videos/)(\d+)", re.I)
+# ⚠️ `[^>]*>` consumes the REST OF THE OPENING TAG. Without it the capture
+# starts at the tag's own closing bracket, so an empty caption div yielded ">"
+# rather than "" — which is truthy, clears an emptiness check, and would have
+# sent a single angle bracket to the summarizer as though it were a caption.
+_CAPTION_DIV = re.compile(r'class="Caption"[^>]*>(.*?)</div>', re.S)
+_OEMBED_P = re.compile(r"<p>(.*?)</p>", re.S)
+
+
+def _strip_tags(html: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html)).strip()
+
+
+def instagram_embed(url: str) -> dict:
+    """Caption + thumbnail for a public Instagram reel/post, from Instagram itself.
+
+    ⚠️ THIS IS THE FIX FOR "INSTAGRAM SAVES HAVE NO SUMMARY". The page fallback
+    below asks for the normal web page, which Instagram serves to a residential
+    IP and refuses to a datacenter one — so it worked in local testing and
+    returned nothing at all from Render, every time.
+
+    `/embed/captioned/` is the iframe Instagram hands to any site embedding a
+    post. It HAS to carry the caption for embeds to render, so it is served
+    without cookies, without a token, and to a plain honest User-Agent.
+    Verified against a real public reel: 200, 128 KB, full caption.
+
+    ⚠️ The caption div is prefixed with the username as a link, so the first
+    token is the handle, not the caption. It is returned separately as
+    `uploader` rather than left to pollute the text handed to the summarizer.
+
+    An EMPTY caption div is a clean signal that the post is private or deleted —
+    report that honestly rather than guessing.
+    """
+    m = _IG_SHORTCODE.search(url)
+    if not m:
+        return {}
+    try:
+        r = _http.get(
+            f"https://www.instagram.com/reel/{m.group(1)}/embed/captioned/",
+            headers=_HONEST_UA, follow_redirects=True, timeout=12,
+        )
+        if r.status_code != 200:
+            return {}
+        html = r.text
+    except Exception as e:
+        logger.info(f"[IG-EMBED] {url}: {type(e).__name__}: {e}")
+        return {}
+
+    cap = _CAPTION_DIV.search(html)
+    text = _strip_tags(cap.group(1)) if cap else ""
+    # The leading "> handle" the embed injects before the caption proper.
+    uploader = ""
+    lead = re.match(r"^>?\s*([A-Za-z0-9_.]{2,30})\s+", text)
+    if lead:
+        uploader = lead.group(1)
+        text = text[lead.end():].strip()
+
+    thumb = ""
+    t = re.search(r'"display_url":"(.*?)"', html)
+    if t:
+        thumb = t.group(1).encode().decode("unicode_escape")
+
+    return {"description": text, "uploader": uploader, "image": thumb}
+
+
+def facebook_oembed(url: str) -> dict:
+    """Description for a public Facebook video, via Meta's OWN tokenless oEmbed.
+
+    This is the sanctioned route — `graph.facebook.com/v25.0/oembed_video` went
+    tokenless on 2026-06-15, needs no app, no App Review and no token, and is
+    the one option here that is not merely tolerated but published.
+
+    ⚠️ THE URL FORM MATTERS. `facebook.com/reel/<id>` returns an EMPTY
+    blockquote with no description — it does not even validate the id — while
+    `facebook.com/watch/?v=<id>` returns the full text. Normalizing first is the
+    difference between this working and silently returning nothing.
+    """
+    m = _FB_VIDEO_ID.search(url)
+    if not m:
+        return {}
+    canonical = f"https://www.facebook.com/watch/?v={m.group(1)}"
+    try:
+        r = _http.get(
+            "https://graph.facebook.com/v25.0/oembed_video",
+            params={"url": canonical, "maxwidth": 640},
+            headers=_HONEST_UA, timeout=12,
+        )
+        if r.status_code != 200:
+            return {}
+        data = r.json()
+    except Exception as e:
+        logger.info(f"[FB-OEMBED] {url}: {type(e).__name__}: {e}")
+        return {}
+
+    body = _OEMBED_P.search(data.get("html") or "")
+    return {
+        "description": _strip_tags(body.group(1)) if body else "",
+        "uploader": (data.get("author_name") or "").strip(),
+        "image": "",   # oembed_video carries no thumbnail; the page fallback may.
+    }
+
+
 def _fetch_page(url: str) -> Optional[str]:
     """Fetch a page's HTML through the pooled client, trying each crawler identity
     in turn, serialised per host with a little jitter.
@@ -828,8 +940,28 @@ def extract_info(url: str) -> dict:
     # the ungated link-preview surface — for LinkedIn this returns the FULL post body
     # via JSON-LD (~2.5k chars in practice), so no paid scraper is needed.
     page_meta = _extract_from_page(url)
+
+    # ── Platform-native surfaces, tried AFTER the page but allowed to WIN ──
+    #
+    # Both work from a datacenter IP, which the page fallback does not: the page
+    # fetch is why Instagram saves arrived with a thumbnail and no text from
+    # Render while working perfectly in local testing. These are Instagram's own
+    # embed iframe and Meta's own tokenless oEmbed — the caption is what they
+    # exist to serve.
+    #
+    # Ordered "page first, then override" rather than replacing it, because the
+    # page path still carries things these do not (og:image:alt, LinkedIn's
+    # JSON-LD body). We only take a native result when it is genuinely richer.
+    native: dict = {}
+    if platform == "instagram":
+        native = instagram_embed(url)
+    elif platform == "facebook":
+        native = facebook_oembed(url)
+
     title = page_meta.get("title") or ""
     description = page_meta.get("description") or ""
+    if len((native.get("description") or "").strip()) > len(description.strip()):
+        description = native["description"].strip()
     best_text = description
     image_alt = (page_meta.get("image_alt") or "").strip()
 
@@ -846,10 +978,10 @@ def extract_info(url: str) -> dict:
         "caption": description,
         "transcript": "",
         "best_text": best_text,
-        "thumbnail_url": page_meta.get("image") or "",
+        "thumbnail_url": page_meta.get("image") or native.get("image") or "",
         "duration": 0,
         "platform": platform,
-        "uploader": "",
+        "uploader": native.get("uploader") or "",
         "needs_audio": False,
         "login_required": not best_text,
         # Cache page extractions that actually yielded text (e.g. LinkedIn via JSON-LD).
