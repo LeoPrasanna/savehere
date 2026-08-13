@@ -8,6 +8,7 @@ import * as Clipboard from 'expo-clipboard';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Icon } from '../../components/Icon';
+import { MascotLoader } from '../../components/MascotLoader';
 import { api, Reel, Task, TaskListResponse, ItineraryResponse, Usage, ReelTodo, thumbUrl } from '../../services/api';
 import { formatDue } from '../../services/todoDates';
 import { TODO_ADD_LABEL, TODO_ADDED_LABEL } from '../../constants/todoBrand';
@@ -309,7 +310,7 @@ export default function ReelDetailScreen() {
   };
 
   if (loading) return (
-    <View style={styles.center}><ActivityIndicator color={colors.accent} size="large" /></View>
+    <View style={styles.center}><MascotLoader label="Opening your save" /></View>
   );
   if (error) return (
     <View style={[styles.center, { padding: spacing.xl }]}>
@@ -473,7 +474,10 @@ export default function ReelDetailScreen() {
 
         {isSummarizing ? (
           <View style={styles.emptySummary}>
-            <ActivityIndicator color={colors.accent} style={{ marginBottom: spacing.xs }} />
+            {/* The face, not a spinner — this is the longest wait in the app
+                (a cold backend plus a Claude call) and the one most worth
+                making feel like the app is still with you. */}
+            <MascotLoader label="Reading this one for you" />
             <Text style={styles.emptyTitle}>Summarizing…</Text>
             <Text style={styles.emptyHint}>Reading the content and writing your summary. This card is already saved — feel free to leave; it'll be ready when you come back.</Text>
           </View>

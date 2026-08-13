@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Stack } from 'expo-router/stack';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, ActivityIndicator, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, BackHandler } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -10,6 +10,8 @@ import {
   useFonts, Inter_400Regular, Inter_500Medium, Inter_600SemiBold,
 } from '@expo-google-fonts/inter';
 import { HeaderMenuButton } from '../components/HomeButton';
+import { MascotLoader } from '../components/MascotLoader';
+import { saveSharedLink } from '../services/shareSave';
 import { LoginScreen } from '../components/LoginScreen';
 import { Confetti } from '../components/Confetti';
 import { TabBar } from '../components/TabBar';
@@ -108,6 +110,7 @@ function AppProfilePanel() {
 function ShareIntentHandler() {
   const router = useRouter();
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!hasShareIntent) return;
@@ -120,10 +123,43 @@ function ShareIntentHandler() {
     // an early return on a non-URL share (a photo, a plain note) must still
     // clear it — otherwise the same dead intent re-fires on every foreground.
     resetShareIntent();
-    if (url) router.push({ pathname: '/save', params: { url } });
+    if (!url) return;
+
+    /**
+     * ⚠️ SAVES IN THE BACKGROUND — IT DOES NOT OPEN THE SAVE SCREEN.
+     *
+     * A share is an interruption of something else: you are mid-scroll in
+     * Instagram, you want the reel kept, you want to carry on scrolling.
+     * Routing to /save and making you watch a progress screen breaks exactly
+     * the flow this feature exists to protect (owner, 2026-08-12). There is
+     * nothing to decide — the URL is known, the save is unconditional, and the
+     * summary was always asynchronous.
+     *
+     * On success we hand control straight back to the app you came from.
+     * `exitApp` finishes OUR activity, which returns you to Instagram; it is
+     * only ever reached on a share, never on a normal launch.
+     *
+     * On FAILURE we deliberately stay open. A notification already said what
+     * went wrong, but bouncing someone out of a failed save is how a link gets
+     * quietly lost.
+     */
+    setSaving(true);
+    saveSharedLink(url).then(ok => {
+      setSaving(false);
+      if (ok && Platform.OS === 'android') BackHandler.exitApp();
+      else if (!ok) router.push({ pathname: '/save', params: { url } });
+    });
   }, [hasShareIntent, shareIntent, router, resetShareIntent]);
 
-  return null;
+  // Android still LAUNCHES the app to deliver ACTION_SEND (Phase B removes
+  // that with a translucent activity), so there is a brief flash either way.
+  // Better it says what is happening than shows a blank canvas.
+  if (!saving) return null;
+  return (
+    <View style={styles.shareOverlay}>
+      <MascotLoader label="Saving to your library" />
+    </View>
+  );
 }
 
 // Gate the whole app on auth: spinner during the initial session check, the login
@@ -161,9 +197,10 @@ function Gate() {
           "0" and React warned about duplicate children on every render. */}
       <StatusBar key={`bar-${schemeEpoch}`} style={isDark() ? 'light' : 'dark'} />
       {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.textPrimary} size="large" />
-        </View>
+        // MascotLoader holds off for 350ms before drawing anything, so a warm
+        // start shows no loader at all rather than a flash of one — which is
+        // also the cheapest "make it faster" there is.
+        <View style={styles.center}><MascotLoader /></View>
       ) : session ? (
         <>
           <AppStack key={`app-${schemeEpoch}`} />
@@ -205,4 +242,12 @@ export default function RootLayout() {
 // between schemes. A plain StyleSheet.create here paints white-on-white.
 const styles = themed(() => StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background },
+  // Covers whatever the app happened to be showing when the share arrived —
+  // the user came from Instagram and should see one thing, not a half-loaded
+  // library behind a spinner.
+  shareOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.background,
+  },
 }));
