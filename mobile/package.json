@@ -47,6 +47,7 @@
     "web": "expo start --web",
     "typecheck": "node --stack-size=16000 ./node_modules/typescript/bin/tsc --noEmit",
     "test:todos": "node --experimental-strip-types --no-warnings services/todoMerge.test.ts",
+    "test:notifications": "node --experimental-strip-types --no-warnings services/notifyLog.test.ts",
     "test:roll": "node --experimental-strip-types --no-warnings components/rollGeometry.test.ts"
   },
   "private": true

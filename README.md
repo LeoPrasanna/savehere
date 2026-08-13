@@ -28,6 +28,10 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 - 📲 **Share directly from the source app** — SaveHere appears in the Android/iOS
   share sheet, so a reel goes from Instagram into your library without a copy-paste.
   (Needs a native build; `expo-share-intent`, wired in `mobile/app/_layout.tsx`.)
+- 🔔 **Notification centre** — a background share posts a local notification, and
+  the last 10 are kept in the hamburger menu with read/unread and per-item delete.
+  The OS shade is not a record; this is the only place a save made while you were
+  in Instagram can still be audited afterwards (`mobile/services/notifyLog.ts`).
 - AI bullet summaries + auto tags + auto category (Claude Haiku) — grounded in the actual captions/transcript, never invented
 - Works in any language; summaries match the source
 - Auto-saved personal notes; editable category; re-summarize (capped)
@@ -267,6 +271,9 @@ Plus: **retrieval, not dumping** — ask sends only the most relevant saves to t
 cd backend && python -m pytest tests/ -q     # 250 tests across 24 files
 cd mobile  && npm run typecheck              # mobile type check (uses --stack-size=16000)
 cd mobile  && npx expo export --platform web # validate the web build
+cd mobile  && npm run test:notifications     # notification-drawer list ops + tolerant parse
+cd mobile  && npm run test:todos             # to-do list reconciliation
+cd mobile  && npm run test:roll              # tagline roll geometry
 ```
 
 CI runs both on push/PR, path-scoped so a mobile-only change doesn't run the Python suite (`.github/workflows/ci.yml`, `mobile-ci.yml`).
