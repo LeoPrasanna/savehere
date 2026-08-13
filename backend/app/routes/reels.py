@@ -350,6 +350,22 @@ def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
             _store_extraction(db, reel.url, info)
 
         filled = _reel_from_info(reel.user_id, reel.url, info)
+        # ⚠️ RE-READ BEFORE FILLING. The block below reasons carefully about the
+        # client-metadata endpoint having populated this row mid-extraction —
+        # and then acted on the copy loaded BEFORE that happened, which made the
+        # whole "only replace with something better" rule compare against stale
+        # values. `reel.title` was still the "Instagram Reel" placeholder in this
+        # session even after the phone had delivered the real one, so
+        # `_weak_title(reel.title)` said True and the placeholder was written
+        # straight back over it. That is the "title is right, then the summary
+        # finishes and it reverts to Instagram Reel" report (owner, 2026-08-12).
+        #
+        # The refresh costs one SELECT on a path that has just spent seconds in
+        # yt-dlp, and it is what makes every guard below actually compare
+        # against what is IN THE DATABASE rather than what was there when this
+        # background task started.
+        db.refresh(reel)
+
         # Non-destructive fill. The client-metadata endpoint may have already
         # populated this row from the user's own IP (see client_metadata) while
         # this background extraction was still running — a blocked server extract

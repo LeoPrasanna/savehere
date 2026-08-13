@@ -1,0 +1,29 @@
+name: Android preview build
+
+# ── WHY THIS EXISTS ────────────────────────────────────────────────────────
+# Every round so far has ended with "merge, then go and run eas build by hand,
+# then remember to commit the versionCode it wrote back". That last step has
+# already been forgotten once, and forgetting it produces a build Android
+# REFUSES to install (equal versionCode), discovered ~40 minutes later at the
+# end of a queue. Automating it removes the manual step and the failure mode.
+#
+# ⚠️ REQUIRES THE EAS GITHUB APP to be connected to this repository once
+# (expo.dev -> project -> GitHub -> Connect). Until that is done this file is
+# inert — it will not error, it simply never fires.
+#
+# ⚠️ FREE-TIER QUEUE IS THE REAL COST. Builds have queued for 88 minutes on
+# this project. Firing one on every merge to develop is fine at the current
+# pace (a few merges a day) but will feel slow if develop gets busy; narrow the
+# trigger to tags, or switch to `workflow_dispatch`, if that day comes.
+
+on:
+  push:
+    branches: ['develop']
+
+jobs:
+  build_android_preview:
+    name: Build Android APK (preview)
+    type: build
+    params:
+      platform: android
+      profile: preview

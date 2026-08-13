@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Stack } from 'expo-router/stack';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -112,6 +112,25 @@ function ShareIntentHandler() {
   const { hasShareIntent, shareIntent, resetShareIntent } = useShareIntentContext();
   const [saving, setSaving] = useState(false);
 
+  /**
+   * ⚠️ EVERY URL IS HANDLED AT MOST ONCE PER PROCESS.
+   *
+   * Owner report, 2026-08-12: sharing returned you to Instagram, but opening
+   * SaveHere afterwards re-ran the share — landing you back on the platform or
+   * on Home instead of the app you asked for.
+   *
+   * `resetShareIntent()` alone is not enough here, and the reason is specific
+   * to what we do next: `BackHandler.exitApp()` finishes the activity while
+   * the process may survive, so the reset can be torn down before the native
+   * module has durably cleared it. The next launch then reads the SAME intent
+   * and re-fires — a second save, a second notification, and a navigation the
+   * user never asked for.
+   *
+   * A ref, not state: it must be readable synchronously inside this effect and
+   * must not itself trigger a render.
+   */
+  const handled = useRef<Set<string>>(new Set());
+
   useEffect(() => {
     if (!hasShareIntent) return;
     // Instagram and YouTube share a bare URL; some apps share "Look at this
@@ -124,6 +143,11 @@ function ShareIntentHandler() {
     // clear it — otherwise the same dead intent re-fires on every foreground.
     resetShareIntent();
     if (!url) return;
+    // Re-delivery of an intent we have already acted on. Silently ignored: the
+    // save happened, and the honest thing is to leave the user wherever they
+    // deliberately navigated rather than hijack the screen a second time.
+    if (handled.current.has(url)) return;
+    handled.current.add(url);
 
     /**
      * ⚠️ SAVES IN THE BACKGROUND — IT DOES NOT OPEN THE SAVE SCREEN.
