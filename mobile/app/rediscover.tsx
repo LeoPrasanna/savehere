@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, FlatList, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { api, Reel } from '../services/api';
+import { MascotLoader } from '../components/MascotLoader';
 import { ReelCard } from '../components/ReelCard';
 import { Label, Body, Title, Rule } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
@@ -37,7 +38,7 @@ export default function RediscoverScreen() {
   }, [reels]);
 
   if (loading) {
-    return <View style={styles.center}><ActivityIndicator color={colors.textPrimary} size="large" /></View>;
+    return <View style={styles.center}><MascotLoader label="Finding something worth a second look" /></View>;
   }
 
   if (error) {

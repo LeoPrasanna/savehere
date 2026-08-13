@@ -3,6 +3,7 @@ import { View, Text, ScrollView, StyleSheet, ActivityIndicator } from 'react-nat
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from '../../components/Icon';
+import { MascotLoader } from '../../components/MascotLoader';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, WorkoutExercise, WorkoutPlan } from '../../services/api';
 import { Pressable } from '../../components/Pressable';
@@ -64,7 +65,7 @@ export default function WorkoutPlanScreen() {
 
   const totalSets = plan?.exercises.reduce((s, e) => s + (e.sets ?? 1), 0) ?? 0;
 
-  if (loading) return <View style={styles.center}><ActivityIndicator color={colors.accent} size="large" /></View>;
+  if (loading) return <View style={styles.center}><MascotLoader label="Loading your plan" /></View>;
   if (error || !plan) return (
     <View style={styles.center}>
       <Icon name="barbell-outline" size={48} color={colors.textTertiary} />
