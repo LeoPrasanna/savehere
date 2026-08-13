@@ -186,23 +186,11 @@ class ShareActivity : Activity() {
             return
         }
 
+        // No key yet: never signed in on this device, or this build's first
+        // run. Fall back to Phase A rather than dropping the link.
         val config = readConfig(this)
         if (config == null) {
-            // No key yet: never signed in on this device, or this build's first
-            // run. Fall back to Phase A — open the app WITH the share so the
-            // existing JS handler saves it. A flash beats a lost link.
-            //
-            // The component is explicit, so no intent filter has to match; the
-            // type must be set because expo-share-intent's activity listener
-            // ignores an intent whose `type` is null.
-            val launch = packageManager.getLaunchIntentForPackage(packageName)
-            if (launch != null) {
-                launch.action = Intent.ACTION_SEND
-                launch.type = "text/plain"
-                launch.putExtra(Intent.EXTRA_TEXT, url)
-                launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                try { startActivity(launch) } catch (t: Throwable) { }
-            }
+            forwardToApp(url)
             finish()
             return
         }
@@ -218,8 +206,30 @@ class ShareActivity : Activity() {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(work)
             else startService(work)
         } catch (t: Throwable) {
+            // ⚠️ Android 12+ can still refuse a foreground-service start in
+            // edge cases (an exemption we thought we had, expired). Falling
+            // through to finish() here would make the share VANISH — no app,
+            // no save, no notification, and the user watched nothing happen.
+            forwardToApp(url)
         }
         finish()
+    }
+
+    /**
+     * Hand the share to the app itself — Phase A's path. A 1–2 s flash beats a
+     * lost link, every time.
+     *
+     * The component is explicit, so no intent filter has to match (MainActivity
+     * no longer declares one). The `type` MUST be set: expo-share-intent's
+     * activity listener ignores an intent whose `type` is null.
+     */
+    private fun forwardToApp(url: String) {
+        val launch = packageManager.getLaunchIntentForPackage(packageName) ?: return
+        launch.action = Intent.ACTION_SEND
+        launch.type = "text/plain"
+        launch.putExtra(Intent.EXTRA_TEXT, url)
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try { startActivity(launch) } catch (t: Throwable) { }
     }
 }
 
@@ -255,7 +265,6 @@ class ShareSaveService : Service() {
         const val EXTRA_API = "api"
         const val EXTRA_KEY = "key"
         private const val ONGOING_ID = 4201
-        private const val RESULT_ID = 4202
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -288,7 +297,11 @@ class ShareSaveService : Service() {
             appendNote(this, title, body)
             try {
                 val mgr = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-                mgr?.notify(RESULT_ID, buildNotification(this, title, body, false))
+                // A fresh id per save. A fixed one meant two shares in quick
+                // succession left only the second notification on screen, so
+                // the first save looked like it never happened.
+                val id = (System.currentTimeMillis() % 100000L).toInt()
+                mgr?.notify(id, buildNotification(this, title, body, false))
             } catch (t: Throwable) {
             }
             stopSelf(startId)
