@@ -9,7 +9,7 @@ import { Icon } from './Icon';
 import { Label, Wordmark } from './kit';
 import { colors, spacing, font, tracking, typeface, radius, themed, gradients, hazeLocations } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
-import { emitUi } from '../services/uiBus';
+import { emitUi, onUi } from '../services/uiBus';
 import { ASK_MIN_REELS } from '../constants/limits';
 import { TAB_BAR_CLEARANCE } from './TabBar';
 import { getSaveCount, hydrateSaveCount, rememberSaveCount } from '../services/saveCount';
@@ -76,6 +76,12 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
       .then(d => { setTotal(d.total); rememberSaveCount(d.total); })
       .catch(() => setFetchError(true));
   }, [attempt]));
+
+  // A share saved while the app was backgrounded changes this count without any
+  // router focus event — the native share Activity never enters JS. `attempt`
+  // is the screen's existing refetch seam, so this reuses it rather than adding
+  // a second fetch path. See the AppState listener in app/_layout.tsx.
+  useEffect(() => onUi('appResumed', () => setAttempt(a => a + 1)), []);
 
   // An error only takes over the screen when there is nothing remembered to
   // show. With a known count the screen stays useful and the failure is a

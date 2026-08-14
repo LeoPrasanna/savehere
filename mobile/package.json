@@ -49,7 +49,9 @@
     "test:todos": "node --experimental-strip-types --no-warnings services/todoMerge.test.ts",
     "test:library": "node --experimental-strip-types --no-warnings services/libraryEdits.test.ts",
     "test:notifications": "node --experimental-strip-types --no-warnings services/notifyLog.test.ts",
-    "test:roll": "node --experimental-strip-types --no-warnings components/rollGeometry.test.ts"
+    "test:roll": "node --experimental-strip-types --no-warnings components/rollGeometry.test.ts",
+    "test:search": "node --experimental-strip-types --no-warnings services/librarySearch.test.ts",
+    "test:quota": "node --experimental-strip-types --no-warnings services/quotaReset.test.ts"
   },
   "private": true
 }

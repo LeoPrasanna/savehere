@@ -50,9 +50,10 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 
 ### Find & rediscover
 
-- 🗂️ **Category filtering** across the library — sixteen categories assigned by the summarizer, filterable from the grid. *(A category-aware smart search shipped and was removed in Aug 2026 once the UI entry point went; narrowing is by category today.)*
+- 🗂️ **Category filtering** across the library — sixteen categories assigned by the summarizer, filterable from the grid
+- 🔎 **Search**, on your device — titles, tags, categories, summaries and your own notes, ranked by relevance, with synonyms ("gym" finds fitness) and typo tolerance. Every keystroke is a local scan of a library that was fetched and tokenized once: **no request per keystroke, no AI action, works offline.** *(The Aug 2026 server-side ranker was ported to TypeScript for exactly this reason — search fires per keystroke, and the free-tier backend cold-starts in ~50 s.)*
 - 🧭 **Rediscover** — resurfaces older saves so they don't get forgotten
-- 💬 **Ask your library** — natural-language questions answered from your own saves, with sources, **streamed token-by-token** (first words in ~1.4 s instead of a 3 s wall of silence)
+- 💬 **Ask your library** — natural-language questions answered from your own saves, with sources, **streamed token-by-token** (first words in ~1.4 s instead of a 3 s wall of silence). Unlike search, each question costs an AI action; when the daily budget is spent the screen says exactly when it comes back and points at search.
 
 ### Design
 
@@ -189,11 +190,11 @@ savehere/
 │   │   ├── quota.py               # atomic per-user daily AI quota + ai_action_log
 │   │   ├── ratelimit.py           # per-IP burst guard (proxy-aware)
 │   │   ├── routes/                # reels, workout (tasks/recipes/workouts/itineraries), ask, todos, account, billing
-│   │   └── services/              # extractor, summarizer, workout_extractor, librarian, search, transcriber
+│   │   └── services/              # extractor, summarizer, workout_extractor, librarian, transcriber
 │   ├── scripts/                   # set_tier.py, dev_tier.py, enable_rls.sql
 │   └── tests/                     # pytest suite (250 tests)
 ├── mobile/                        # Expo Router app
-│   ├── app/                       # library, save, reel detail, ask, rediscover, todos, help, pro, workout
+│   ├── app/                       # library, save, reel detail, ask, search, rediscover, todos, help, support, pro, workout
 │   ├── components/                # kit.tsx (design primitives), ReelCard, TaskList, TodoEditor, Landing, Icon, …
 │   ├── constants/                 # theme (design system + reference lock), pricing, features, todoBrand
 │   └── services/                  # api.ts (typed client), todoDates.ts + todoSettings.ts, …
@@ -280,6 +281,8 @@ cd mobile  && npm run test:library           # library reconciliation (in-flight
 cd mobile  && npm run test:notifications     # notification-drawer list ops + tolerant parse
 cd mobile  && npm run test:todos             # to-do list reconciliation
 cd mobile  && npm run test:roll              # tagline roll geometry
+cd mobile  && npm run test:search            # library search ranking (category, synonyms, typos, scale)
+cd mobile  && npm run test:quota             # "AI comes back at…" day/clock arithmetic
 ```
 
 CI runs both on push/PR, path-scoped so a mobile-only change doesn't run the Python suite (`.github/workflows/ci.yml`, `mobile-ci.yml`).
