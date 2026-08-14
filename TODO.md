@@ -5,6 +5,83 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ SDK 57 UPGRADE — DECIDED, SEQUENCED AFTER ROUND 4 (2026-08-14)
+
+`npx expo-doctor` fails one check: **Hermes V1 memory regression**, `expo@56.0.19`
+on Hermes `250829098.0.10`. Researched properly before deciding; the doctor is
+right, but **not for the reason it looks like**.
+
+**What it actually is** `[Certain]` — Hermes V1 attaches debug metadata to every
+function evaluated via `eval`, and worklets ship as strings `eval`'d onto the UI
+runtime. **512 KB per unique worklet.** It is a step-function rise in the memory
+FLOOR, allocated at init — not a leak, not GC pressure. Both platforms.
+Evidence: a bare example app went **149 → 266 MB**; a real production app
+**~580 MB → ~1.1 GB** ([expo/expo#46519](https://github.com/expo/expo/issues/46519),
+[react-native#57059](https://github.com/react/react-native/issues/57059),
+[Software Mansion write-up](https://swmansion.com/blog/how-worklets-bundle-mode-accidentally-fixed-Hermes-v1-memory-regression/)).
+
+**Why it reaches SaveHere, which is not obvious.** The trigger is *importing*
+`react-native-reanimated` / `react-native-worklets` — not using them heavily.
+This app uses **zero Reanimated APIs directly**: every `Animated.*` in the
+codebase is RN's legacy `Animated` (`ReelCard`, `LoginScreen`, `SkeletonCard`,
+`OnboardingModal`, `Pressable`, `TaskList`, `save`, `workout/session`), and there
+are **0 `'worklet'` directives in our own source**. The only consumer is **`moti`**,
+in 5 files (`Confetti`, `MascotLoader`, `RollingTagline`, `TodoGoalBar`, `todos`).
+471 worklet definitions sit in the dependency graph (reanimated 398, worklets 62,
+moti 11). `[Likely]` only a subset is evaluated, so realistic cost is tens of MB.
+
+⚠️ **The unvirtualized masonry does NOT multiply this, and assuming it did was
+wrong.** Worklet cost is per-DEFINITION, not per-instance — mounting 200
+`ReelCard`s allocates no extra metadata. Same for `libraryIndex`'s token `Set`s
+(plain JS heap, and only built when someone opens search).
+⚠️ **But `app/index.tsx`'s `loadMore` is a real, independent memory problem that
+STACKS on the raised floor**: it appends pages and never unmounts (the documented
+trade in the `ponytail:` note at the masonry), so decoded bitmaps for every tile
+scrolled past stay resident all session. Hermes raises the floor, the grid climbs
+from it, and they meet the OOM ceiling together on a cheap test device. **Capping
+the retained window is worth doing on SDK 56 and 57 alike** — it is the half of
+this we actually own.
+⚠️ **No source anywhere confirms an actual OOM CRASH** — every report documents
+elevated RSS only. The doubling is real; the crash is inference.
+
+**All three narrower mitigations are dead — do not spend time on them:**
+| Escape hatch | Verdict |
+|---|---|
+| Pin a fixed Hermes via `expo-build-properties` | ❌ **Impossible** — no Hermes version field exists in its option list `[Certain]` |
+| `useHermesV1: false` on SDK 56 | ❌ **Reported ineffective** — expo/expo#46519 reporter still saw the rise `[Likely]` |
+| Worklets Bundle Mode on the installed 0.8.3 | ❌ **Reject** — `bundleMode` does exist in 0.8.3, but setup requires **patching `metro` and `metro-runtime`**, upstream-labelled "temporary workarounds". More risk than the upgrade, for less. |
+
+**Blast radius of 56 → 57 is smaller than feared.** 15 `~56.x` pins move via one
+`npx expo install expo@^57.0.9 --fix` (RN 0.85.3→0.86, reanimated 4.3.1→4.5,
+worklets 0.8.3→0.10; React stays 19.2). **`expo-share-intent` v8.0.1 exists with
+`peerDependencies: {"expo": "^57"}`** — the "SDK 56 pin" note below is resolved by
+a `7 → 8` bump, so it is **not** a blocker. `plugins/withInvisibleShare.js` is
+`[Likely]` low risk: it touches no Gradle, no dependencies and no resources — one
+manifest edit and one `writeFileSync` — and SDK 57's prebuild-cleans-native-dirs
+change is a non-issue here because we are CNG and never commit `android/`.
+No New Architecture default change.
+
+⚠️ **Two things to watch, both stated as unverified.** (1) **RN 0.86 ships
+edge-to-edge FIXES** to `Dimensions`, `KeyboardAvoidingView` and `measureInWindow`
+— our `behavior="padding"` on all four KAVs is a *compensation* for the SDK 54
+`adjustResize` breakage those fixes address, so it may now **double-compensate**.
+Re-test every KAV after upgrading; this is the one concrete code change to expect.
+(2) **SDK 57's Kotlin/Gradle/compileSdk versions could not be established** from
+any reachable source — which matters because `ShareSave.kt` **has never been
+compiled by anything**, so an SDK 57 build would put a first-time-compiled file
+through a possibly-new compiler.
+
+**DECISION: ship round 4 on SDK 56, then make SDK 57 the very next branch —
+before the round-5 build.** Not either/or, sequenced. Reasons: rounds 1–3 already
+shipped this exact regression with no reported crash; there is ~1 real user and
+zero OOM evidence; and bundling an SDK major into a build that already carries an
+`AppState` listener, `dismissOverlays` across six modals and a never-compiled
+Kotlin Activity means a crash would tell us **which of four things** broke. This
+repo has paid for that conflation before. The SDK 57 build then has exactly one
+job — prove the upgrade and compile `ShareSave.kt` for the first time.
+
+---
+
 ## ▶ ANDROID TEST ROUND 4 (2026-08-14) — 2 bugs, 1 question, 3 features
 
 Branch `feat/share-refresh-quota-support`. All six items traced before any edit.
@@ -71,7 +148,7 @@ those 5 touch the UI, so every finding was real against current code.
 | 2 | Tab capsule renders square | Android does **not** clip `overflow:hidden` children to a parent's *rounded* shape — only its bounding rect. The pill's `LinearGradient` fill painted square corners over the border. Fill now carries its own radius. |
 | 3 | "Paste copied link" unintuitive | Placeholder is the instruction; tapping the empty field pastes, falls back to focusing for typing. Separate paste button became a Clear button. |
 | 4 | Ask flashes before the lock | `savedCount` started at `null`, and `locked` needs non-null — so the working screen showed for the whole `/usage` round-trip. Now seeded from `services/saveCount`, which already existed for the home screen's identical bug. |
-| 5 | Can't share into the app | `ACTION_SEND` is not a deep link — `Linking` can never see it, so no JS-only fix exists. Added `expo-share-intent@7` (SDK 56 pin) + handler in `_layout.tsx` → `/save?url=`. ⚠️ **Needs a new build; OTA cannot add a native module.** |
+| 5 | Can't share into the app | `ACTION_SEND` is not a deep link — `Linking` can never see it, so no JS-only fix exists. Added `expo-share-intent@7` (SDK 56 pin) + handler in `_layout.tsx` → `/save?url=`. ⚠️ **Needs a new build; OTA cannot add a native module.** ⚠️ **The "SDK 56 pin" is no longer a ceiling** — `expo-share-intent@8.0.1` declares `peerDependencies: {"expo": "^57"}`, so it is a straight `7 → 8` bump whenever SDK 57 lands (see the SDK 57 entry at the top). |
 | 6 | Slate quotes clipped | Entries had drifted to 85 chars against a 42px/2-line viewport. Trimmed to a stated ~58-char budget + `numberOfLines={2}` so it can never slice mid-glyph again. |
 | 7 | Todo sheet: keyboard + dates | THREE bugs. (a) a `Modal` is its own Android window and is never IME-resized — added its own KAV. (b) `onSubmitEditing={submit}` on the title meant Enter created the task before you reached the date chips. (c) **the real one**: the seed effect re-ran on every prop change, and `reel/[id]` re-fetches every 2.5s while a summary is pending — so it wiped the date (and title) you had just typed. Now latched to the open transition. |
 | 8 | Instagram title → "Login • Instagram" | Instagram answers the phone's preview fetch with its **sign-in page at HTTP 200**, whose `og:title`/`og:image` are non-empty — so every "did we get a title?" check accepted the wall's branding. Screened client-side (`isLoginWall`) and server-side (`_is_login_wall_title`, folded into `_weak_title` so all three fill-sites are covered). |
