@@ -7,18 +7,39 @@ name: Android preview build
 # REFUSES to install (equal versionCode), discovered ~40 minutes later at the
 # end of a queue. Automating it removes the manual step and the failure mode.
 #
-# ⚠️ REQUIRES THE EAS GITHUB APP to be connected to this repository once
-# (expo.dev -> project -> GitHub -> Connect). Until that is done this file is
-# inert — it will not error, it simply never fires.
+# ✅ CONFIRMED WORKING 2026-08-14. The EAS GitHub App is connected and the base
+# directory is set, so merging to `develop` fires a build on its own.
 #
-# ⚠️ FREE-TIER QUEUE IS THE REAL COST. Builds have queued for 88 minutes on
-# this project. Firing one on every merge to develop is fine at the current
-# pace (a few merges a day) but will feel slow if develop gets busy; narrow the
-# trigger to tags, or switch to `workflow_dispatch`, if that day comes.
+# ⚠️ THE QUEUE IS THE COST, AND IT IS THE WHOLE COST. Measured from EAS's own
+# `metrics` across two builds: compute is FLAT at 17.7 and 18.3 min (a 3%
+# spread), while queue was 7.6 min and 29.7 min — 4x, and 62% of wall time on
+# the slow one. So the lever that matters is not making a build faster, it is
+# not queueing builds that cannot change the APK.
+#
+# Hence the `paths` filter. On 2026-08-14 two merges landed minutes apart and
+# the second was a TODO.md-only change: it queued a full Android build behind
+# the first, and EAS cancelled one of them.
+#
+# ⚠️ THE PATTERNS ARE WRITTEN TO BE CORRECT UNDER EITHER PATH ROOT. EAS reads
+# `.eas/workflows/` relative to the base directory configured for the GitHub
+# connection (`mobile` here), and it is NOT documented whether `paths` resolves
+# from there or from the repo root. Both readings behave the same way:
+#   - repo-root:   `**` matches everything, and the exclusions do real work.
+#   - mobile-relative: `**` matches everything under mobile/, the backend/docs/
+#     .github exclusions match nothing (harmless), and a merge that touches only
+#     those directories never reaches mobile/ so it does not fire anyway.
+# If a build ever fails to fire for a genuine mobile change, THIS is the first
+# thing to suspect — check `eas workflow:run` still works before blaming EAS.
 
 on:
   push:
     branches: ['develop']
+    paths:
+      - '**'
+      - '!**/*.md'        # docs-only merges cannot change the APK
+      - '!backend/**'     # FastAPI ships via Render, not EAS
+      - '!docs/**'
+      - '!.github/**'     # GitHub Actions config; EAS workflows live elsewhere
 
 jobs:
   build_android_preview:
