@@ -5,6 +5,41 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ ANDROID TEST ROUND 4 (2026-08-14) — 2 bugs, 1 question, 3 features
+
+Branch `feat/share-refresh-quota-support`. All six items traced before any edit.
+
+| # | Item | What it actually was |
+|---|---|---|
+| 1 | Library needs a manual refresh to show reels shared while the app was closed | ✅ **Root cause: the app had NO `AppState` listener anywhere — zero occurrences repo-wide.** Every screen's only refresh trigger was `useFocusEffect`, and returning to a still-mounted screen is **not** a router focus event; the native share Activity saves without ever entering the JS process, so nothing invalidated anything. Fixed with ONE listener in `app/_layout.tsx` broadcasting `appResumed`, which `app/index.tsx` and `components/Landing.tsx` subscribe to. ⚠️ **A second, independent staleness path was found and fixed too:** Home and Library are the SAME route (`/`), told apart by a session flag, so switching tabs never blurs the screen — `index.tsx`'s `libraryState` subscriber only re-read the flag and never reloaded. A cold start that sat on Landing while a share arrived showed a stale grid on the very first visit, with no backgrounding involved. |
+| 2 | Profile panel (or a to-do sheet) still open after leaving the app and coming back | ✅ **Round 3's `closeProfile` fix was aimed at one component and fired in one case.** There are **eight** modals in the app, and the event was emitted only for a *brand-new, URL-bearing* share intent — behind three early returns — so leaving the app any other way, sharing a photo, or a re-delivered intent all left everything on screen. `closeProfile` is now `dismissOverlays`, a broadcast fired by the same AppState listener (on `background` **only**, never iOS's transient `inactive`, or pulling down the notification shade would throw away a half-typed to-do). Subscribed by the panel, the to-do editor, the to-do settings sheet, the keep-or-delete ask, the category picker and the workout notice. ⚠️ `OnboardingModal` is deliberately **excluded** — it has no dismiss by design, and closing it without running `finish()` would burn the first-run tour without stamping the seen-flag. ⚠️ Found alongside: `showDeleteConfirm` was never reset when the panel closed, so **"Delete your account?" re-appeared unprompted** on the next open. |
+| 3 | Q: when the quota resets, do all the pending AI summaries fire at once? | ✅ **No — and the answer inverts the feature.** Verified in code: an over-quota save is written `summary_status='quota_exceeded'`, and `recover_pending_summaries` filters on `pending` only (`routes/reels.py`), so **nothing retries automatically, ever**. There is no thundering herd, so there is nothing to ask the user about — the "should we run these?" prompt was not built. ⚠️ **The real bug is the opposite one:** `reel/[id].tsx` deliberately rendered **no** retry button in `quota_exceeded`, on the reasoning that nothing could succeed until the reset. True on the day, wrong every day after — the card said "resumes tomorrow" forever and offered no way to make tomorrow happen. The button now returns once `usage.remaining > 0` (gated on the live budget, not on a clock). |
+| 3.1 | Feature: show *when* the quota comes back, everywhere AI is shown | ✅ `resets_at` was already in every `/api/account/usage` response and was simply never displayed. New `services/quotaReset.ts` (+ `npm run test:quota`) renders it in the **user's own clock**: midnight UTC is 5:30 AM in India and 8 PM the *previous* day in California, so the word "tomorrow" the app used everywhere was actively wrong for some users. Shown in ProfilePanel's meter (at zero), the save screen's pre-save notice, the reel detail quota state, the grid tile overlay and the new Ask block. Formatted by hand, not via `toLocaleTimeString` — Intl options are honoured inconsistently across Hermes builds. |
+| 3.2 | Feature: when AI is exhausted, Ask is useless — offer a fast library search | ✅ Shipped, **but not gated on the quota, and that is a deliberate disagreement with the brief.** Search costs nothing, so hiding it until someone runs out makes the app worse for everyone who hasn't — and it recreates the exact reason the search vertical was deleted on 2026-08-10 (an entry point nobody could reach). It is always available (library header icon + menu row); Ask merely *promotes* it when the budget is gone, with wording that does not oversell it ("it finds the save; it won't answer the question"). ⚠️ **Client-side, not a revived endpoint.** `services/librarySearch.ts` is a TypeScript port of the deleted `backend/app/services/search.py` (commit `090a51a`) — same stopwords, same synonym groups, same weights, because they were tuned against real failures. The library is fetched once (`services/libraryIndex.ts`, reusing the existing list endpoint at its own 1000 cap — no new route) and **tokenized once**; a keystroke is then a synchronous scan, no debounce and no request. A round-trip per keystroke to a free instance that cold-starts in ~50 s is the version of this feature that reads as broken. Locked by `npm run test:search`, which includes a scale assertion (2,000 reels, <25 ms/query). |
+| 4 | Support page | ✅ `app/support.tsx` + a **Support** row in ProfilePanel → Settings. `savehere.support@gmail.com`, with a copy-to-clipboard fallback because `mailto:` silently opens nothing on a device with no mail client — without it a user in that state has no route to support at all, which is what App Store guideline 1.5 requires. The draft is prefilled with account email, plan, app version and platform, which is what every support reply otherwise has to ask for. ⚠️ Uses `Linking.openURL` directly, **not** `services/openLink` — that helper prechecks non-http schemes with `canOpenURL`, which on Android 11+ returns false for any undeclared scheme without ever trying. That is the bug that made the Watch button dead (round 1, item 11); routing `mailto:` through it would have reproduced it exactly. |
+
+**Verified:** 300 backend tests (untouched, still green), `npm run typecheck` clean,
+`npx expo export --platform web` clean, all six mobile self-checks pass (two new),
+and the app boots to the login wall in a real browser with **zero console errors** —
+which is the check that the new root-level imports (`libraryIndex` → `librarySearch`,
+`quotaReset`, the `AppState` effect) all load and run.
+⚠️ **NOT verified logged in.** Every one of these surfaces sits behind the auth gate
+and the agent's browser has no session — the same standing limitation as rounds 1–3.
+Items 1 and 2 are Android lifecycle behaviour and need an APK regardless.
+
+**Left undone on purpose:**
+- `app/rediscover.tsx` refreshes on **mount only** — no `useFocusEffect` at all, so it
+  is stale even returning from a reel inside the app. It was NOT wired to `appResumed`:
+  the screen reshuffles its picks whenever the list changes, so refreshing it would
+  make the grid jump under the user, and it deliberately biases toward *older* saves,
+  so a just-shared reel would not appear there anyway. Real bug, separate fix.
+- A hosted **Support URL** for App Store Connect (see "Mobile — App Store Requirements").
+  The in-app page and the address exist; the public web page does not.
+- A slim `GET /api/reels/index` endpoint for search. The full list payload is a few
+  hundred KB at the sizes this app has; add the endpoint when that is measurably slow.
+
+---
+
 ## ▶ ANDROID TEST ROUND 3 (2026-08-13) — 5 owner findings
 
 | # | Item | Status / root cause |
@@ -772,18 +807,34 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
   **UI copy corrected 2026-08-11 (same change made three strings false):** the button hint said *"Built only from what the reel mentions — nothing is invented"*, the estimated-structure notice said *"The places themselves come only from the reel"*, and the tips heading said *"Tips from the reel"*. All three were true under the old grounded-only prompt and lies under the new one. Now: the hint explains the reel-plus-known-highlights split and points out prices/hours are never guessed, the notice says gaps were filled from general knowledge, and the heading is just "Tips".
   **Token budget:** `max_tokens` 1400 → 4000, and `stop_reason == "max_tokens"` now raises instead of being parsed into an empty plan — the old path returned a 422 blaming the user's reel for our own cap, *after* charging their AI action. Per-day items capped at 6 in the prompt (normalizer still permits 10) so a 14-day plan stays inside the budget. ⚠️ Cost per itinerary rises roughly 2-3x (still ~$0.01-0.015 at Haiku rates); it is Pro-gated and capped at 3 per reel. **Remaining = mobile:** "Trip Itinerary" button on travel detail screens rendering `days[]`/`tips[]`, with the Pro-locked upsell state for free tier.
 - [x] **Pagination / infinite scroll** — `/api/reels` takes `limit`/`offset` + returns full `total`; library grid loads 24/page via FlatList `onEndReached`. Counts (header, Landing, ProfilePanel) use `total`.
-- [n/a] ~~**Server-side search**~~ — shipped, then **DELETED 2026-08-10** (owner). The
-  library header search field was removed in PR #39, leaving the endpoint with no
-  reachable caller; rather than carry a CI-tested feature no user could hit, the whole
-  vertical came out. See the removal entry in the Active Refactoring backlog.
-- [n/a] ~~**Smart search (no AI cost)**~~ — **DELETED 2026-08-10** with the rest of the search
-  vertical. Kept here for the reasoning, which outlives the code: it tokenized the query and
-  dropped filler ("any videos on Fitness" → "fitness"), matched **category** (the old LIKE
-  search never did — the root cause of "Fitness finds nothing but chestwork works"), expanded
-  synonyms (gym/workout ↔ fitness, recipe ↔ cooking) and ranked by relevance. It was
-  deliberately **not** Claude-backed because search fires per keystroke and would have drained
-  the daily AI quota — that constraint still applies to any replacement. Embeddings remain the
-  semantic upgrade path if search ever returns.
+- [n/a] ~~**Server-side search**~~ — shipped, then **DELETED 2026-08-10** (owner), and
+  **not** revived when search came back on 2026-08-14. Still the right call: the
+  reason it had no reachable caller is gone, but the reason to keep it off the server
+  never was — see below.
+- [x] **Smart search (no AI cost) — BACK 2026-08-14, on the client this time.**
+  `mobile/services/librarySearch.ts` is a TypeScript port of the deleted
+  `backend/app/services/search.py` (commit `090a51a`): same stopwords, same synonym
+  groups, same weights, because those were tuned against real failures and rewriting
+  them from scratch would have reintroduced bugs someone already paid for. It
+  tokenizes the query and drops filler ("any videos on Fitness" → "fitness"), matches
+  **category** (the root cause of "Fitness finds nothing but chestwork works"),
+  expands synonyms (gym/workout ↔ fitness, recipe ↔ cooking), forgives one typo, and
+  ranks by relevance.
+  **What changed is WHERE it runs, and why:** search fires per keystroke, and the
+  server it would call is a Render free instance that cold-starts in ~50 s. The
+  library is fetched once (`services/libraryIndex.ts`, through the existing list
+  endpoint at its own 1000 cap — no new route) and **tokenized once**; a query is then
+  a synchronous scan with no debounce, no request and no AI action, and it keeps
+  working offline. The old "never Claude-backed" constraint still holds and is now
+  structural rather than a rule to remember.
+  ⚠️ Two porting notes worth keeping: the Python leaned on `difflib`'s 0.8 ratio,
+  which catches **transpositions** — plain Levenshtein ≤1 does not, so "wrokout" would
+  have silently stopped finding "workout"; the replacement handles adjacent swaps
+  explicitly. And typo-matching is off for the summary/notes field: ~40 tokens per
+  reel against a title's ~8 is where a linear scan would stop being instant.
+  Locked by `npm run test:search`, including a 2,000-reel scale assertion.
+  Embeddings remain the semantic upgrade path; an inverted index is the step before
+  that, and neither is needed at this scale.
 - [x] **Tap-to-watch + link-open (web false-alert fixed)** — the detail-screen hero thumbnail (with a "Watch" chip) and the source-URL row open the original post via `mobile/services/openLink.ts`. **Root cause found + fixed (verified with a real click in-browser):** react-native-web's `Pressable` dispatches `onPress` asynchronously, so the user-activation gesture is gone by the time `window.open()` runs — it returns `null` for a genuinely-real click, and the old `if (!win) throw` fired a false "couldn't open this link" alert on every working tap (which auto-dismissed when the new tab stole focus). Web now uses an **anchor-element click** (`<a target=_blank rel=noopener>`), which opens reliably and hands back no null to misread; no cross-origin `win.opener=null` (throws in some browsers). Trade-off: web can't detect a genuinely-blocked open, but a false popup on every success was the real bug, and true failures (deleted/private post) open a tab showing the platform's own error — undetectable client-side anyway. **Native keeps the honest failure popup** (`canOpenURL` is a real signal there).
 - [x] **Workout expectation modal** — before the FIRST "Build Workout", a modal sets expectations: generic template inspired by the reel, not personalized coaching; beginners scale down at their own pace; every set/rep/rest editable afterwards. Includes the fitness disclaimer chip.
 - [x] **Modal ghost-click fix (web)** — the workout/category modals used a close-on-press overlay with a plain View card: on web a double-click's second click (or any click on the card body) bubbled to the overlay and closed the modal instantly. Fixed in `reel/[id].tsx`: card presses `stopPropagation`, overlay presses within 350 ms of opening are ignored; deliberate outside-clicks still close (verified live with scripted clicks).
@@ -820,7 +871,13 @@ stand up Render staging+prod services (owner sets each service's `sync:false` va
 - [ ] **Keywords** — 100-character keyword field for App Store search ranking.
 - [ ] **Age rating** — complete the age rating questionnaire in App Store Connect (likely 4+).
 - [ ] **Privacy policy URL** — required for any app with network access. Host a simple one-page policy and add the URL to App Store Connect.
-- [ ] **Support URL** — a page or email address users can contact for help.
+- [~] **Support URL** — **in-app page DONE 2026-08-14** (`mobile/app/support.tsx`, reached from
+  ProfilePanel → Settings → Support): `savehere.support@gmail.com`, a prefilled mail draft
+  carrying account/plan/version, and a copy-to-clipboard fallback for devices with no mail
+  client. ⚠️ **The App Store Connect field still needs a public URL**, which this is not — a
+  screen inside the app cannot be linked from a product page. Host one alongside the privacy
+  policy (`docs/PRIVACY_POLICY.html` has the same gap: written, not hosted), and buy the
+  domain first since both need it.
 - [ ] **EAS Build setup** — configure `eas.json` with `production` profile, bundle ID (`com.yourname.savehere`), Apple signing certificate and provisioning profile.
 - [ ] **TestFlight beta** — distribute to testers via TestFlight before submitting for review.
 

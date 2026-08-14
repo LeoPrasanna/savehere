@@ -10,6 +10,7 @@ import { Icon } from '../components/Icon';
 import { api } from '../services/api';
 import { fetchClientMetadata } from '../services/clientExtract';
 import { getCachedUsage, refreshUsage } from '../services/usageCache';
+import { resetsAtLabel } from '../services/quotaReset';
 import * as haptics from '../services/haptics';
 import { Pressable } from '../components/Pressable';
 import { Label, Body, Title, Rule, Index, GhostButton, FilledButton } from '../components/kit';
@@ -77,6 +78,11 @@ export default function SaveScreen() {
   const [aiRemaining, setAiRemaining] = useState<number | null>(
     () => getCachedUsage()?.remaining ?? null,
   );
+  // Kept beside `aiRemaining` so the notice below re-renders with it. Reading
+  // the cache inline during render would not re-run when the fetch lands.
+  const [resetsAt, setResetsAt] = useState<string | null>(
+    () => getCachedUsage()?.resets_at ?? null,
+  );
   const aiExhausted = aiRemaining === 0;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const pulse = useRef(new Animated.Value(1)).current;
@@ -87,7 +93,11 @@ export default function SaveScreen() {
   // arrives after you've already tapped Save has missed its moment.
   useEffect(() => {
     let alive = true;
-    refreshUsage().then(u => { if (alive && u) setAiRemaining(u.remaining ?? null); });
+    refreshUsage().then(u => {
+      if (!alive || !u) return;
+      setAiRemaining(u.remaining ?? null);
+      setResetsAt(u.resets_at ?? null);
+    });
     return () => { alive = false; };
   }, []);
 
@@ -254,7 +264,7 @@ export default function SaveScreen() {
             <Body style={styles.quotaText}>
               Today's AI actions are used up. This link will still be saved with its
               title and thumbnail — the summary, recipe and workout tools come back
-              after the daily reset.
+              at {resetsAtLabel(resetsAt) || 'the daily reset'}.
             </Body>
           </View>
         )}

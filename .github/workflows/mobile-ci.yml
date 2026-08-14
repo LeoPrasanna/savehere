@@ -28,7 +28,12 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # ⚠️ 22, not 20. The services/ self-checks below run through
+          # `node --experimental-strip-types`, which does not exist before
+          # 22.6 — on 20 it is a hard `bad option` exit, not a skip. The repo's
+          # test scripts have required 22 since they were written; CI just never
+          # ran them, so nothing surfaced it until 2026-08-14.
+          node-version: "22"
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
@@ -41,3 +46,17 @@ jobs:
         # Uses the package.json script: tsc --noEmit with a bumped stack size —
         # plain tsc overflows on this app's heavy type graph (expected, not a bug).
         run: npm run typecheck
+
+      - name: Self-checks
+        # The pure-logic modules in services/ carry assert-based self-checks (no
+        # framework, no fixtures — plain node with --experimental-strip-types).
+        # They were only ever run by hand, which is the same as not running them:
+        # each one pins a reconciliation or a ranking that fails SILENTLY when it
+        # breaks, which is precisely the class this job exists to catch.
+        run: |
+          npm run test:library
+          npm run test:todos
+          npm run test:notifications
+          npm run test:roll
+          npm run test:search
+          npm run test:quota

@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, Reel, Usage, UsageLog } from '../services/api';
 import { getCachedUsage, refreshUsage } from '../services/usageCache';
+import { resumesAtSentence } from '../services/quotaReset';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { Label, Body, Title, Rule, GhostButton, FilledButton, Index } from './kit';
@@ -73,7 +74,14 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
     // The difference is that a stale-but-real number is on screen meanwhile,
     // rather than a placeholder that reads as fact.
     if (visible) refreshUsage().then(u => { if (u) setUsage(u); });
-    else { setLogOpen(false); setLog(null); }   // reset the drill-down on close
+    else {
+      setLogOpen(false); setLog(null);   // reset the drill-down on close
+      // ⚠️ `showDeleteConfirm` belongs in this reset too. Without it, closing
+      // the panel while the confirmation was up left the flag set, and the
+      // NEXT time the panel opened it re-presented "Delete your account?"
+      // unprompted — a destructive dialog appearing on its own.
+      setShowDeleteConfirm(false);
+    }
   }, [visible]);
 
   const toggleLog = () => {
@@ -313,6 +321,17 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
                   </Body>
                 )}
 
+                {/* ⚠️ AT ZERO, THE RESET TIME IS THE ONLY USEFUL THING ON THIS
+                    ROW. "0 of 20 left" with no answer to "left until when?" is
+                    what makes a quota feel arbitrary. The server has always
+                    returned `resets_at`; nothing showed it until 2026-08-14.
+                    Rendered in the user's own clock — midnight UTC is 5:30 AM
+                    in India and 8 PM the previous day in California, so the
+                    word "tomorrow" was actively wrong for some people. */}
+                {usage.remaining === 0 && (
+                  <Body style={styles.hint}>{resumesAtSentence(usage.resets_at)}</Body>
+                )}
+
                 {usage.tier === 'trial' && usage.trial_ends_at && (
                   <Body style={styles.hint}>
                     Trial — {trialDaysLeft(usage.trial_ends_at)} left, then 3 AI actions a day and 20 saves.
@@ -337,6 +356,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
             <Label wide style={styles.section}>Explore</Label>
             <Rule />
             {showAsk && <NavRow label="Ask your library" path="/ask" />}
+            <NavRow label="Search your library" path="/search" />
             <NavRow label="Rediscover saves" path="/rediscover" />
             <NavRow label="What you can do" path="/help" />
 
@@ -344,6 +364,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
             <Label wide style={styles.section}>Settings</Label>
             <Rule />
             <NavRow label="Edit profile" path="/profile" />
+            <NavRow label="Support" path="/support" />
 
             {/* Appearance, inline. Three tracked words; the active one is ink
                 with a rule under it — the same selection grammar the category

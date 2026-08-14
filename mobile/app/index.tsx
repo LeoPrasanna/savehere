@@ -59,9 +59,6 @@ export default function HomeScreen() {
   // Session-scoped (services/sessionFlags): remounts don't bounce back to the
   // landing, but a sign-out/sign-in resets it so new users start at Landing.
   const [entered, setEntered] = useState(hasEnteredLibrary());
-  // The Home and Library tabs flip that flag from OUTSIDE this route (the tab
-  // bar lives above the router), so the screen has to be told to re-read it.
-  useEffect(() => onUi('libraryState', () => setEntered(hasEnteredLibrary())), []);
   const [scrolled, setScrolled] = useState(false);
 
   const load = useCallback(async (category = activeCategory) => {
@@ -162,6 +159,35 @@ export default function HomeScreen() {
     // result.
   }, [load]));
 
+  /**
+   * ⚠️ ROUTER FOCUS IS NOT THE ONLY WAY THIS LIST GOES STALE — and until
+   * 2026-08-14 it was the only thing that refreshed it. Two ways in:
+   *
+   *  - `appResumed` (owner report): a reel shared from Instagram while SaveHere
+   *    sat in the background is saved by the native share Activity, which never
+   *    enters the JS process at all. Returning to a still-mounted screen fires
+   *    no focus event, so the grid kept showing its pre-share list until the
+   *    user pulled to refresh — which is exactly what they had to do.
+   *  - `libraryState`: Home and Library are the SAME route (`/`), told apart by
+   *    a session flag, so switching tabs never blurs this screen. It used to
+   *    only re-read the flag; a cold start that sat on Landing while a share
+   *    arrived then showed a stale grid on the very first visit.
+   *
+   * Both refresh in place — `applyEdits` inside `load()` already makes a
+   * surprise refetch safe against an in-flight delete, and the `reelsRef` guard
+   * above means an existing grid is never blanked to skeletons.
+   */
+  useEffect(() => {
+    if (!entered) return;   // Landing is on screen and does its own refresh.
+    return onUi('appResumed', load);
+  }, [entered, load]);
+
+  useEffect(() => onUi('libraryState', () => {
+    const now = hasEnteredLibrary();
+    setEntered(now);
+    if (now) load();
+  }), [load]);
+
   const hasPending = reels.some(r => r.summary_status === 'pending');
   useEffect(() => {
     if (!entered || !hasPending) return;
@@ -244,19 +270,29 @@ export default function HomeScreen() {
             {displayName} · {total > 0 ? `${total} saved` : 'nothing saved yet'}
           </Label>
         </View>
+        {/* ⚠️ An ICON, not the search field that used to live under this header.
+            That field was removed on purpose (owner, 2026-08-09) and replaced
+            by the rolling capability line below; putting it back would undo
+            that decision. A 36px button costs the layout nothing and keeps
+            search one tap away — which is the half the old removal got wrong,
+            since search is free (no AI, no quota) and was the only way to find
+            a save by name. */}
+        <Pressable style={styles.hBtn} onPress={() => router.push('/search')} accessibilityLabel="Search your library">
+          <Icon name="search" size={17} color={colors.textPrimary} />
+        </Pressable>
         <Pressable style={styles.hBtn} onPress={() => emitUi('openProfile')} accessibilityLabel="Menu">
           <Icon name="menu" size={17} color={colors.textPrimary} />
         </Pressable>
       </View>
 
       {/* The search field used to sit here. Replaced (owner, 2026-08-09) with a
-          rolling list of what the library can actually do for a save.
-          ⚠️ There is NO search anywhere in the app any more, client or server:
-          the owner deleted the vertical on 2026-08-10 rather than carry an
-          unreachable feature (`services/search.py`, `GET /api/reels/search`,
-          `api.searchReels()` and their tests are all gone — recover from git if
-          search returns). Category bubbles are the only way to narrow the grid.
-          If search comes back at scale, embeddings, not the lexical ranker. */}
+          rolling list of what the library can actually do for a save, and that
+          stands — search came back on 2026-08-14 as its own screen behind the
+          icon above, not as a field competing with this row.
+          ⚠️ It is CLIENT-SIDE now (`services/librarySearch.ts`, a TypeScript
+          port of the deleted `backend/app/services/search.py`): search fires
+          per keystroke, and the server it used to call is a free instance with
+          a ~50 s cold start. Category bubbles still narrow the grid. */}
       <RollingTagline
         compact
         shuffle

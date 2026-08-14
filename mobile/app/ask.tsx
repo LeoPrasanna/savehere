@@ -11,6 +11,7 @@ import { Disclaimer } from '../components/Disclaimer';
 import { Label, Body, Title, Rule, Index, GhostButton, FilledButton } from '../components/kit';
 import { getSaveCount, hydrateSaveCount, rememberSaveCount } from '../services/saveCount';
 import { getCachedUsage, refreshUsage } from '../services/usageCache';
+import { resumesAtSentence } from '../services/quotaReset';
 import { ASK_MIN_REELS } from '../constants/limits';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { colors, spacing, font, tracking, typeface, themed } from '../constants/theme';
@@ -63,6 +64,17 @@ export default function AskScreen() {
   const [savedCount, setSavedCount] = useState<number | null>(
     () => getCachedUsage()?.saves?.used ?? getSaveCount(),
   );
+  /**
+   * ⚠️ Ask is the one screen where an exhausted AI budget is a DEAD END, and it
+   * showed no sign of it: a 429 arrived only after you typed a question and
+   * tapped send, as one line of generic red text. Everything Ask does costs an
+   * AI action, so there is nothing to try again.
+   *
+   * Seeded from the login-time cache so the notice is on the first frame, not
+   * after a round-trip — a warning that arrives once you've typed has missed
+   * its moment, the same reasoning as the save screen's.
+   */
+  const [usage, setUsage] = useState(getCachedUsage);
 
   useEffect(() => {
     let alive = true;
@@ -73,12 +85,16 @@ export default function AskScreen() {
     });
     refreshUsage().then(u => {
       if (!alive || !u) return;
+      setUsage(u);
       setSavedCount(u.saves.used);
       rememberSaveCount(u.saves.used);
     });
     return () => { alive = false; };
   }, []);
   const locked = savedCount !== null && savedCount < ASK_MIN_REELS;
+  // null (never fetched) must NOT read as exhausted — a wrong "you're out"
+  // shown to someone with budget is worse than showing it a moment late.
+  const outOfAi = usage != null && usage.remaining === 0;
 
   const ask = async (question: string) => {
     const text = question.trim();
@@ -133,6 +149,37 @@ export default function AskScreen() {
             Answers come only from what you've saved — never from the open web.
           </Body>
 
+          {/* ── Out of AI actions ────────────────────────────────────────────
+              Ask is the only screen where this is a hard stop: every question
+              costs an action, so there is no degraded mode to fall back to.
+
+              ⚠️ Search is offered here, NOT gated behind this state. It is
+              free and always available (the library header and the menu both
+              reach it); this block just makes it the obvious next move for
+              someone who came to find something and cannot ask. Wording is
+              careful about the difference: search finds a save, it does not
+              answer a question, and pretending otherwise would be a worse
+              consolation than saying so. */}
+          {outOfAi && (
+            <View style={styles.quotaBox}>
+              <View style={styles.quotaHead}>
+                <Icon name="time" size={15} color={colors.textSecondary} />
+                <Label wide>No AI actions left today</Label>
+              </View>
+              <Body style={styles.quotaText}>
+                Every question costs one, so Ask is paused. {resumesAtSentence(usage?.resets_at)}
+                {' '}Meanwhile you can search your library by word — titles, tags, categories,
+                summaries and your own notes. It finds the save; it won't answer the question.
+              </Body>
+              <FilledButton
+                label="Search your library"
+                trailing="→"
+                onPress={() => router.push('/search')}
+                style={styles.quotaCta}
+              />
+            </View>
+          )}
+
           {/* Underlined field with the send action inline. */}
           <View style={styles.field}>
             <View style={styles.fieldRow}>
@@ -159,7 +206,9 @@ export default function AskScreen() {
             <View style={[styles.fieldRule, focused && styles.fieldRuleOn]} />
           </View>
 
-          {!result && !loading && !error && (
+          {/* Suggestions are hidden when the budget is gone — every one of them
+              is a question that would 429. */}
+          {!result && !loading && !error && !outOfAi && (
             <View style={styles.suggestions}>
               <Label wide style={styles.suggestHead}>Try</Label>
               <Rule />
@@ -281,6 +330,17 @@ const styles = themed(() => StyleSheet.create({
     marginTop: spacing.lg,
   },
   errorText: { flex: 1, fontSize: font.sm, lineHeight: 20 },
+
+  quotaBox: {
+    marginTop: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.ghostLine,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  quotaHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  quotaText: { fontSize: font.sm, lineHeight: 20 },
+  quotaCta: { marginTop: spacing.xs },
 
   thinking: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
 

@@ -5,6 +5,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from './Icon';
 import { Reel, thumbCandidates } from '../services/api';
 import * as haptics from '../services/haptics';
+import { getCachedUsage } from '../services/usageCache';
+import { resetsAtLabel } from '../services/quotaReset';
 import { Pressable } from './Pressable';
 import { Label } from './kit';
 import {
@@ -103,6 +105,10 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
   const isPending = reel.summary_status === 'pending';
   const failed = reel.summary_status === 'failed';
   const overQuota = reel.summary_status === 'quota_exceeded';
+  // Read from the cache rather than fetched — a grid can hold hundreds of these
+  // and none of them should make a request. The cache is filled at login and
+  // refreshed on every foreground (app/_layout.tsx).
+  const quotaLabel = overQuota ? resetsAtLabel(getCachedUsage()?.resets_at) : '';
   const thumb = candidates[candidate];
 
   return (
@@ -158,8 +164,16 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
           {failed && <Text style={styles.meta}>NO TEXT</Text>}
           {/* Out of AI actions — the save is complete, only the summary is
               waiting on the reset. Says so rather than reusing "NO TEXT",
-              which blames the reel for the user's daily cap. */}
-          {overQuota && <Text style={styles.meta}>AI RESUMES TOMORROW</Text>}
+              which blames the reel for the user's daily cap.
+              ⚠️ "TOMORROW" was a guess: the reset is midnight UTC, which is
+              5:30 AM the same morning in India and 8 PM the PREVIOUS day in
+              California. The real time comes off the cached usage; the word
+              only survives as the fallback when we have no usage to read. */}
+          {overQuota && (
+            <Text style={styles.meta} numberOfLines={1}>
+              {quotaLabel ? `AI RESUMES ${quotaLabel.toUpperCase()}` : 'AI RESUMES AFTER RESET'}
+            </Text>
+          )}
           <Text style={styles.title} numberOfLines={2}>
             {reel.title || (isPending ? 'Saving…' : 'Untitled')}
           </Text>

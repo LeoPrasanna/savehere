@@ -13,7 +13,7 @@ import { MascotLoader } from '../components/MascotLoader';
 import { TodoGoalBar } from '../components/TodoGoalBar';
 import { Avatar } from '../components/Avatar';
 import { useAuth } from '../contexts/AuthContext';
-import { emitUi } from '../services/uiBus';
+import { emitUi, useDismissOnBackground } from '../services/uiBus';
 import { Label } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { TodoSettingsSheet } from '../components/TodoSettingsSheet';
@@ -229,6 +229,22 @@ export default function TodosScreen() {
   // Set when a reel-linked task is completed: the "delete the saved card?" ask.
   const [finished, setFinished] = useState<Todo | null>(null);
   const [deletingReel, setDeletingReel] = useState(false);
+
+  /**
+   * Leaving the app closes this screen's sheets (owner report, 2026-08-14).
+   *
+   * ⚠️ `TodoEditor` is the one that matters most here: it stays MOUNTED while
+   * closed on purpose (so its fade-out survives), so its state is long-lived —
+   * a half-written task left open before a share was still open on return, on
+   * top of whatever the user came back for. Dismissal fires on `background`
+   * only, never on iOS's transient `inactive`, so pulling down the
+   * notification shade does not throw away what you were typing.
+   */
+  useDismissOnBackground(() => {
+    setEditorOpen(false);
+    setSettingsOpen(false);
+    setFinished(null);
+  });
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);

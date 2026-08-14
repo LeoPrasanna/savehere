@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Stack } from 'expo-router/stack';
 import { useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { View, StyleSheet, Platform, BackHandler } from 'react-native';
+import { View, StyleSheet, Platform, BackHandler, AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ShareIntentProvider, useShareIntentContext } from 'expo-share-intent';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,8 +18,9 @@ import { TabBar } from '../components/TabBar';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { OnboardingModal } from '../components/OnboardingModal';
-import { onUi, emitUi } from '../services/uiBus';
+import { onUi, emitUi, useDismissOnBackground } from '../services/uiBus';
 import { consumeReopenPanel } from '../services/sessionFlags';
+import { refreshUsage } from '../services/usageCache';
 import {
   colors, font, typeface, themed, onSchemeChange, setScheme, isDark, SCHEME_STORAGE_KEY,
 } from '../constants/theme';
@@ -58,10 +59,13 @@ function AppStack() {
       <Stack.Screen name="landing" options={{ headerShown: false }} />
       <Stack.Screen name="save" options={{ title: headerTitle('Save'), presentation: 'modal' }} />
       <Stack.Screen name="ask" options={{ title: headerTitle('Ask your library') }} />
+      {/* Search is the free sibling of Ask — no AI, no quota, works offline. */}
+      <Stack.Screen name="search" options={{ title: headerTitle('Search your library') }} />
       <Stack.Screen name="rediscover" options={{ title: headerTitle('Rediscover') }} />
       {/* Title stays blank — the screen's own hero is the title. */}
       <Stack.Screen name="todos" options={{ title: '' }} />
       <Stack.Screen name="help" options={{ title: headerTitle('What you can do') }} />
+      <Stack.Screen name="support" options={{ title: headerTitle('Support') }} />
       <Stack.Screen name="profile" options={{ title: headerTitle('Profile') }} />
       {/* Appearance is not a route — it's three inline words in ProfilePanel.
           A whole screen for one three-way choice was never worth the tap. */}
@@ -86,9 +90,10 @@ function AppProfilePanel() {
   // Reopens itself after a scheme switch remounts the tree (one-shot flag).
   const [open, setOpen] = useState(consumeReopenPanel);
   useEffect(() => onUi('openProfile', () => setOpen(true)), []);
-  // A share arriving from another app closes it — see the note on the event in
-  // services/uiBus.ts for why the share overlay cannot simply cover it.
-  useEffect(() => onUi('closeProfile', () => setOpen(false)), []);
+  // Leaving the app — a share, or just switching to Instagram — closes it. See
+  // the note on `dismissOverlays` in services/uiBus.ts for why the share
+  // overlay cannot simply cover it.
+  useDismissOnBackground(() => setOpen(false));
   return <ProfilePanel visible={open} onClose={() => setOpen(false)} reels={[]} />;
 }
 
@@ -136,6 +141,25 @@ function ShareIntentHandler() {
 
   useEffect(() => {
     if (!hasShareIntent) return;
+
+    /**
+     * ⚠️ CLEAR THE SCREEN FIRST, BEFORE ANY EARLY RETURN (owner report,
+     * 2026-08-13: sharing while the profile panel was open showed the panel,
+     * not the save).
+     *
+     * The overlay below cannot solve this. Every one of these surfaces renders
+     * inside a `Modal`, which on both platforms is its OWN window — an
+     * absolutely positioned sibling View is in a different window and can never
+     * paint over it, whatever its zIndex. So they have to be told to go away.
+     *
+     * ⚠️ It emits HERE, not after the URL and dedup guards below it. Those
+     * return early for a photo share and for a re-delivered intent — and a
+     * re-delivered intent on foreground is explicitly expected (see the note on
+     * `handled`), so the old placement left the panel on screen in exactly the
+     * cases the user was most likely to hit.
+     */
+    emitUi('dismissOverlays');
+
     // Instagram and YouTube share a bare URL; some apps share "Look at this
     // <url>" or append a title, so fall back to plucking the first URL out of
     // the text rather than refusing anything that isn't exactly a link.
@@ -151,18 +175,6 @@ function ShareIntentHandler() {
     // deliberately navigated rather than hijack the screen a second time.
     if (handled.current.has(url)) return;
     handled.current.add(url);
-
-    /**
-     * ⚠️ CLOSE THE PROFILE PANEL (owner report, 2026-08-13: sharing while the
-     * panel was open showed the panel, not the save).
-     *
-     * The overlay below cannot solve this. `ProfilePanel` renders inside a
-     * `Modal`, which on both platforms is its OWN window — an absolutely
-     * positioned sibling View is in a different window and can never paint over
-     * it, whatever its zIndex. So the panel has to be told to go away, and the
-     * app-global panel lives above the router, hence the bus.
-     */
-    emitUi('closeProfile');
 
     /**
      * ⚠️ SAVES IN THE BACKGROUND — IT DOES NOT OPEN THE SAVE SCREEN.
@@ -185,6 +197,11 @@ function ShareIntentHandler() {
     setSaving(true);
     saveSharedLink(url).then(ok => {
       setSaving(false);
+      // The library just gained a card that no screen knows about. On Android
+      // we leave immediately and `appResumed` will fire on the way back in, but
+      // on iOS/web the user stays here — same staleness, no lifecycle event to
+      // catch it. One signal covers both.
+      if (ok) emitUi('appResumed');
       if (ok && Platform.OS === 'android') BackHandler.exitApp();
       else if (!ok) router.push({ pathname: '/save', params: { url } });
     });
@@ -217,6 +234,45 @@ function Gate() {
   // page reload. On web the current route survives (it's URL-driven).
   const [schemeEpoch, setSchemeEpoch] = useState(0);
   useEffect(() => onSchemeChange(() => setSchemeEpoch(e => e + 1)), []);
+
+  /**
+   * ⚠️ THE APP'S ONLY LIFECYCLE LISTENER. There was none at all before
+   * 2026-08-14, and its absence is the single root cause of two owner reports:
+   *
+   *  - a reel shared into SaveHere while it sat in the background never showed
+   *    up in the library until a manual pull-to-refresh. The native share
+   *    Activity saves without ever entering the JS process, and coming back to
+   *    a still-running app is NOT a router focus event — so `useFocusEffect`,
+   *    which is every screen's only refresh trigger, never fires.
+   *  - the profile panel (or a to-do sheet, or the category picker) was still
+   *    open on return, because nothing ever told them the app had gone away.
+   *
+   * One subscription, two signals, and every screen and overlay subscribes to
+   * the one it cares about — rather than N screens each growing their own
+   * lifecycle handling and drifting.
+   *
+   * ⚠️ Dismiss on 'background' ONLY, never 'inactive'. iOS emits 'inactive' for
+   * transient interruptions — pulling down the notification shade, the app
+   * switcher preview — and closing someone's half-typed to-do because they
+   * glanced at a notification would be a worse bug than the one being fixed.
+   */
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'background') { emitUi('dismissOverlays'); return; }
+      if (state !== 'active') return;
+      emitUi('appResumed');
+      // The daily AI quota may have reset while the app was away, and every
+      // "you're out of AI actions" message in the app reads from this cache.
+      if (session) refreshUsage();
+    });
+    // ⚠️ Optional call, not `sub.remove()`. react-native-web's AppState returns
+    // UNDEFINED when `document.visibilityState` is unavailable (static render,
+    // an ancient browser) — an unguarded cleanup would throw at the root of the
+    // tree, which is the worst possible place for it. On web the mapping is
+    // document visibility, so switching browser tabs counts as leaving; that is
+    // the right reading of "the app went away".
+    return () => sub?.remove();
+  }, [session]);
 
   // Native boot: localStorage isn't readable at module init there, so apply the
   // stored preference right after mount (one default-scheme first frame).

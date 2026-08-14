@@ -46,7 +46,7 @@ backend/   FastAPI + SQLAlchemy, SQLite (dev). System Python 3.12.
   tests/                 pytest (27 tests) — pure-function + rate-limit + retrieval
 
 mobile/    Expo SDK 56 + expo-router + React Native (dev on web).
-  app/                   index (library), landing(redirect), save, ask, rediscover, help, reel/[id], workout/*
+  app/                   index (library), landing(redirect), save, ask, search, rediscover, help, support, reel/[id], workout/*
   components/            ReelCard, TaskList, Landing, ProfilePanel, Icon (Lucide), AuroraBackground, BorderBeam, …
   services/api.ts        typed API client; BASE_URL from EXPO_PUBLIC_API_URL || localhost:8000
   constants/             theme.ts, features.ts
@@ -59,15 +59,26 @@ mobile/    Expo SDK 56 + expo-router + React Native (dev on web).
 - Per-reel **AI caps**: tasks generated **once** then manual add/edit/delete; workout ×3. Resummarize is **uncapped per reel** (2026-07-14) — every run charges the per-user daily AI quota, which is the real ceiling; the per-IP burst guard stops loops. The UI notes the quota cost next to the button.
 - **Ask your library** — retrieval-based (only top-15 relevant saves sent to Claude).
 - **AI outputs show dual units**: °F/°C, lb/g, cup/ml across all 4 prompts (summary, tasks/recipe, workout).
-- **Search: REMOVED (2026-08-10).** There is no search in the app, client or server.
-  The library header field went in PR #39; the endpoint, `app/services/search.py`
-  (tokenizing, stopwords, synonyms, category matching, relevance ranking), the
-  mobile `api.searchReels()` and `tests/test_smart_search.py` were all deleted
-  once it was clear nothing could reach them. **Narrowing the grid is category
-  bubbles only.** If search returns, the lexical ranker is in git — but at the
-  scale that would justify rebuilding it, go to embeddings instead. The old
-  rationale still holds and is why this was never Claude-backed: search fires
-  per keystroke and would drain the daily AI quota.
+- **Search: removed 2026-08-10, back 2026-08-14 — on the CLIENT.** The server
+  vertical (`app/services/search.py`, `GET /api/reels/search`,
+  `api.searchReels()`, `tests/test_smart_search.py`) is still deleted and stays
+  deleted. What returned is `mobile/services/librarySearch.ts`, a TypeScript
+  port of that ranker — same stopwords, synonym groups and weights, since they
+  were tuned against real failures — plus `services/libraryIndex.ts`, which
+  fetches the library once through the **existing** list endpoint (no new route)
+  and tokenizes it once. A keystroke is then a synchronous scan: no debounce, no
+  request, no AI action, works offline.
+  **The "never Claude-backed" rule is now structural rather than a rule to
+  remember**, and it generalized: search fires per keystroke, so it must not hit
+  the *server* either — a Render free instance cold-starts in ~50 s.
+  ⚠️ It is NOT gated on the AI quota, though that is how it was asked for
+  (2026-08-14). Search costs nothing, so gating it would make the app worse for
+  everyone with budget left and would recreate the exact "no reachable entry
+  point" problem that got the first version deleted. It lives on the library
+  header and in the menu; `app/ask.tsx` merely promotes it when the AI budget is
+  spent. Category bubbles still narrow the grid.
+  Upgrade path if scale ever demands it: an inverted index first, embeddings
+  after — neither is close to needed.
 - **Safety surfaces**: all disclaimer copy lives in ONE place, `mobile/components/Disclaimer.tsx` (variants: ai / fitness / recipe / ownership / medical). Sensitive (medical/high-stakes) saves are flagged by the summarizer (`is_sensitive`), show the medical disclaimer, and the server refuses tasks/workout generation for them (`routes/workout.py`, 422 before quota charge). A pre-build workout modal sets "generic template, not coaching" expectations.
 - Rediscover, Help, landing page.
 - Landing: hamburger (☰) opens profile panel; "Ask your library" card shown prominently once ≥3 reels saved; card hidden from panel when shown on landing; "Open my library" below the Ask card.
@@ -282,6 +293,56 @@ that section is now marked **RETIRED**. Full spec: [`DESIGN_PROPOSAL.md`](DESIGN
 **Haze Backdrop Visibility Constraints (2026-08-09):** The `gradients.haze` background wash is visually blocked by full-bleed library grid thumbnails. Keep haze as an atmospheric layer for sparse screens only (Login wall, Workout rest phases). Do not try to solve grid coverage with blur due to performance overhead on web previews.
 <!-- **Monochrome Light Scheme Integrity:** The "Nocturnal Dimension" color shifts apply strictly to the dark scheme. The light scheme must remain flat monochrome to avoid breaking WCAG AAA text/contrast safety gates, except for the high-contrast semantic `danger` state (#B3323E). -->
 
+### App lifecycle — the listener that did not exist (2026-08-14)
+
+Until this date the app had **no `AppState` listener anywhere** — zero
+occurrences repo-wide. Every screen's only refresh trigger was
+`useFocusEffect`, which is *router* focus, not app lifecycle. That single gap
+produced two separate owner-reported bugs, and it will produce more if the
+listener is ever removed or duplicated.
+
+- **One listener, in `app/_layout.tsx`'s `Gate`.** It emits two `uiBus` events:
+  `appResumed` on `'active'`, `dismissOverlays` on `'background'`. Screens
+  subscribe to what they care about. Do NOT add a second listener in a screen —
+  the point is that lifecycle handling lives in one place and cannot drift.
+- **Dismiss on `'background'` ONLY, never `'inactive'`.** iOS emits `'inactive'`
+  for transient interruptions (notification shade, app switcher preview), and
+  closing someone's half-typed to-do because they glanced at a notification
+  would be worse than the bug being fixed.
+- **`AppState.addEventListener` returns `undefined` on react-native-web** when
+  `document.visibilityState` is unavailable, so the cleanup is `sub?.remove()`.
+  An unguarded call throws at the root of the tree.
+- **Why the library needed it at all:** the Android share Activity saves without
+  ever entering the JS process (see the Phase B section above), and returning to
+  a still-mounted screen fires no focus event. The card existed on the server and
+  no screen had any reason to ask again.
+- **`closeProfile` became `dismissOverlays`.** The old event was aimed at one
+  component and fired only for a brand-new, URL-bearing share intent, behind
+  three early returns — so seven other modals, and every non-share way of
+  leaving the app, were never covered. The emitter must not know the inventory.
+  ⚠️ `OnboardingModal` is excluded on purpose: it has no dismiss by design, and
+  closing it without running `finish()` burns the first-run tour without
+  stamping its seen-flag.
+
+### Quota reset is a display problem, not a scheduling one (2026-08-14)
+
+- The quota day is a **UTC calendar date** and resets implicitly: `ai_usage` is
+  keyed `(user_id, day)`, so at 00:00 UTC the lookup key changes and a fresh row
+  is inserted at 0. There is no cron and nothing to schedule.
+- **Nothing re-runs missed summaries when it resets.** An over-quota save is
+  written `summary_status='quota_exceeded'`, and `recover_pending_summaries`
+  filters on `pending` only — so there is no thundering herd of Claude calls at
+  midnight, and no need to ask the user's permission for one. What there *was*
+  instead: `quota_exceeded` rendered no retry button at all, so those reels were
+  a permanent dead end. The button now returns once `usage.remaining > 0`.
+- `resets_at` has always been in `/api/account/usage`; it was simply never
+  displayed. `mobile/services/quotaReset.ts` renders it in the user's own clock —
+  **"tomorrow" was actively wrong**, since midnight UTC is 5:30 AM in India and
+  8 PM the previous day in California. Formatted by hand, not with
+  `toLocaleTimeString`: Intl options are honoured inconsistently across Hermes
+  builds and a meter that reads differently per device is worse than one that is
+  plain everywhere.
+
 ## 5. Known gotchas / constraints
 
 - **Windows dev**; line endings show LF→CRLF warnings (harmless).
@@ -299,8 +360,9 @@ that section is now marked **RETIRED**. Full spec: [`DESIGN_PROPOSAL.md`](DESIGN
 2. **Auth + per-user data** (Supabase): users table, `user_id` everywhere, per-user filtering, per-user AI quota. *Largest pure-code unlock; enables tiers/referrals/quota.*
 3. **Deploy backend** (Railway/Render) + point `EXPO_PUBLIC_API_URL` at it + lock CORS + Postgres. Repo is deploy-ready (`render.yaml`, env-driven CORS/DATABASE_URL, `$PORT` start, `/health` check) — owner action: connect repo, set `ANTHROPIC_API_KEY`.
 4. **iOS share extension** (needs Mac/EAS) — the core capture gesture.
-5. ~~**Server-side search**~~ — built, then **deleted 2026-08-10** when the UI
-   entry point was removed and nothing could call it. See §3.
+5. ~~**Server-side search**~~ — built, **deleted 2026-08-10** when the UI entry
+   point was removed and nothing could call it, and **not** revived on
+   2026-08-14 when search returned client-side. Don't rebuild it. See §3.
 6. Pricing/IAP config in App Store Connect (intro offer, offer code, regional prices) — at launch.
 
 See [`TODO.md`](../TODO.md) for the full, categorized checklist.

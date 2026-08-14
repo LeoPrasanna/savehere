@@ -15,6 +15,8 @@ import { TODO_ADD_LABEL, TODO_ADDED_LABEL } from '../../constants/todoBrand';
 import { useWaitingMessage } from '../../constants/waitingMessages';
 import { openSourceLink } from '../../services/openLink';
 import { getCachedUsage, refreshUsage } from '../../services/usageCache';
+import { resumesAtSentence } from '../../services/quotaReset';
+import { useDismissOnBackground } from '../../services/uiBus';
 import { markDeleted, unmarkDeleted, patchReel } from '../../services/libraryEdits';
 import * as haptics from '../../services/haptics';
 import { Pressable } from '../../components/Pressable';
@@ -73,6 +75,21 @@ export default function ReelDetailScreen() {
   // within 350ms of opening are ignored; card presses never dismiss (see
   // stopPropagation on the card pressables).
   const modalOpenedAt = useRef(0);
+
+  /**
+   * Leaving the app closes every sheet this screen owns (owner report,
+   * 2026-08-14: share a reel from Instagram, come back, the New-task sheet or
+   * the category picker is still sitting there).
+   *
+   * Each `visible` flag is a `useState` private to this screen, so there is no
+   * way to reach them from the root — one subscription per owner is the
+   * irreducible part. See services/uiBus.ts.
+   */
+  useDismissOnBackground(() => {
+    setTodoOpen(false);
+    setCategoryModal(false);
+    setWorkoutModal(false);
+  });
   const openModal = (setter: (v: boolean) => void) => {
     modalOpenedAt.current = Date.now();
     setter(true);
@@ -409,6 +426,11 @@ export default function ReelDetailScreen() {
   // The "action" button is Recipe on cooking reels, generic tasks elsewhere —
   // each has its own flag.
   const actionLocked = isCooking ? feat?.recipe === false : feat?.tasks === false;
+  /** Budget is back after a `quota_exceeded` save. `> 0`, not "the clock says
+   *  the reset passed": the server's own count is the thing that decides
+   *  whether the retry can succeed, and a cached-but-stale meter only ever
+   *  hides the button, which is the safe direction. */
+  const aiBackNow = (usage?.remaining ?? 0) > 0;
   const PRO_HINT = 'Available on Pro. Your free plan keeps saves, summaries and search.';
   const itinRegensLeft = itin?.regenerations_left ?? 3;
   const showItinerarySection = isTravel && !isSensitive;
@@ -524,21 +546,40 @@ export default function ReelDetailScreen() {
             <Disclaimer variant={summaryDisclaimer} style={{ marginTop: spacing.sm }} />
           </>
         ) : reel.summary_status === 'quota_exceeded' ? (
-          /* Out of AI actions for the day. The save itself is complete and this
-             screen says so first — the card is the product, the summary is an
-             enhancement. No Try again button on purpose: nothing here can
-             succeed until the reset, and a button that spends nothing and
-             changes nothing all day is worse than no button. */
+          /* Out of AI actions when this was saved. The save itself is complete
+             and the screen says so first — the card is the product, the summary
+             is an enhancement.
+
+             ⚠️ THE BUTTON APPEARS AGAIN ONCE THE BUDGET IS ACTUALLY BACK.
+             There was no Try again here at all, on the reasoning that nothing
+             could succeed until the reset — true on the day, and wrong every
+             day after. Nothing retries a `quota_exceeded` reel automatically
+             (startup recovery only picks up rows still `pending`, deliberately
+             — see backend/app/routes/reels.py), so this state was a dead end:
+             the card said "resumes tomorrow" forever and offered no way to
+             make tomorrow happen. Gated on the live `remaining` rather than on
+             a clock, so it is the budget itself that decides. */
           <View style={styles.emptySummary}>
             <Icon name="time" size={28} color={colors.textSecondary} style={{ marginBottom: spacing.xs }} />
-            <Text style={styles.emptyTitle}>Saved — AI summary resumes tomorrow</Text>
-            <Text style={styles.emptyHint}>
-              You've used today's AI actions, so this one was saved without a summary.
-              Nothing was lost: the link, title and thumbnail are here, and you can add
-              notes now. Summaries, recipes and workouts unlock again after the daily
-              reset — or upgrade for a bigger allowance.
+            <Text style={styles.emptyTitle}>
+              {aiBackNow ? 'Saved — your AI actions are back' : 'Saved — AI summary is waiting on your daily reset'}
             </Text>
-            <Text style={styles.quotaNote}>Your saves are never rationed — only the AI actions are.</Text>
+            <Text style={styles.emptyHint}>
+              {aiBackNow
+                ? "This one was saved while today's AI actions were used up, so it never got a summary. You have actions again — run it now."
+                : "You've used today's AI actions, so this one was saved without a summary. Nothing was lost: the link, title and thumbnail are here, and you can add notes now."}
+            </Text>
+            {aiBackNow ? (
+              <Pressable style={[styles.pill, { marginTop: spacing.sm }]} onPress={handleSummarizeNow} disabled={summarizing}>
+                {summarizing ? <ActivityIndicator size="small" color={colors.accent} /> : <Ionicons name="refresh" size={13} color={colors.accent} />}
+                <Text style={styles.pillText}>{summarizing ? 'Summarizing…' : 'Summarize now'}</Text>
+              </Pressable>
+            ) : null}
+            <Text style={styles.quotaNote}>
+              {aiBackNow
+                ? 'Uses 1 AI action from your daily quota.'
+                : `${resumesAtSentence(usage?.resets_at)} Your saves are never rationed — only the AI actions are.`}
+            </Text>
           </View>
         ) : (reel.summary_status === 'failed' || pendingStalled) ? (
           <View style={styles.emptySummary}>
