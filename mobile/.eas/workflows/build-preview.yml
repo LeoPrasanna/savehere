@@ -10,11 +10,20 @@ name: Android preview build
 # ✅ CONFIRMED WORKING 2026-08-14. The EAS GitHub App is connected and the base
 # directory is set, so merging to `develop` fires a build on its own.
 #
-# ⚠️ THE QUEUE IS THE COST, AND IT IS THE WHOLE COST. Measured from EAS's own
-# `metrics` across two builds: compute is FLAT at 17.7 and 18.3 min (a 3%
-# spread), while queue was 7.6 min and 29.7 min — 4x, and 62% of wall time on
-# the slow one. So the lever that matters is not making a build faster, it is
-# not queueing builds that cannot change the APK.
+# ⚠️ THE QUEUE IS THE BIGGER COST. Measured from EAS's own `metrics`:
+#
+#   358c42ae   queue 29.7 min   compute 17.7 min
+#   cdbd151b   queue  7.6 min   compute 18.3 min
+#   aef10440   queue  5.8 min   compute 26.0 min
+#
+# Queue spans a 24-minute range, compute an 8-minute one. ⚠️ An earlier version
+# of this comment claimed compute was "FLAT... a 3% spread" — that was read off
+# the first two rows alone, and the third broke it. Compute varies by ~45%, for
+# reasons not established here; do not quote it as a constant.
+#
+# The conclusion survives the correction: the largest single lever available in
+# this repo is not making a build faster — it is not queueing builds that
+# cannot change the APK at all.
 #
 # Hence the `paths` filter. On 2026-08-14 two merges landed minutes apart and
 # the second was a TODO.md-only change: it queued a full Android build behind
@@ -40,6 +49,11 @@ on:
       - '!backend/**'     # FastAPI ships via Render, not EAS
       - '!docs/**'
       - '!.github/**'     # GitHub Actions config; EAS workflows live elsewhere
+      # This file. Editing the trigger cannot change the APK, and the first
+      # version of this filter proved the point by queueing a 26-minute build
+      # for a comment. Test changes here with `eas workflow:run` instead:
+      #   npx eas-cli@latest workflow:run .eas/workflows/build-preview.yml
+      - '!**/.eas/**'
 
 jobs:
   build_android_preview:
