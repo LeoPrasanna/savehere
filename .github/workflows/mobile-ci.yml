@@ -28,7 +28,12 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # ⚠️ 22, not 20. The services/ self-checks below run through
+          # `node --experimental-strip-types`, which does not exist before
+          # 22.6 — on 20 it is a hard `bad option` exit, not a skip. The repo's
+          # test scripts have required 22 since they were written; CI just never
+          # ran them, so nothing surfaced it until 2026-08-14.
+          node-version: "22"
           cache: npm
           cache-dependency-path: mobile/package-lock.json
 
