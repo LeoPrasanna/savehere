@@ -10,7 +10,7 @@ import { Icon } from '../components/Icon';
 import { Disclaimer } from '../components/Disclaimer';
 import { Label, Body, Title, Rule, Index, GhostButton, FilledButton } from '../components/kit';
 import { getSaveCount, hydrateSaveCount, rememberSaveCount } from '../services/saveCount';
-import { getCachedUsage, refreshUsage } from '../services/usageCache';
+import { getCachedUsage, refreshUsage, onUsage } from '../services/usageCache';
 import { resumesAtSentence } from '../services/quotaReset';
 import { ASK_MIN_REELS } from '../constants/limits';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
@@ -80,6 +80,20 @@ export default function AskScreen() {
     });
     return () => { alive = false; };
   }, []);
+
+  /**
+   * ⚠️ WITHOUT THIS, ASKING YOUR LAST QUESTION LEAVES THE BOX OPEN.
+   *
+   * `usage` was read once on mount, so `outOfAi` below still said false after
+   * the action that spent the budget — and the empty-state work from the round
+   * before (hide the field when `remaining === 0`) only took effect on a
+   * remount. The screen that spends the quota was the last to know it had.
+   *
+   * `askStream` reports its own spend now (see api.ts), so subscribing is what
+   * turns that into something the user sees.
+   */
+  useEffect(() => onUsage(setUsage), []);
+
   const locked = savedCount !== null && savedCount < ASK_MIN_REELS;
   // null (never fetched) must NOT read as exhausted — a wrong "you're out"
   // shown to someone with budget is worse than showing it a moment late.

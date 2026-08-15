@@ -11,7 +11,7 @@ import { SkeletonGrid } from '../components/SkeletonCard';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { Landing } from '../components/Landing';
-import { Label, Body, Title, Rule, GhostButton, Wordmark } from '../components/kit';
+import { Label, Body, Rule, GhostButton, Wordmark, EmptyState } from '../components/kit';
 import { hasEnteredLibrary, markEnteredLibrary } from '../services/sessionFlags';
 import { onUi, emitUi } from '../services/uiBus';
 import { applyEdits, markDeleted, unmarkDeleted } from '../services/libraryEdits';
@@ -25,6 +25,11 @@ import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGO
 
 const CATEGORIES = ['all', ...CATEGORY_OPTIONS];
 const PAGE = 24;
+
+/** Category names are stored lowercase; sentence copy needs them capitalised.
+ *  Single word by definition (see ALLOWED_CATEGORIES on the backend), so this
+ *  does not need to handle spaces. */
+const titleCase = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** Module-level so the reference is stable — RollingTagline is memoized and an
  *  inline array would defeat that on every render. */
@@ -347,29 +352,30 @@ export default function HomeScreen() {
       {loading ? (
         <SkeletonGrid columns={numColumns} rows={3} />
       ) : error && reels.length === 0 ? (
-        <View style={styles.empty}>
-          <Label wide>Offline</Label>
-          <Title style={styles.emptyTitle}>Can't reach the server</Title>
-          <Body style={styles.emptyText}>{error}</Body>
+        <EmptyState kicker="Offline" title="Can't reach the server" body={error}>
           <GhostButton label="Retry" onPress={() => { setLoading(true); load(); }} style={styles.emptyCta} />
-        </View>
+        </EmptyState>
       ) : reels.length === 0 ? (
-        <View style={styles.empty}>
-          <Label wide>Empty sheet</Label>
-          <Title style={styles.emptyTitle}>
-            {activeCategory === 'all' ? 'Nothing saved yet' : `Nothing in ${activeCategory}`}
-          </Title>
-          <Body style={styles.emptyText}>
-            {activeCategory === 'all'
-              ? 'Save your first link and the summary appears in seconds.'
-              : 'Saves you expected here may be filed under a different category.'}
-          </Body>
+        <EmptyState
+          kicker="Empty sheet"
+          /* ⚠️ `titleCase`, not the raw value. The category bubbles render
+             through `Label`, which uppercases — so the filter read FITNESS
+             while this line read "Nothing in fitness", lowercase, inside the
+             system's largest display type. Same word, two casings, one screen
+             apart. */
+          title={activeCategory === 'all'
+            ? 'Nothing saved yet'
+            : `Nothing in ${titleCase(activeCategory)}`}
+          body={activeCategory === 'all'
+            ? 'Save your first link and the summary appears in seconds.'
+            : 'Saves you expected here may be filed under a different category.'}
+        >
           {activeCategory === 'all' ? (
             <GhostButton label="Save your first link" trailing="→" onPress={() => router.push('/save')} style={styles.emptyCta} />
           ) : (
             <GhostButton label="Show all categories" onPress={() => onCategoryChange('all')} style={styles.emptyCta} />
           )}
-        </View>
+        </EmptyState>
       ) : (
         <>
         {(offline || error) && (
@@ -533,9 +539,6 @@ const styles = themed(() => StyleSheet.create({
     maxWidth: 560,
     alignSelf: 'center',
   },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
-  emptyTitle: { textAlign: 'center' },
-  emptyText: { textAlign: 'center', maxWidth: 380 },
   emptyCta: { marginTop: spacing.sm, alignSelf: 'stretch', maxWidth: 320 },
 
   // Keeps the exact footprint the search row occupied, so the grid below does

@@ -60,3 +60,4 @@ jobs:
           npm run test:roll
           npm run test:search
           npm run test:quota
+          npm run test:cover

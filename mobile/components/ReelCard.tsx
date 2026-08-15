@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Platform, Animated, ActivityIndicator } from 'r
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from './Icon';
+import { GeneratedCover } from './GeneratedCover';
 import { Reel, thumbCandidates } from '../services/api';
 import * as haptics from '../services/haptics';
 import { getCachedUsage } from '../services/usageCache';
@@ -178,10 +179,13 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
             onError={onImageFailed}
           />
         ) : (
-          /* No thumbnail: an empty frame with its platform named, rather than
-             a coloured tint standing in for a picture. */
-          <View style={[styles.image, styles.imageEmpty]}>
-            <Icon name={platform.icon === 'globe-outline' ? 'link' : 'play'} size={20} color={colors.textTertiary} />
+          /* ⚠️ No thumbnail, and after `tryRepair` there will never be one —
+             so this is a real cover, not a placeholder. It used to be one 20px
+             grey glyph on a flat panel, which is what a broken tile looks like;
+             this is what a chosen one looks like. Deterministic per reel, drawn
+             offline, costs nothing. See components/GeneratedCover.tsx. */
+          <View style={styles.image}>
+            <GeneratedCover id={reel.id} category={reel.category} />
           </View>
         )}
 
@@ -299,7 +303,6 @@ const styles = themed(() => StyleSheet.create({
     width: '100%', height: '100%',
     borderRadius: radius.lg,
   },
-  imageEmpty: { alignItems: 'center', justifyContent: 'center' },
 
   // Inside the picture's bounds — costs the tile no height. Only the BOTTOM
   // corners are rounded: the scrim starts mid-tile, so its top edge is straight.

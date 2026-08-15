@@ -243,6 +243,30 @@ export interface TaskListResponse {
   tasks: Task[];
 }
 
+/**
+ * Called after every successful write. `services/usageCache` registers itself
+ * here at import time.
+ *
+ * ⚠️ WHY A HOOK AND NOT A DIRECT IMPORT: `usageCache` already imports `api`, so
+ * importing it back would be a module cycle — the kind that resolves fine until
+ * the day module init order changes and `refreshUsage` is undefined at first
+ * call. One nullable function pointer keeps the dependency arrow pointing one
+ * way.
+ *
+ * ⚠️ WHY IT LIVES IN `request()` AT ALL. The AI budget and the library counts
+ * are server-owned, and EVERY screen that changed them was expected to remember
+ * to re-fetch. None of them did: the reel screen ran summarize / tasks /
+ * workout / itinerary and refreshed usage only on MOUNT, so five spent actions
+ * later the cache still held the numbers from before the first one. Opening the
+ * hamburger then painted that stale number, refreshed in the background, and
+ * corrected itself a beat later — the "menu isn't updating" the owner reported.
+ *
+ * Putting it in each caller means every FUTURE endpoint has to remember too.
+ * This is the one place they all already go through.
+ */
+let onMutate: (() => void) | null = null;
+export function setMutationHook(fn: () => void) { onMutate = fn; }
+
 async function request<T>(path: string, options?: RequestInit, timeoutMs = 55000): Promise<T> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -271,6 +295,9 @@ async function request<T>(path: string, options?: RequestInit, timeoutMs = 55000
       } catch {}
       throw new Error(msg);
     }
+    // Anything that isn't a GET may have moved the AI budget or the library
+    // counts. GET is excluded so `getUsage()` itself cannot loop.
+    if ((options?.method || 'GET').toUpperCase() !== 'GET') onMutate?.();
     return res.json();
   } catch (e: any) {
     if (e.name === 'AbortError') {
@@ -327,6 +354,10 @@ async function askStream(question: string, handlers: AskStreamHandlers): Promise
         reject(new Error(msg));
         return;
       }
+      // Ask is the one AI action that bypasses `request()` (it streams over
+      // XHR), so it has to report the spend itself — without this, the single
+      // most quota-visible screen in the app is the one that never updates it.
+      onMutate?.();
       const { answer, sources } = split(xhr.responseText);
       resolve({ answer: answer.trim(), sources: sources ?? [] });
     };

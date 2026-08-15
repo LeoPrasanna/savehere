@@ -93,6 +93,14 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 - Per-user daily AI quota (the real cost ceiling) + per-reel AI caps + per-IP burst guard
 - Usage drill-down — see exactly what today's AI actions were spent on
 - `/health` and `/health/extract` self-test endpoints; image proxy for CDN-blocked thumbnails
+- 🖼️ **Thumbnails repair themselves, and fall back to a drawn cover when they can't.**
+  Instagram's CDN links are *signed* and die ~5 days after the save, so every Instagram
+  save eventually stops rendering — `POST /api/reels/{id}/thumbnail` re-resolves one from
+  the embed page (**no AI action charged**; it's our data going stale, not something the
+  user asked an AI for), bounded to one attempt per reel per session. When there is no
+  picture to be had at all, the tile draws a **generated cover** instead — one gradient
+  and an oversized category glyph, deterministic from the reel id, no network and no
+  assets. It reads as a cover the app chose, not as a broken image.
 - Backend test suite — **250 pytest tests** across 24 files
 
 ---
