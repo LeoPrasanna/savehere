@@ -5,6 +5,49 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ 🔴 SHIPPED BUG FOUND 2026-08-15 — FOUR BUILDS IN A ROW WERE UNINSTALLABLE
+
+**Every build since 2026-08-14 produced `versionCode` 7.** Confirmed across four:
+`aef10440`, `018a0e56`, `2551789f`, `42001928` — all 7, from a committed 6.
+
+**Android refuses to install an APK whose `versionCode` equals the installed
+one.** So after installing the first of those, the next three would have failed
+on the phone with a bare *"App not installed"* — no reason given, discovered
+after a 20-minute build and a queue. **This is exactly the trap
+`build-preview.yml`'s header was written to prevent, and the automation never
+actually prevented it.**
+
+**Root cause:** `eas.json` had `"appVersionSource": "local"`. With that,
+`autoIncrement` reads `android.versionCode` out of `app.json`, bumps it, and
+writes the result back **on the build machine** — a filesystem nobody keeps. The
+bump never reaches git, so every build starts from the same committed number and
+lands on the same result. Expo names this directly: *"you need to commit your
+changes on every build if you want the version change to persist. This can be
+difficult to coordinate when building on CI."*
+
+**Fix: `"appVersionSource": "remote"`** (Expo's recommendation since EAS CLI
+12.0.0). The counter lives on EAS's servers and increments per build with no
+local file to commit, so the treadmill disappears rather than being managed.
+
+⚠️ **ONE-TIME OWNER ACTION REQUIRED — the remote counter is NOT yet initialized.**
+`eas build:version:get` reports *"No remote versions are configured for this
+project."* Initializing needs an interactive TTY (`build:version:set` has no
+value flag and refuses piped stdin: *"Input is required, but stdin is not
+readable"*), so it could not be done from here. **Run this once, from a real
+terminal, and answer `7`:**
+```
+cd mobile && npx eas-cli@latest build:version:set --platform android --profile preview
+```
+`7` is the highest versionCode ever built, so the next build is 8 and cannot
+collide with anything already on a phone.
+**Belt and braces until you do:** `app.json`'s `versionCode` was bumped 6 → **8**,
+so if a build runs first and EAS seeds the remote counter from the local config,
+it still lands above the installed 7. ⚠️ Once remote versioning is live that
+field is **ignored for builds** (EAS says so on every command) and survives only
+as a historical marker — do not "fix" it later by editing it.
+
+---
+
 ## ▶ EAS UPDATE (OTA) — ADDED 2026-08-15. MOST FIXES NO LONGER NEED A BUILD
 
 **Why:** the app is a native shell plus a JavaScript payload, and **almost every
