@@ -46,8 +46,9 @@ Substitute `<MODEL>` with your own model's display name — e.g. `Claude Opus 5`
 - Tests: `python -m pytest tests/ -q` (from `backend/`) — keep them green
 - AI model: Claude Haiku `claude-haiku-4-5-20251001` (summaries, tasks/recipe, workout, ask-library)
 
-**Mobile** (`mobile/`) — Expo SDK 56 + expo-router + React Native:
-- ⚠️ Expo changed a lot — check the versioned docs at https://docs.expo.dev/versions/v56.0.0/ before writing Expo code (see `mobile/AGENTS.md`).
+**Mobile** (`mobile/`) — Expo SDK 57 + expo-router + React Native 0.86:
+- ⚠️ Expo changed a lot — check the versioned docs at https://docs.expo.dev/versions/v57.0.0/ before writing Expo code (see `mobile/AGENTS.md`).
+- ⚠️ **EAS Free plan = 15 Android builds per calendar month** (not the 30 an old changelog announced), and running out is a wall, not a bill. `build-preview.yml`'s auto-trigger is deliberately `workflow_dispatch` only — fire a build with `npx eas-cli@latest workflow:run .eas/workflows/build-preview.yml` from `mobile/`. See TODO.md → "EAS BUILD BUDGET".
 - Typecheck: `npm run typecheck` (uses `--stack-size=16000`; plain `tsc` crashes on the heavy type graph — that's expected, not a real error).
 - Validate web build: `npx expo export --platform web`
 - Icons go through `components/Icon.tsx` (Lucide); platform brand badges use Ionicons.

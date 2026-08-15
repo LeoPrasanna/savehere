@@ -45,7 +45,7 @@ backend/   FastAPI + SQLAlchemy, SQLite (dev). System Python 3.12.
       transcriber.py     audio transcription fallback (OpenAI Whisper; needs ffmpeg)
   tests/                 pytest (27 tests) — pure-function + rate-limit + retrieval
 
-mobile/    Expo SDK 56 + expo-router + React Native (dev on web).
+mobile/    Expo SDK 57 + expo-router + React Native 0.86 (dev on web).
   app/                   index (library), landing(redirect), save, ask, search, rediscover, help, support, reel/[id], workout/*
   components/            ReelCard, TaskList, Landing, ProfilePanel, Icon (Lucide), AuroraBackground, BorderBeam, …
   services/api.ts        typed API client; BASE_URL from EXPO_PUBLIC_API_URL || localhost:8000
@@ -271,7 +271,8 @@ that section is now marked **RETIRED**. Full spec: [`DESIGN_PROPOSAL.md`](DESIGN
 - **No blur, deliberately.** The whole point of this hybrid is that it avoids
   `expo-blur`/`backdrop-filter`, so Android and web render identically to iOS at
   the same cost. Do not reintroduce glassmorphism to "finish the look".
-- **No Fraunces.** Owner's call — avoids font-loading latency on SDK 56.
+- **No Fraunces.** Owner's call — avoids font-loading latency (decided on SDK 56;
+  the reasoning is about font loading, not the SDK, so it survives SDK 57).
   `typeface.serif` still resolves to `Inter_600SemiBold`; headers and titles use
   Inter. Any doc claiming Fraunces is in the app is wrong.
 - **Haze backdrop visibility constraints (2026-08-09):** the `gradients.haze`
