@@ -5,6 +5,72 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ EAS UPDATE (OTA) — ADDED 2026-08-15. MOST FIXES NO LONGER NEED A BUILD
+
+**Why:** the app is a native shell plus a JavaScript payload, and **almost every
+change this project makes is the JavaScript half.** Of everything in round 4,
+only the SDK upgrade and the Kotlin share Activity touched native — the search
+screen, support page, quota labels and modal-dismissal fix were all JS, and every
+one of them cost a full ~26-minute build because there was no other delivery
+route. `expo-updates` gives one: the app checks Expo's server on launch and pulls
+new JS. **No build, no queue, and it does not draw on the 15/month build quota**
+(EAS Update is metered separately, on MAU + bandwidth — the dashboard showed
+0 / 0 GiB, i.e. it had never been set up).
+
+Ship a JS-only change with:
+```
+cd mobile && npx eas-cli@latest update --channel preview --message "what changed"
+```
+
+⚠️ **Native changes still need a build** — a new SDK, a new native module, changed
+permissions. Same rule that forced a build for the share sheet. **It is also why
+installing `expo-updates` itself costs one build: it cannot install itself over
+the air.** Budget line: build 11 of 15 was the SDK 57 verification; this needs 12.
+
+⚠️ **An OTA push is instant in BOTH directions.** A broken screen reaches the
+device in seconds with no review gate. That is a real operational risk, not a
+theoretical one.
+
+### ⚠️ TWO THINGS `eas update:configure` GOT WRONG HERE — both corrected
+
+**1. It set `runtimeVersion.policy` to `appVersion`, which would have shipped
+guaranteed crashes.** That policy ties the JS runtime to `expo.version` in
+app.json — which in this repo is **`"1.0.0"` and has never moved**, not across
+SDK 56 → 57, not when the Kotlin `ShareActivity` was added, not when
+`expo-share-intent` went 7 → 8. Under `appVersion`, an update built on SDK 57
+would be offered to an SDK 56 APK, which cannot run it. Now
+**`{"policy": "fingerprint"}`**, which hashes everything affecting the native
+runtime — including `plugins/withInvisibleShare.js` — so an update is only ever
+served to a build it genuinely fits. Expo recommends `fingerprint` exactly when
+incompatible updates must be "extremely unlikely, at the cost of making it
+necessary to create builds more often". That trade is right for this project:
+a wrong-runtime update is a crash on a tester's phone; an extra build is 26
+minutes. Verified in the prebuild output —
+`<string name="expo_runtime_version">file:fingerprint</string>`.
+
+**2. It injected an iOS `appExtensions` block nobody asked for.** The command
+added `extra.eas.build.experimental.ios.appExtensions` declaring a
+`ShareExtension` target and the App Group `group.com.savehere.app`. **Reverted.**
+iOS cannot be built at all (blocked on the $99 Apple Developer account), that
+App Group entitlement cannot be provisioned without it, and static native config
+that has never been exercised is how a repo accumulates untested surface. It was
+also unrelated to the change being made — a command run for OTA should not
+silently add iOS native targets. `npx expo prebuild --platform android --clean`
+was re-run after reverting and is unaffected, which proves Android never needed
+it. Add it deliberately when iOS is actually tackled, with a real App Group.
+
+**Channels** are wired in `eas.json` (`development` / `preview` / `production`),
+so an update published to `--channel preview` reaches preview APKs only.
+
+**Verified:** expo-doctor 21/21 · typecheck · all 6 self-checks · web export ·
+`expo prebuild --platform android --clean` with the plugin invariants intact
+(exactly ONE `ACTION_SEND` filter owned by `ShareActivity`, `ShareSave.kt` in
+place) and `expo.modules.updates.*` meta-data present in the manifest.
+⚠️ **The OTA path itself is unproven until an APK containing `expo-updates` is
+installed** — you cannot test over-the-air delivery from a build that predates it.
+
+---
+
 ## ▶ EAS BUILD BUDGET — 15/MONTH, NOT 30. AUTO-TRIGGER IS OFF (2026-08-15)
 
 ⚠️ **The "30 builds a month" everyone remembers is wrong, and wrong in the
@@ -23,9 +89,16 @@ Free plans cannot incur overage — there is **no pay-per-build escape hatch**. 
 only unblocks are Starter ($19/mo, which also buys the high-priority queue and a
 2-hour timeout) or waiting for the 1st.
 
-**State on 2026-08-15: 10 of 15 used, in four days** (9 finished + 1 EAS-cancelled;
-cancelled-before-work builds are documented as not charged, so plan against **5
-remaining**). Reset is **1 September**, calendar month, not signup anniversary.
+**State on 2026-08-15, read off the owner's own usage dashboard: 9 builds counted**
+(9 Android, 0 iOS). Eleven build records exist — 9 finished, 1 cancelled, 1 in
+flight — so the dashboard's 9 confirms two things that were previously inferred:
+**cancelled builds do not consume quota** (this was `[Likely]` from the docs, now
+measured), and **no sibling project under `leo-app-dev-team` is drawing on the
+allowance** (account total equals this project's total). Reset is **1 September**,
+calendar month, not signup anniversary.
+⚠️ The dashboard does **not** show the plan name. If the account is on a paid
+plan the 15 ceiling does not apply at all and this whole section is moot —
+confirm at `expo.dev/accounts/leo-app-dev-team/settings/billing`.
 
 **Consequence: `build-preview.yml`'s auto-trigger is now `workflow_dispatch` only.**
 A `paths` filter is not a budget — it stops *pointless* builds, but an auto-trigger
