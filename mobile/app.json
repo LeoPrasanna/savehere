@@ -22,7 +22,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.savehere.app",
-      "versionCode": 6
+      "versionCode": 8
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -63,6 +63,12 @@
         "projectId": "e81a906f-8918-45c6-b743-bd50185b263b"
       }
     },
-    "owner": "leo-app-dev-team"
+    "owner": "leo-app-dev-team",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/e81a906f-8918-45c6-b743-bd50185b263b"
+    }
   }
 }
