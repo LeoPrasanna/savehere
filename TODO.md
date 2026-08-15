@@ -5,6 +5,34 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ 🔴 OTA TRAP FOUND 2026-08-15 — ONE npm SCRIPT ORPHANED A WHOLE UPDATE
+
+Round 6 was JS-only and should have shipped over the air. The published update
+reached **nothing**: its runtime version was `b0a8b156…`, the installed build 9
+is `dcafdcb7…`.
+
+**`runtimeVersion` is the `fingerprint` policy, and `@expo/fingerprint` hashes
+package.json's `scripts` block.** Adding one dev-only line to register a new
+self-check changed the fingerprint. `eas fingerprint:compare` named the whole
+diff as that single added script.
+
+⚠️ **A mismatched runtime version does not warn or fail — the update simply
+never applies to any device.** The failure mode is silence, which is why this
+would otherwise have been found by the owner reporting "the fix didn't arrive".
+
+**Rule:** new self-checks are invoked **directly** in `mobile-ci.yml`, never via
+a new `package.json` script. The six existing `test:*` scripts are baked into
+build 9's fingerprint — leave them alone. Recorded in `mobile/AGENTS.md`, which
+is auto-loaded into every session that touches `mobile/`.
+
+**Before publishing any update:**
+```
+cd mobile && npx eas-cli@latest fingerprint:generate -p android
+```
+must equal the installed build's Runtime Version from `eas build:view <id>`.
+
+---
+
 ## ▶ ROUND 6 (2026-08-15) — 3 bugs, 1 consistency pass, 1 research-only item
 
 | # | Item | Outcome |

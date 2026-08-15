@@ -52,8 +52,7 @@
     "test:notifications": "node --experimental-strip-types --no-warnings services/notifyLog.test.ts",
     "test:roll": "node --experimental-strip-types --no-warnings components/rollGeometry.test.ts",
     "test:search": "node --experimental-strip-types --no-warnings services/librarySearch.test.ts",
-    "test:quota": "node --experimental-strip-types --no-warnings services/quotaReset.test.ts",
-    "test:cover": "node --experimental-strip-types --no-warnings components/coverStyle.test.ts"
+    "test:quota": "node --experimental-strip-types --no-warnings services/quotaReset.test.ts"
   },
   "private": true
 }
