@@ -55,9 +55,19 @@ export function resetsAtLabel(iso: string | null | undefined, now: Date = new Da
   return `${time} on ${WEEKDAYS[at.getDay()]}`;
 }
 
-/** The full sentence the out-of-AI surfaces share, so the wording can't drift
- *  between the panel, the save screen and the reel card. */
-export function resumesAtSentence(iso: string | null | undefined): string {
-  const label = resetsAtLabel(iso);
+/**
+ * The full sentence the out-of-AI surfaces share, so the wording can't drift
+ * between the panel, the save screen and the reel card.
+ *
+ * ⚠️ `now` is injectable for the SAME reason it is on `resetsAtLabel`, and
+ * leaving it off here was a real defect: the test asserted "5:30 AM tomorrow"
+ * against a hardcoded date, passed on the day it was written, and failed the
+ * next morning when that timestamp became "today". `backend/tests/test_quota.py`
+ * had the identical bug once (it asserted on the local date while the quota
+ * keys rows on the UTC day, so it failed every run between 00:00 and 05:30 IST).
+ * A time-dependent assertion is not a test, it is a scheduled outage.
+ */
+export function resumesAtSentence(iso: string | null | undefined, now: Date = new Date()): string {
+  const label = resetsAtLabel(iso, now);
   return label ? `AI actions come back at ${label}.` : 'AI actions come back after the daily reset.';
 }

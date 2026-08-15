@@ -25,9 +25,39 @@ name: Android preview build
 # this repo is not making a build faster — it is not queueing builds that
 # cannot change the APK at all.
 #
-# Hence the `paths` filter. On 2026-08-14 two merges landed minutes apart and
-# the second was a TODO.md-only change: it queued a full Android build behind
-# the first, and EAS cancelled one of them.
+# ⚠️⚠️ THE AUTO-TRIGGER IS OFF, AND THE REASON IS A HARD CEILING, NOT A
+# PREFERENCE (2026-08-15).
+#
+# The EAS Free plan gives **15 Android builds per CALENDAR MONTH** — not the 30
+# that a 2023 changelog announced and that everyone still remembers. The 30 was
+# pooled with an iOS sub-cap; today's allowance is split per platform
+# (15 Android + 15 iOS), and for an Android-only project the 15 iOS builds are
+# dead weight. Source: https://expo.dev/pricing.md ("Up to 15 Android and 15
+# iOS builds").
+#
+# ⚠️ **RUNNING OUT IS A WALL, NOT A BILL.** Free plans cannot incur overage:
+# "Once you use your monthly quota of free builds, new builds are unavailable
+# until the quota resets on the first day of the next calendar month"
+# (https://docs.expo.dev/billing/faq/). No pay-per-build escape hatch exists.
+# The only unblocks are upgrading to Starter or waiting for the 1st.
+#
+# On 2026-08-15 this project had used **10 of 15** in four days, with half the
+# month left. A `paths` filter alone is not a budget — an auto-trigger spends
+# the remaining builds in merge order, which is not the same as spending them
+# on the merges that deserve an APK.
+#
+# So builds are now DELIBERATE:
+#
+#   cd mobile && npx eas-cli@latest workflow:run .eas/workflows/build-preview.yml
+#
+# ⚠️ The versionCode write-back that this file was created to automate STILL
+# happens — `autoIncrement` runs on the build machine either way, so nothing
+# regressed there. What is lost is only the "fires by itself" part.
+#
+# ── RESTORING THE AUTO-TRIGGER ─────────────────────────────────────────────
+# When the budget allows (a paid plan, or a quieter month), uncomment the block
+# below. It is kept verbatim rather than deleted because it was verified working
+# on 2026-08-14 and the path patterns are non-obvious.
 #
 # ⚠️ THE PATTERNS ARE WRITTEN TO BE CORRECT UNDER EITHER PATH ROOT. EAS reads
 # `.eas/workflows/` relative to the base directory configured for the GitHub
@@ -37,23 +67,25 @@ name: Android preview build
 #   - mobile-relative: `**` matches everything under mobile/, the backend/docs/
 #     .github exclusions match nothing (harmless), and a merge that touches only
 #     those directories never reaches mobile/ so it does not fire anyway.
-# If a build ever fails to fire for a genuine mobile change, THIS is the first
-# thing to suspect — check `eas workflow:run` still works before blaming EAS.
+#
+# on:
+#   push:
+#     branches: ['develop']
+#     paths:
+#       - '**'
+#       - '!**/*.md'        # docs-only merges cannot change the APK
+#       - '!backend/**'     # FastAPI ships via Render, not EAS
+#       - '!docs/**'
+#       - '!.github/**'     # GitHub Actions config; EAS workflows live elsewhere
+#       - '!**/.eas/**'     # editing the trigger cannot change the APK
 
 on:
-  push:
-    branches: ['develop']
-    paths:
-      - '**'
-      - '!**/*.md'        # docs-only merges cannot change the APK
-      - '!backend/**'     # FastAPI ships via Render, not EAS
-      - '!docs/**'
-      - '!.github/**'     # GitHub Actions config; EAS workflows live elsewhere
-      # This file. Editing the trigger cannot change the APK, and the first
-      # version of this filter proved the point by queueing a 26-minute build
-      # for a comment. Test changes here with `eas workflow:run` instead:
-      #   npx eas-cli@latest workflow:run .eas/workflows/build-preview.yml
-      - '!**/.eas/**'
+  # Manual only. See the budget note above before removing this.
+  # ⚠️ The empty `inputs: {}` is REQUIRED — EAS validates `workflow_dispatch` as
+  # an object, and a bare `workflow_dispatch:` (which is valid GitHub Actions)
+  # fails with "must be an object but it was null".
+  workflow_dispatch:
+    inputs: {}
 
 jobs:
   build_android_preview:

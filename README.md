@@ -101,7 +101,7 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 
 | Layer | Technology |
 | --- | --- |
-| Mobile | React Native + **Expo SDK 56** (expo-router), Reanimated, Moti, Lucide icons, Inter |
+| Mobile | React Native 0.86 + **Expo SDK 57** (expo-router), Reanimated, Moti, Lucide icons, Inter |
 | Backend | **FastAPI** (Python 3.12) + SQLAlchemy |
 | Database | SQLite (dev) → **Supabase Postgres** (prod — migration pending, see [TODO.md](TODO.md)) |
 | Auth | **Supabase Auth** (email today; Apple + Google before launch) — ES256 JWTs verified via JWKS |

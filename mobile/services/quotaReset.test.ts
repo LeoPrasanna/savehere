@@ -52,6 +52,14 @@ assert.equal(resetsAtLabel('not-a-date'), '');
 
 // ── The shared sentence still says something true with no timestamp ─────────
 assert.match(resumesAtSentence(null), /after the daily reset/);
-assert.match(resumesAtSentence(local(2026, 8, 15, 5, 30).toISOString()), /come back at 5:30 AM tomorrow\./);
+// ⚠️ `now` is passed EXPLICITLY. This line originally omitted it, so it read the
+// real system clock: it asserted "tomorrow", passed on the day it was written,
+// and failed the next morning when that same timestamp became "today". Every
+// assertion in this file must pin both ends of the comparison or it is a test
+// that fails on a calendar, not on a regression.
+assert.match(
+  resumesAtSentence(local(2026, 8, 15, 5, 30).toISOString(), local(2026, 8, 14, 22, 0)),
+  /come back at 5:30 AM tomorrow\./,
+);
 
 console.log('quotaReset: all assertions passed');

@@ -5,7 +5,60 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
-## ▶ SDK 57 UPGRADE — DECIDED, SEQUENCED AFTER ROUND 4 (2026-08-14)
+## ▶ EAS BUILD BUDGET — 15/MONTH, NOT 30. AUTO-TRIGGER IS OFF (2026-08-15)
+
+⚠️ **The "30 builds a month" everyone remembers is wrong, and wrong in the
+dangerous direction.** The Free plan gives **15 Android + 15 iOS per calendar
+month** — split per platform, not pooled — so an Android-only project has **15**,
+not 30. Source: [expo.dev/pricing.md](https://expo.dev/pricing.md), *"Up to 15
+Android and 15 iOS builds"*. The 30 figure comes from the
+[2023-08-01 changelog](https://expo.dev/changelog/2023-08-01-eas-free-plan-limits),
+which described a genuinely pooled allowance with an iOS sub-cap. That structure
+is gone. **Trusting it overestimates Android headroom by 2x.**
+
+⚠️ **Running out is a WALL, not a bill.** *"Once you use your monthly quota of
+free builds, new builds are unavailable until the quota resets on the first day
+of the next calendar month"* ([billing FAQ](https://docs.expo.dev/billing/faq/)).
+Free plans cannot incur overage — there is **no pay-per-build escape hatch**. The
+only unblocks are Starter ($19/mo, which also buys the high-priority queue and a
+2-hour timeout) or waiting for the 1st.
+
+**State on 2026-08-15: 10 of 15 used, in four days** (9 finished + 1 EAS-cancelled;
+cancelled-before-work builds are documented as not charged, so plan against **5
+remaining**). Reset is **1 September**, calendar month, not signup anniversary.
+
+**Consequence: `build-preview.yml`'s auto-trigger is now `workflow_dispatch` only.**
+A `paths` filter is not a budget — it stops *pointless* builds, but an auto-trigger
+still spends the rest in merge order rather than on the merges that deserve an APK.
+Builds are deliberate now:
+```
+cd mobile && npx eas-cli@latest workflow:run .eas/workflows/build-preview.yml
+```
+The `versionCode` write-back the workflow was built to automate still happens —
+`autoIncrement` runs on the build machine either way. The push-trigger block is
+kept commented in the file (verified working 2026-08-14, non-obvious path
+patterns) for when the budget allows.
+
+⚠️ **EAS Workflows minutes are metered separately (Free: 60/mo) but build jobs do
+NOT draw from them** — *"Build jobs within workflows are billed using the same
+flat-rate pricing as standalone EAS Build jobs."* This workflow contains exactly
+one `type: build` job, so triggering through it costs no more than `eas build`.
+That only changes if a non-build job (Maestro, a script) is ever added.
+
+⚠️ **Quota is ACCOUNT-wide, `build:list` is PROJECT-scoped.** If another project
+under `leo-app-dev-team` builds, the remaining figure is lower than this says.
+No EAS CLI command exposes plan tier or remaining quota — verify at
+`expo.dev/accounts/leo-app-dev-team/settings/billing`. Free plan is **assumed,
+not proven by tooling.**
+
+Other Free-tier caps worth knowing: **1 concurrent build**, low-priority queue
+(*"wait times of 90+ minutes"* at peak — matches the 29.7 min measured here),
+**45-minute build timeout** (compute has already hit 26.0 min), 90-day artifact
+retention.
+
+---
+
+## ▶ SDK 57 UPGRADE — DONE 2026-08-15 (decided 2026-08-14)
 
 `npx expo-doctor` fails one check: **Hermes V1 memory regression**, `expo@56.0.19`
 on Hermes `250829098.0.10`. Researched properly before deciding; the doctor is
@@ -80,6 +133,73 @@ Kotlin Activity means a crash would tell us **which of four things** broke. This
 repo has paid for that conflation before. The SDK 57 build then has exactly one
 job — prove the upgrade and compile `ShareSave.kt` for the first time.
 
+### ✅ UPGRADE APPLIED 2026-08-15 — branch `chore/sdk-57-upgrade`
+
+**The regression is gone, verified by version rather than by an absent warning:**
+`react-native@0.86.2` ships **`hermes-compiler 250829098.0.16`** — the exact first
+fixed version the doctor names. `npx expo-doctor` is **21/21, no issues**.
+
+**Both feared blockers were answered, and both were smaller than feared.**
+
+1. **`expo-share-intent` 7 → 8.0.1.** It blocked the install exactly as predicted
+   (`Conflicting peer dependency: expo@56.0.19`), and the bump cleared it. The
+   "SDK 56 pin" note in the Blockers section is now stale and has been corrected.
+2. **⚠️ THE KEYBOARDAVOIDINGVIEW FEAR WAS WRONG, AND THE REASON MATTERS.** The
+   worry was that RN 0.86's edge-to-edge fixes would make our `behavior="padding"`
+   workaround double-compensate. Read the actual commit (`4a6c933cce`): it fixes a
+   **render loop that only affects `behavior="height"`** — we use `"padding"` at
+   all 7 call sites — and replaces Android's legacy keyboard *height heuristic*
+   with `WindowInsetsCompat`, computing the IME offset as
+   `imeInsets.bottom - barInsets.bottom`. That makes `padding` **more accurate,
+   not redundant**. It does **not** re-enable `adjustResize`, so the SDK 54 root
+   cause (edge-to-edge disabling it, leaving `behavior={undefined}` inert) is
+   unchanged and the fix stays load-bearing. The PR's own test plan covers
+   `padding` on Android 7, 14 and 16. RN 0.86 is the second release shipped with
+   [no user-facing breaking changes](https://reactnative.dev/blog/2026/06/11/react-native-0.86).
+   **No code change was needed.** Still worth an eyeball on device: the offset may
+   shift by the nav-bar inset now that it is measured rather than guessed.
+
+**The "unverified toolchain" gap is CLOSED — measured off a real prebuild, not
+researched.** SDK 57 / RN 0.86.2 resolves to **Kotlin 2.1.20, AGP 8.12.0, Gradle
+wrapper 9.3.1, compileSdk/targetSdk 36, minSdk 24, NDK 27.1.12297006**
+(`node_modules/react-native/gradle/libs.versions.toml`). `newArchEnabled=true`,
+`hermesEnabled=true`, `edgeToEdgeEnabled=true`. Kotlin 2.1.20 is unremarkable —
+`ShareSave.kt` uses no version-sensitive language features.
+
+**`plugins/withInvisibleShare.js` survives SDK 57 unchanged** — `npx expo prebuild
+--platform android --clean` produces exactly the same invariants as on SDK 56:
+**one** `ACTION_SEND` filter in the manifest, owned by
+`com.savehere.app.share.ShareActivity`, and `ShareSave.kt` in
+`android/app/src/main/java/com/savehere/app/share/`.
+
+⚠️ **Found and fixed while upgrading — a self-inflicted test defect.**
+`quotaReset.test.ts` asserted `resumesAtSentence(...)` returned "5:30 AM
+**tomorrow**" against a hardcoded date, but that function had no injectable
+clock, so it read the real one. It passed on 2026-08-14 and **failed on
+2026-08-15** when the same timestamp became "today". This is the identical bug
+`backend/tests/test_quota.py` already carries a note about (asserting on the
+local date while the quota keys rows on the UTC day → failed every run between
+00:00 and 05:30 IST). `resumesAtSentence` now takes `now` like `resetsAtLabel`
+does, and the test pins both ends. **A time-dependent assertion is not a test,
+it is a scheduled outage.**
+
+⚠️ **`mobile/AGENTS.md` was pointing every future session at the v56 docs.** It is
+auto-loaded whenever `mobile/` is touched, so a stale version there misdirects
+every later session. Bumped to v57, with a note to move it in the same commit as
+any SDK upgrade.
+
+⚠️ **`npx expo prebuild` rewrites `package.json`'s `android`/`ios` scripts to
+`expo run:*`.** Reverted to `expo start --*`: this project is CNG, `android/` is
+gitignored, and `expo run:android` tells the next developer to do a local native
+build they have no Android SDK for.
+
+**Verified locally:** expo-doctor 21/21 · typecheck clean · all 6 self-checks ·
+`expo export --platform web` clean · `expo prebuild --platform android --clean`
+clean with the plugin's manifest/Kotlin invariants intact · 300 backend tests
+untouched (no backend change).
+⚠️ **NOT verified on a device.** `ShareSave.kt` has still never been compiled —
+the EAS build is what settles that, and it is the one job this build has.
+
 ---
 
 ## ▶ ANDROID TEST ROUND 4 (2026-08-14) — 2 bugs, 1 question, 3 features
@@ -148,7 +268,7 @@ those 5 touch the UI, so every finding was real against current code.
 | 2 | Tab capsule renders square | Android does **not** clip `overflow:hidden` children to a parent's *rounded* shape — only its bounding rect. The pill's `LinearGradient` fill painted square corners over the border. Fill now carries its own radius. |
 | 3 | "Paste copied link" unintuitive | Placeholder is the instruction; tapping the empty field pastes, falls back to focusing for typing. Separate paste button became a Clear button. |
 | 4 | Ask flashes before the lock | `savedCount` started at `null`, and `locked` needs non-null — so the working screen showed for the whole `/usage` round-trip. Now seeded from `services/saveCount`, which already existed for the home screen's identical bug. |
-| 5 | Can't share into the app | `ACTION_SEND` is not a deep link — `Linking` can never see it, so no JS-only fix exists. Added `expo-share-intent@7` (SDK 56 pin) + handler in `_layout.tsx` → `/save?url=`. ⚠️ **Needs a new build; OTA cannot add a native module.** ⚠️ **The "SDK 56 pin" is no longer a ceiling** — `expo-share-intent@8.0.1` declares `peerDependencies: {"expo": "^57"}`, so it is a straight `7 → 8` bump whenever SDK 57 lands (see the SDK 57 entry at the top). |
+| 5 | Can't share into the app | `ACTION_SEND` is not a deep link — `Linking` can never see it, so no JS-only fix exists. Added `expo-share-intent@7` (SDK 56 pin) + handler in `_layout.tsx` → `/save?url=`. ⚠️ **Needs a new build; OTA cannot add a native module.** ✅ **The "SDK 56 pin" is resolved (2026-08-15):** bumped to `expo-share-intent@8.0.1` as part of the SDK 57 upgrade. It was a hard blocker on the install (`Conflicting peer dependency: expo@56.0.19`) and the bump cleared it. |
 | 6 | Slate quotes clipped | Entries had drifted to 85 chars against a 42px/2-line viewport. Trimmed to a stated ~58-char budget + `numberOfLines={2}` so it can never slice mid-glyph again. |
 | 7 | Todo sheet: keyboard + dates | THREE bugs. (a) a `Modal` is its own Android window and is never IME-resized — added its own KAV. (b) `onSubmitEditing={submit}` on the title meant Enter created the task before you reached the date chips. (c) **the real one**: the seed effect re-ran on every prop change, and `reel/[id]` re-fetches every 2.5s while a summary is pending — so it wiped the date (and title) you had just typed. Now latched to the open transition. |
 | 8 | Instagram title → "Login • Instagram" | Instagram answers the phone's preview fetch with its **sign-in page at HTTP 200**, whose `og:title`/`og:image` are non-empty — so every "did we get a title?" check accepted the wall's branding. Screened client-side (`isLoginWall`) and server-side (`_is_login_wall_title`, folded into `_weak_title` so all three fill-sites are covered). |
