@@ -145,6 +145,50 @@ export function Screen({ children, pad = false, scroll = false, style }: {
 }
 
 /**
+ * "There is nothing here" — the one shape for every such moment in the app.
+ *
+ * ⚠️ WHY THIS EXISTS (owner report, 2026-08-15: "the styling is not matching
+ * with Homepage content"). Four screens had grown their own version of this
+ * block, and they had drifted apart in ways that are obvious side by side:
+ *
+ *   home        centred, `Label`+`Title`+`Body`, body maxWidth 380
+ *   search      LEFT-aligned, body maxWidth 420
+ *   rediscover  LEFT-aligned, body maxWidth 420
+ *   todos       centred, but a raw <Text> at fontSize `lg` and **weight 800**
+ *
+ * That last one is the loud one: `Title` is weight **300** and the note on it
+ * says "Never bold this; 300 is the point". So the todos screen was rendering
+ * the system's signature type at nearly the opposite weight, in a system whose
+ * entire hierarchy is carried by weight and tracking because it has no colour
+ * to spend.
+ *
+ * Home is the reference (owner's instruction), so this is home's version:
+ * centred, kicker over title over body. Passing the pieces instead of copying
+ * the markup is what stops the fifth screen from drifting again.
+ *
+ * `children` is the slot for whatever comes after the copy — usually one
+ * GhostButton, occasionally more.
+ */
+export function EmptyState({ kicker, title, body, children, style }: {
+  kicker: string;
+  title: ReactNode;
+  body?: ReactNode;
+  children?: ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[styles.emptyState, style]}>
+      <Label wide>{kicker}</Label>
+      {/* numberOfLines 3 because one caller echoes the user's own query back,
+          and an unbounded string there can push the body off-screen. */}
+      <Title numberOfLines={3} style={styles.emptyStateTitle}>{title}</Title>
+      {body ? <Body style={styles.emptyStateBody}>{body}</Body> : null}
+      {children}
+    </View>
+  );
+}
+
+/**
  * A section header: tracked uppercase label with a rule under it.
  * Replaces the coloured section pills the outgoing system used.
  */
@@ -265,6 +309,18 @@ export function Rail({ step, total }: { step: number; total: number }) {
 
 const styles = themed(() => StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.background },
+
+  emptyState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    gap: spacing.md,
+  },
+  emptyStateTitle: { textAlign: 'center' },
+  // 380, not 420. Long measure is what made these read as walls of text on a
+  // phone; the tablet round capped body copy for the same reason.
+  emptyStateBody: { textAlign: 'center', maxWidth: 380 },
 
   label: {
     color: colors.textTertiary,

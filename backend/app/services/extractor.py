@@ -419,6 +419,25 @@ def _youtube_oembed(url: str) -> dict:
 _HONEST_UA = {"User-Agent": "SaveHere/1.0 (+https://savehere.app)"}
 
 _IG_SHORTCODE = re.compile(r"instagram\.com/(?:reel|reels|p|tv)/([A-Za-z0-9_-]+)", re.I)
+# ⚠️ THE THUMBNAIL COMES FROM THE <img> TAG, NOT FROM THE EMBEDDED JSON.
+#
+# This used to be `re.search(r'"display_url":"(.*?)"', html)`, and it matched
+# NOTHING — measured 0/5 against real saved reels on 2026-08-15. The embed page
+# carries its JSON blob **escaped inside an HTML attribute**, so the bytes are
+# `\"display_url\":\"https:\\\/\\\/...` — there is a backslash between
+# `display_url` and the colon, and the unescaped pattern cannot match it.
+#
+# That silent miss is what made `POST /reels/{id}/thumbnail` — the repair
+# endpoint shipped the round before — return 422 "the post may be private or
+# deleted" for EVERY Instagram save. The feature was dead on arrival and looked
+# like an Instagram problem rather than a regex problem.
+#
+# The rendered <img> is the better target anyway: one unescaped, already-final
+# URL that needs no `unicode_escape` round-trip to read. Verified 5/5 on the
+# same reels, and the resulting URL returns 200.
+_IG_EMBED_IMG = re.compile(
+    r'<img[^>]+class="EmbeddedMediaImage"[^>]+src="([^"]+)"', re.I
+)
 _FB_VIDEO_ID = re.compile(r"facebook\.com/(?:reel/|watch/?\?v=|[^/]+/videos/)(\d+)", re.I)
 # ⚠️ `[^>]*>` consumes the REST OF THE OPENING TAG. Without it the capture
 # starts at the tag's own closing bracket, so an empty caption div yielded ">"
@@ -476,10 +495,14 @@ def instagram_embed(url: str) -> dict:
         uploader = lead.group(1)
         text = text[lead.end():].strip()
 
+    # See the note on _IG_EMBED_IMG: the JSON blob is escaped and unreadable by
+    # a plain regex, the rendered <img> is not. `unescape` because the src is an
+    # HTML attribute and arrives with &amp; between its query parameters — left
+    # in, those turn a signed CDN URL into a 403.
     thumb = ""
-    t = re.search(r'"display_url":"(.*?)"', html)
+    t = _IG_EMBED_IMG.search(html)
     if t:
-        thumb = t.group(1).encode().decode("unicode_escape")
+        thumb = unescape(t.group(1))
 
     return {"description": text, "uploader": uploader, "image": thumb}
 

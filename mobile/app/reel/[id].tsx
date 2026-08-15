@@ -14,7 +14,7 @@ import { formatDue } from '../../services/todoDates';
 import { TODO_ADD_LABEL, TODO_ADDED_LABEL } from '../../constants/todoBrand';
 import { useWaitingMessage } from '../../constants/waitingMessages';
 import { openSourceLink } from '../../services/openLink';
-import { getCachedUsage, refreshUsage } from '../../services/usageCache';
+import { getCachedUsage, refreshUsage, onUsage } from '../../services/usageCache';
 import { resumesAtSentence } from '../../services/quotaReset';
 import { useDismissOnBackground } from '../../services/uiBus';
 import { markDeleted, unmarkDeleted, patchReel } from '../../services/libraryEdits';
@@ -122,6 +122,15 @@ export default function ReelDetailScreen() {
     api.getItinerary(id).then(setItin).catch(() => {});
     refreshUsage().then(u => { if (u) setUsage(u); });
   }, [id]);
+
+  /**
+   * This screen is where the AI budget is actually SPENT — summarize,
+   * re-summarize, tasks, workout, itinerary all live here — and it read the
+   * budget once, on mount. So the meter still showed the pre-spend number after
+   * five actions, and the hamburger inherited that same stale cache. Every
+   * write refreshes the cache now (see api.ts); this makes the screen show it.
+   */
+  useEffect(() => onUsage(setUsage), []);
 
   // Refetched on FOCUS, not just mount: the task can be completed (or deleted)
   // over on the Follow Through screen, and coming back here must show the

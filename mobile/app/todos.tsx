@@ -14,7 +14,7 @@ import { TodoGoalBar } from '../components/TodoGoalBar';
 import { Avatar } from '../components/Avatar';
 import { useAuth } from '../contexts/AuthContext';
 import { emitUi, useDismissOnBackground } from '../services/uiBus';
-import { Label } from '../components/kit';
+import { Label, EmptyState } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { TodoSettingsSheet } from '../components/TodoSettingsSheet';
 import { bucketOf, formatDue, todayISO, Bucket } from '../services/todoDates';
@@ -595,14 +595,14 @@ export default function TodosScreen() {
         )}
 
         {todos.length === 0 && !error ? (
-          <View style={styles.empty}>
-            <Icon name="checkbox" size={44} color={colors.textTertiary} />
-            <Text style={styles.emptyTitle}>Nothing to follow through on</Text>
-            <Text style={styles.emptyText}>
-              Add something you want to get done — or open a save and tap “{TODO_ADD_LABEL}”
-              to turn it into a real plan.
-            </Text>
-          </View>
+          /* Was a raw <Text> at weight 800 — see the note on EmptyState. The
+             icon goes with it: no other empty state in the app has one, and it
+             was the only thing making this screen's version look bespoke. */
+          <EmptyState
+            kicker="All clear"
+            title="Nothing to follow through on"
+            body={`Add something you want to get done — or open a save and tap “${TODO_ADD_LABEL}” to turn it into a real plan.`}
+          />
         ) : (
           grouped.map((section, i) => (
             <MotiView
@@ -816,9 +816,6 @@ const styles = themed(() => StyleSheet.create({
   },
   errorText: { flex: 1, color: colors.danger, fontSize: font.xs },
 
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg },
-  emptyTitle: { color: colors.textPrimary, fontSize: font.lg, fontWeight: '800', marginTop: spacing.sm },
-  emptyText: { color: colors.textSecondary, fontSize: font.sm, lineHeight: 21, textAlign: 'center' },
 
   section: { gap: spacing.sm },
   sectionHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },

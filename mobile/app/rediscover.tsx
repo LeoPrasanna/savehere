@@ -3,7 +3,7 @@ import { View, StyleSheet, FlatList, ActivityIndicator, useWindowDimensions } fr
 import { api, Reel } from '../services/api';
 import { MascotLoader } from '../components/MascotLoader';
 import { ReelCard } from '../components/ReelCard';
-import { Label, Body, Title, Rule } from '../components/kit';
+import { Body, Rule, EmptyState } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { markDeleted, unmarkDeleted } from '../services/libraryEdits';
 import { colors, spacing, font, GRID_GAP, columnsForWidth, themed } from '../constants/theme';
@@ -48,23 +48,21 @@ export default function RediscoverScreen() {
 
   if (error) {
     return (
-      <View style={styles.center}>
-        <Label wide>Offline</Label>
-        <Title style={styles.emptyTitle}>Couldn't load your saves</Title>
-        <Body style={styles.emptyText}>Make sure the server is running, then try again.</Body>
-      </View>
+      <EmptyState
+        kicker="Offline"
+        title="Couldn't load your saves"
+        body="Make sure the server is running, then try again."
+      />
     );
   }
 
   if (picks.length === 0) {
     return (
-      <View style={styles.center}>
-        <Label wide>Empty sheet</Label>
-        <Title style={styles.emptyTitle}>Nothing to rediscover yet</Title>
-        <Body style={styles.emptyText}>
-          Save a few links — they'll resurface here so they don't get forgotten.
-        </Body>
-      </View>
+      <EmptyState
+        kicker="Empty sheet"
+        title="Nothing to rediscover yet"
+        body="Save a few links — they'll resurface here so they don't get forgotten."
+      />
     );
   }
 
@@ -123,6 +121,4 @@ const styles = themed(() => StyleSheet.create({
   list: { paddingBottom: TAB_BAR_CLEARANCE + spacing.xl, gap: GRID_GAP },
   head: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.lg, gap: spacing.lg },
   sub: { fontSize: font.sm, lineHeight: 20 },
-  emptyTitle: { marginTop: spacing.xs },
-  emptyText: { fontSize: font.sm, lineHeight: 20, maxWidth: 420 },
 }));

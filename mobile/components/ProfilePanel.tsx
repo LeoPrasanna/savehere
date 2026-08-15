@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, Platform, Sc
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, Reel, Usage, UsageLog } from '../services/api';
-import { getCachedUsage, refreshUsage } from '../services/usageCache';
+import { getCachedUsage, refreshUsage, onUsage } from '../services/usageCache';
 import { resumesAtSentence } from '../services/quotaReset';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
@@ -83,6 +83,18 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
       setShowDeleteConfirm(false);
     }
   }, [visible]);
+
+  /**
+   * Repaint whenever the cache changes, not only when the panel is opened.
+   *
+   * ⚠️ Refresh-on-open was the whole strategy, and it made the panel a snapshot
+   * of the moment it was opened. Spend an AI action, leave it open, and the
+   * meter still read the old number; save a reel from the share sheet and the
+   * counts stayed put. Now that every write refreshes the cache (api.ts's
+   * mutation hook), subscribing is what turns that into something the user can
+   * actually see. Unsubscribes on unmount — `onUsage` returns its own remover.
+   */
+  useEffect(() => onUsage(setUsage), []);
 
   const toggleLog = () => {
     const next = !logOpen;

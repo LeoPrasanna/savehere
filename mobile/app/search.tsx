@@ -9,7 +9,7 @@ import { ReelCard } from '../components/ReelCard';
 import { MascotLoader } from '../components/MascotLoader';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
-import { Label, Body, Title, Rule, GhostButton } from '../components/kit';
+import { Label, Body, Title, Rule, GhostButton, EmptyState } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { markDeleted, unmarkDeleted } from '../services/libraryEdits';
 import { getLibraryIndex, refreshLibraryIndex, indexedCount } from '../services/libraryIndex';
@@ -95,13 +95,11 @@ export default function SearchScreen() {
     if (loading) return <View style={styles.center}><MascotLoader label="Reading your library" /></View>;
     if (failed) {
       return (
-        <View style={styles.center}>
-          <Label wide>Offline</Label>
-          <Title style={styles.emptyTitle}>Couldn't load your saves</Title>
-          <Body style={styles.emptyText}>
-            Search runs on your device, but it needs your library first. Check the connection and try again.
-          </Body>
-        </View>
+        <EmptyState
+          kicker="Offline"
+          title="Couldn't load your saves"
+          body="Search runs on your device, but it needs your library first. Check the connection and try again."
+        />
       );
     }
     if (!typed) {
@@ -174,16 +172,13 @@ export default function SearchScreen() {
     }
     if (results.length === 0) {
       return (
-        <View style={styles.center}>
-          <Label wide>No match</Label>
-          {/* Showing the query back is the difference between "nothing matched
-              THAT" and "search is broken". */}
-          <Title style={styles.emptyTitle} numberOfLines={3}>Nothing for “{q.trim()}”</Title>
-          <Body style={styles.emptyText}>
-            Titles, tags, categories, summaries and notes are all searched. Try a shorter word —
-            a category name like “cooking” or “fitness” matches every save filed under it.
-          </Body>
-        </View>
+        <EmptyState
+          kicker="No match"
+          /* Showing the query back is the difference between "nothing matched
+             THAT" and "search is broken". */
+          title={`Nothing for “${q.trim()}”`}
+          body="Titles, tags, categories, summaries and notes are all searched. Try a shorter word — a category name like “cooking” or “fitness” matches every save filed under it."
+        />
       );
     }
     return (
