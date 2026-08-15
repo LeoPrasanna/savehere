@@ -735,6 +735,67 @@ def update_notes(reel_id: str, body: ReelNotesRequest,
     return _to_response(reel)
 
 
+def _resolve_thumbnail(url: str, platform: str) -> str:
+    """Ask the platform for a CURRENT thumbnail URL. No AI, no quota."""
+    if platform == "instagram":
+        # The embed route is the one that answers a datacenter IP — see
+        # docs/EXTRACTION_ROUTES.md. It carries a freshly-signed display_url.
+        return (extractor.instagram_embed(url) or {}).get("image") or ""
+    if platform == "youtube":
+        # Deterministic and unsigned, so it cannot expire; a YouTube reel only
+        # reaches here when nothing was stored at save time.
+        vid = extractor._youtube_id(url)
+        return f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg" if vid else ""
+    return (extractor._extract_from_page(url) or {}).get("image") or ""
+
+
+@router.post("/{reel_id}/thumbnail", response_model=ReelResponse,
+             dependencies=[Depends(rate_limit(30, 60, "thumb_refresh"))])
+def refresh_thumbnail(reel_id: str, user: AuthUser = Depends(get_current_user),
+                      db: Session = Depends(get_db)):
+    """Re-resolve one reel's thumbnail and store it.
+
+    ⚠️ WHY THIS HAS TO EXIST — MEASURED, NOT GUESSED (2026-08-15, owner report
+    "at times the thumbnail is not loading"). A scan of 153 saved reels found
+    TWO separate causes, and only one of them is a save-time failure:
+
+      * **26 rows have no `thumbnail_url` at all** — extraction failed when the
+        card was created. Static, and previously permanent.
+      * **6 rows hold a signed CDN URL that has ALREADY EXPIRED.** Instagram's
+        `scontent.*.cdninstagram.com` links carry an `oe=<hex>` expiry, and the
+        sampled ones died ~5 DAYS after the save (saved 2026-07-20, expired
+        2026-07-25). This class GROWS with the age of the library: every
+        Instagram save eventually stops rendering.
+
+    That second one is the important finding, because no amount of client-side
+    retrying can fix it — the stored URL is dead, permanently, and the app was
+    quietly degrading to an empty frame. YouTube is unaffected (`i.ytimg.com`
+    links are unsigned), which is exactly why the bug looked intermittent: it is
+    Instagram-shaped, not random.
+
+    Deliberately NOT charged against the AI quota: this is a fetch, not an AI
+    action, and making a broken picture cost the user an allowance unit would be
+    charging them for our own stale data. The per-IP burst limit is the guard —
+    a grid of 24 tiles failing at once must not become 24 page fetches a second.
+    """
+    reel = _get_owned_reel_or_404(reel_id, user, db)
+    try:
+        fresh = _resolve_thumbnail(reel.url, reel.platform or "")
+    except Exception as e:                       # never 500 over a picture
+        logger.info(f"[THUMB-REFRESH] {reel.id}: {type(e).__name__}: {e}")
+        fresh = ""
+    if not fresh:
+        raise HTTPException(
+            status_code=422,
+            detail="Couldn't get a new preview image for this save — the post may be private or deleted.",
+        )
+    if fresh != reel.thumbnail_url:
+        reel.thumbnail_url = fresh
+        db.commit()
+        db.refresh(reel)
+    return _to_response(reel)
+
+
 @router.delete("/{reel_id}")
 def delete_reel(reel_id: str, user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     reel = _get_owned_reel_or_404(reel_id, user, db)

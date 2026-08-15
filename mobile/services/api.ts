@@ -180,6 +180,10 @@ export interface Usage {
   limit: number;       // AI actions allowed today (tier-dependent)
   remaining: number;
   resets_at: string;
+  /** This email had an account here before and deleted it — derived server-side
+   *  from the trial grant that outlives deletion. Drives the welcome-back
+   *  screen, and suppresses the first-run tour. */
+  returning?: boolean;
   // Feature flags for locked-button UI (server enforces with 403s regardless):
   // post-trial free loses ask / non-cooking tasks / itinerary; trial+pro keep all.
   features?: { ask: boolean; tasks: boolean; recipe: boolean; workout: boolean; itinerary: boolean };
@@ -378,6 +382,11 @@ export const api = {
   // Run/retry the first summary (for a reel still pending or failed).
   summarizeReel: (id: string) =>
     request<Reel>(`/api/reels/${id}/summarize`, { method: 'POST' }),
+
+  /** Re-resolve a dead or missing preview image. Costs no AI action — see
+   *  `services/thumbRefresh.ts` for why Instagram thumbnails expire at all. */
+  refreshThumbnail: (id: string) =>
+    request<Reel>(`/api/reels/${id}/thumbnail`, { method: 'POST' }),
 
   updateNotes: (id: string, notes: string) =>
     request<Reel>(`/api/reels/${id}/notes`, {

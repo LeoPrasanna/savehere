@@ -5,6 +5,28 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ ROUND 5 (2026-08-15) — 1 bug, 1 long-running layout bug, 4 features
+
+| # | Item | Outcome |
+|---|---|---|
+| 1 | Thumbnails sometimes don't load | ✅ **Two causes, both measured against the real library (153 rows), not guessed.** (a) **26 rows have no `thumbnail_url` at all** — extraction failed at save time. (b) **6 rows hold a signed Instagram CDN URL that has ALREADY EXPIRED.** `scontent.*.cdninstagram.com` links carry an `oe=<hex>` expiry and the sampled ones died **~5 days** after the save (saved 2026-07-20, expired 2026-07-25). ⚠️ **(b) is the important half: it GROWS with the age of the library — every Instagram save eventually stops rendering — and no client-side retry can fix it, because the stored URL is permanently 403.** YouTube is immune (`i.ytimg.com` is unsigned), which is exactly why it looked intermittent: the bug is Instagram-shaped, not random. Fix: `POST /api/reels/{id}/thumbnail` re-resolves via the embed route (`EXTRACTION_ROUTES.md`) and stores it; `services/thumbRefresh.ts` calls it **once per reel per session**, max 3 concurrent / 40 per session, so a grid of dead tiles can't DDoS our own backend. **Charges no AI action** — a stale picture is our data going bad, not something the user asked an AI for; locked by a test. |
+| 2 | Library still messy on tablet/iPad | ✅ **The last two rounds were fixing the wrong thing. `app.json` had `"orientation": "portrait"`, compiled into the manifest as `android:screenOrientation="portrait"`.** On a tablet that is letterboxed or force-resized into a layout nobody has ever designed against — and **no `columnsForWidth` tuning can reach it**, which is why the symptom survived two correct grid fixes. Now `"default"` (verified: the manifest reads `unspecified`). ⚠️ **Native — needs an APK, not OTA.** Researched on Refero alongside it (3 Pinterest captures): **the tile GROWS with the canvas** — Pinterest iOS renders a 181pt tile at 390pt, desktop ~221–248px at ~1280–1440px — while rounds 1 and 3 held it at 180 and added columns, producing a 6-wide filmstrip of phone-sized stamps. New `TARGET_TILE_WIDE = 232` above 700pt (phone output bit-identical); the grid stays full-bleed per the primary style reference. Scrim 55% → 38% (it multiplies with column count: 6 grey gradients on a phone, 15+ on a tablet, over the only colour the system spends). Library disclaimer capped at 560pt — it was rendering as one ~170-character centred line on a 1366pt iPad. |
+| 3 | Ask shows a text box when the AI quota is gone | ✅ The field, its send button and the autofocus are all skipped when `remaining === 0`. It was rendering an inviting, keyboard-raising box whose only possible outcome was a 429 *after* you'd typed a whole question — telling someone a door is locked and leaving the handle turning. |
+| 4 | Welcome-back page for a returning deleted-account user | ✅ `components/WelcomeBack.tsx` — **one screen, not the four-step tour**, because a returning user knows what the app is and re-teaching them is what makes a re-signup feel like starting from zero. Says plainly that the old library really is gone (pretending otherwise is a lie discovered ten seconds later on an empty grid) and that the trial did **not** restart. Signal is `returning` on `/api/account/usage`, **derived, no migration**: `_ensure_profile` seeds a returning user's `trial_started_at` from the `trial_grants` row that outlives account deletion, so `created_at - trial_started_at > 5min` means "been here before". ⚠️ **`OnboardingModal` now defers to it** — a returning user's Supabase account really is minutes old, so both would otherwise fire together. |
+| 5 | Search should say when to use it vs Ask | ✅ A two-way comparison on the empty search screen with **one worked example**, because "use search when you know what you want" means nothing until the two sentences sit side by side: “paneer” (search, free) vs “what can I cook tonight with paneer and no oven?” (Ask, one AI action). Rule of thumb spelled out: a **thing** → search, a **question** → Ask. Matters because picking wrong is expensive in one direction only — using Ask for a lookup burns the daily budget on something search does for free. |
+| 6 | Support page more polished / industrial | ✅ Added a **"Probably not a bug"** self-serve section (5 expandable cases: no summary, quota exhausted, lost picture, silent share, wrong summary) — an industrial support page answers the common cases before asking for an email, because most people writing in are describing expected behaviour they had no way to recognise as expected. Plus honest **response times** (one person, days not minutes, and what jumps the queue) and a **data** section stating that support cannot read their library. |
+
+**Verified:** 321 backend tests (+21 new, was 300) · typecheck · all 6 mobile self-checks ·
+`expo export --platform web` · `expo prebuild --platform android --clean` with the share-plugin
+invariants intact and `screenOrientation="unspecified"` confirmed.
+⚠️ **Not verified on a device.** In particular the tablet layout still has **no screenshot** —
+the orientation lock is a strong, evidence-backed explanation but it is not proof, and
+`useWindowDimensions().width` under Android letterboxing reports the *window*, not the screen,
+which would have made every column calculation in rounds 1 and 3 correct-but-irrelevant.
+**One logged `width`/`numColumns` from the real tablet settles it.**
+
+---
+
 ## ▶ 🔴 SHIPPED BUG FOUND 2026-08-15 — FOUR BUILDS IN A ROW WERE UNINSTALLABLE
 
 **Every build since 2026-08-14 produced `versionCode` 7.** Confirmed across four:

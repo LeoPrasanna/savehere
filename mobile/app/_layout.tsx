@@ -18,6 +18,7 @@ import { TabBar } from '../components/TabBar';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
 import { OnboardingModal } from '../components/OnboardingModal';
+import { WelcomeBack } from '../components/WelcomeBack';
 import { onUi, emitUi, useDismissOnBackground } from '../services/uiBus';
 import { consumeReopenPanel } from '../services/sessionFlags';
 import { refreshUsage } from '../services/usageCache';
@@ -314,7 +315,12 @@ function Gate() {
       {/* Welcome confetti — overlaid above the gate so it keeps playing as the app
           mounts after sign-in. */}
       {celebrate && <Confetti />}
+      {/* ⚠️ These two are mutually exclusive and BOTH gate on a fresh Supabase
+          account — a returning user's new account really is minutes old, so
+          without the `returning` check in OnboardingModal they would fire
+          together. See components/WelcomeBack.tsx. */}
       <OnboardingModal />
+      <WelcomeBack />
     </>
   );
 }

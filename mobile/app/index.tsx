@@ -524,6 +524,14 @@ const styles = themed(() => StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.xl,
+    // ⚠️ PROSE GETS A MEASURE; THE GRID STAYS FULL-BLEED. Without this cap a
+    // 1366pt iPad renders this as ONE centred line of ~170 characters, which is
+    // unreadable and is a real part of "messy on tablet". `emptyText` above
+    // already caps at 380 — this was the one text block that didn't.
+    // The grid itself is deliberately NOT capped (the primary style reference
+    // is explicit: full-bleed, no max-width container).
+    maxWidth: 560,
+    alignSelf: 'center',
   },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { textAlign: 'center' },
