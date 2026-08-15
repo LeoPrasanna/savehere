@@ -7,6 +7,7 @@ import { Reel, thumbCandidates } from '../services/api';
 import * as haptics from '../services/haptics';
 import { getCachedUsage } from '../services/usageCache';
 import { resetsAtLabel } from '../services/quotaReset';
+import { canRefreshThumb, refreshThumb } from '../services/thumbRefresh';
 import { Pressable } from './Pressable';
 import { Label } from './kit';
 import {
@@ -60,6 +61,17 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
   // fail. `candidate` is an index into that list.
   const candidates = thumbCandidates(reel.thumbnail_url);
   const [candidate, setCandidate] = useState(0);
+  /**
+   * A URL the server re-resolved for us after every stored candidate failed.
+   *
+   * ⚠️ Instagram CDN links are SIGNED and expire (~5 days, measured) — after
+   * that the stored URL is permanently 403 and no retry of it can ever work.
+   * The only repair is asking the platform again, which is what this is. Also
+   * covers reels whose extraction failed at save time and never had one.
+   * Bounded per session in services/thumbRefresh.ts.
+   */
+  const [repaired, setRepaired] = useState<string | null>(null);
+  const [repairing, setRepairing] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
   const imgOpacity = useRef(new Animated.Value(0)).current;
 
@@ -109,7 +121,37 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
   // and none of them should make a request. The cache is filled at login and
   // refreshed on every foreground (app/_layout.tsx).
   const quotaLabel = overQuota ? resetsAtLabel(getCachedUsage()?.resets_at) : '';
-  const thumb = candidates[candidate];
+  // The repaired URL wins: it is the only one known to be currently valid.
+  const thumb = repaired ?? candidates[candidate];
+
+  /**
+   * Every stored candidate has now failed. Ask the server for a live URL once.
+   *
+   * Only fires when there was something to fail — a reel that never had a
+   * thumbnail starts with an empty candidate list, and that is handled by the
+   * mount effect below rather than by an image error that can never happen.
+   */
+  const onImageFailed = () => {
+    const next = candidate + 1;
+    setCandidate(next);
+    if (next < candidates.length || repaired || repairing) return;
+    tryRepair();
+  };
+
+  const tryRepair = () => {
+    if (repairing || repaired || !canRefreshThumb(reel.id)) return;
+    setRepairing(true);
+    refreshThumb(reel.id)
+      .then(url => { if (url) setRepaired(url); })
+      .finally(() => setRepairing(false));
+  };
+
+  // A reel with no stored thumbnail at all (extraction failed at save time)
+  // never fires onError, so it needs its own nudge. Both classes of the bug end
+  // up in the same repair path.
+  useEffect(() => {
+    if (candidates.length === 0) tryRepair();
+  }, [reel.id]);
 
   return (
     <Animated.View style={[styles.frame, { opacity, aspectRatio: aspect }]}>
@@ -133,7 +175,7 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
             onLoad={() => Animated.timing(imgOpacity, {
               toValue: 1, duration: motion.micro, useNativeDriver: true,
             }).start()}
-            onError={() => setCandidate(c => c + 1)}
+            onError={onImageFailed}
           />
         ) : (
           /* No thumbnail: an empty frame with its platform named, rather than
@@ -262,7 +304,14 @@ const styles = themed(() => StyleSheet.create({
   // Inside the picture's bounds — costs the tile no height. Only the BOTTOM
   // corners are rounded: the scrim starts mid-tile, so its top edge is straight.
   scrim: {
-    position: 'absolute', left: 0, right: 0, bottom: 0, height: '55%',
+    // ⚠️ 38%, was 55% (2026-08-15). The scrim is the thing that MULTIPLIES with
+    // column count: on a phone you see ~6 tiles and so ~6 grey gradients; on a
+    // tablet grid you see 15+, and the wall of saved pictures — the only colour
+    // this system spends — ends up more than half covered in grey. Neither
+    // reference does this: Pinterest puts no text on the tile at all, and the
+    // primary style reference puts text on the tile but forbids tinted overlays
+    // outright. 38% still carries two lines of title legibly.
+    position: 'absolute', left: 0, right: 0, bottom: 0, height: '38%',
     borderBottomLeftRadius: radius.lg,
     borderBottomRightRadius: radius.lg,
   },

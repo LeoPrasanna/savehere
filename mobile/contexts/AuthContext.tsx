@@ -8,6 +8,7 @@ import { resetSessionFlags } from '../services/sessionFlags';
 import { refreshUsage, clearUsage } from '../services/usageCache';
 import { clearLibraryEdits } from '../services/libraryEdits';
 import { clearLibraryIndex } from '../services/libraryIndex';
+import { clearThumbRefreshes } from '../services/thumbRefresh';
 import { ensureShareKey, clearShareKey } from '../services/shareKey';
 
 /**
@@ -141,7 +142,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Never let the next account inherit the previous one's tier or counts,
       // a pending delete / category override from their library, or the
       // ability to keep saving into their account silently from the share sheet.
-      if (event === 'SIGNED_OUT') { clearUsage(); clearLibraryEdits(); clearShareKey(); clearLibraryIndex(); }
+      if (event === 'SIGNED_OUT') {
+        clearUsage(); clearLibraryEdits(); clearShareKey(); clearLibraryIndex();
+        clearThumbRefreshes();
+      }
 
       setSession(next);
       setLoading(false);

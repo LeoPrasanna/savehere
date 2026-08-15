@@ -1,15 +1,15 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import {
-  View, Text, TextInput, FlatList, StyleSheet,
+  View, Text, TextInput, FlatList, ScrollView, StyleSheet,
   KeyboardAvoidingView, useWindowDimensions,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { api, Reel } from '../services/api';
 import { ReelCard } from '../components/ReelCard';
 import { MascotLoader } from '../components/MascotLoader';
 import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
-import { Label, Body, Title, Rule } from '../components/kit';
+import { Label, Body, Title, Rule, GhostButton } from '../components/kit';
 import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { markDeleted, unmarkDeleted } from '../services/libraryEdits';
 import { getLibraryIndex, refreshLibraryIndex, indexedCount } from '../services/libraryIndex';
@@ -36,6 +36,7 @@ import { colors, spacing, font, tracking, typeface, GRID_GAP, columnsForWidth, t
  * ~50 s — is the version of this feature that reads as broken.
  */
 export default function SearchScreen() {
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const numColumns = columnsForWidth(width);
 
@@ -105,17 +106,70 @@ export default function SearchScreen() {
     }
     if (!typed) {
       return (
-        <View style={styles.center}>
+        <ScrollView
+          contentContainerStyle={styles.intro}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
           <Label wide>Ready</Label>
           <Title style={styles.emptyTitle}>
             {total > 0 ? `${total} save${total === 1 ? '' : 's'} to search` : 'Nothing saved yet'}
           </Title>
           <Body style={styles.emptyText}>
             {total > 0
-              ? 'Type a word from a title, a tag, a category or your own notes. Results appear as you type — no AI actions are used.'
+              ? 'Type a word from a title, a tag, a category or your own notes. Results appear as you type, and no AI actions are used.'
               : 'Save a link first — everything you keep becomes searchable here.'}
           </Body>
-        </View>
+
+          {/* ── Search vs Ask ─────────────────────────────────────────────────
+              ⚠️ Owner request, 2026-08-15: people cannot tell these two apart,
+              and picking wrong is expensive in one direction only. Search costs
+              nothing and finds a SAVE; Ask costs an AI action and produces an
+              ANSWER. Someone who uses Ask for "where's that pasta reel" burns
+              their daily budget on a lookup search does for free.
+
+              The distinction is drawn with ONE worked example rather than an
+              abstract rule, because "use search when you know what you want"
+              means nothing until you see the two sentences side by side. */}
+          {total > 0 && (
+            <View style={styles.compare}>
+              <Rule />
+              <View style={styles.compareRow}>
+                <Icon name="search" size={16} color={colors.textPrimary} />
+                <View style={styles.compareText}>
+                  <Label tone="ink" wide>Search — when you know what you saved</Label>
+                  <Body style={styles.compareBody}>
+                    “<Text style={styles.quote}>paneer</Text>” finds the reel you're picturing, in a
+                    tap. Free, instant, works offline.
+                  </Body>
+                </View>
+              </View>
+              <Rule />
+              <View style={styles.compareRow}>
+                <Icon name="ask" size={16} color={colors.textPrimary} />
+                <View style={styles.compareText}>
+                  <Label tone="ink" wide>Ask — when you don't</Label>
+                  <Body style={styles.compareBody}>
+                    “<Text style={styles.quote}>what can I cook tonight with paneer and no oven?</Text>”
+                    reads across your saves and answers. Costs one AI action from your daily
+                    allowance.
+                  </Body>
+                </View>
+              </View>
+              <Rule />
+              <Body style={styles.compareFoot}>
+                Rule of thumb: searching for a <Text style={styles.quote}>thing</Text> → search.
+                Asking a <Text style={styles.quote}>question</Text> → Ask.
+              </Body>
+              <GhostButton
+                label="Ask your library instead"
+                trailing="→"
+                onPress={() => router.replace('/ask')}
+                style={styles.compareCta}
+              />
+            </View>
+          )}
+        </ScrollView>
       );
     }
     if (results.length === 0) {
@@ -230,4 +284,23 @@ const styles = themed(() => StyleSheet.create({
   },
   emptyTitle: { marginTop: spacing.xs },
   emptyText: { fontSize: font.sm, lineHeight: 20, maxWidth: 420 },
+
+  // The intro scrolls: on a small phone with the keyboard up, the two-way
+  // comparison is taller than the remaining viewport, and a centred View would
+  // simply clip it.
+  intro: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.xl,
+    paddingBottom: TAB_BAR_CLEARANCE + spacing.xl,
+    gap: spacing.md,
+  },
+  compare: { marginTop: spacing.lg, gap: spacing.md },
+  compareRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start', paddingVertical: spacing.md },
+  compareText: { flex: 1, minWidth: 0, gap: spacing.sm },
+  compareBody: { fontSize: font.sm, lineHeight: 20 },
+  // The examples are the payload of this block, so they read as ink, not as
+  // the surrounding explanation.
+  quote: { color: colors.textPrimary },
+  compareFoot: { fontSize: font.sm, lineHeight: 20, paddingTop: spacing.xs },
+  compareCta: { marginTop: spacing.sm },
 }));

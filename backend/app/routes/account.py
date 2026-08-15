@@ -48,6 +48,23 @@ def _delete_auth_user(user_id: str) -> bool:
         return False
 
 
+# A profile created more than this after its own trial clock started did not
+# start that clock — it inherited it from a `trial_grants` row, i.e. this email
+# had an account here before. Slack rather than `!=` because the two writes are
+# separate statements and clock/rounding noise of a second or two is normal;
+# a real return gap is days or weeks, so nothing sits near this boundary.
+_RETURNING_GAP = timedelta(minutes=5)
+
+
+def _is_returning(user: AuthUser, db: Session) -> bool:
+    """Has this email had an account here before? See the note at the `returning`
+    key in `get_usage` for why this is derived instead of stored."""
+    profile = db.query(ProfileDB).filter(ProfileDB.user_id == user.id).first()
+    if profile is None or profile.created_at is None or profile.trial_started_at is None:
+        return False
+    return (profile.created_at - profile.trial_started_at) > _RETURNING_GAP
+
+
 @router.get("/usage")
 def get_usage(user: AuthUser = Depends(get_current_user), db: Session = Depends(get_db)):
     """The caller's effective tier and today's usage — read-only, never charges.
@@ -72,6 +89,24 @@ def get_usage(user: AuthUser = Depends(get_current_user), db: Session = Depends(
     return {
         # Effective tier: 'pro' | 'trial' | 'free' (trial expired).
         "tier": ent.tier,
+        # ── Has this person been here before? ──────────────────────────────
+        # True when the profile INHERITED an older trial clock than its own
+        # creation time, which happens in exactly one situation: `_ensure_profile`
+        # found a `trial_grants` row for the hash of their email and seeded
+        # `trial_started_at` from it. That row survives account deletion by
+        # design (it is the trial-reset containment), so it is a reliable
+        # "this email had an account before" signal.
+        #
+        # ⚠️ DERIVED, NOT STORED — deliberately no new column and no migration.
+        # For a genuinely new profile both timestamps are the same `now`, so the
+        # comparison is false; for a returning one the grant predates the new
+        # profile by however long they were away.
+        #
+        # ⚠️ It stays true forever, so it is a fact about the ACCOUNT, not a
+        # one-shot flag. The client is responsible for showing its welcome-back
+        # once (see components/WelcomeBack.tsx) — a server-side "seen" bit would
+        # be a second source of truth for something local storage already knows.
+        "returning": _is_returning(user, db),
         "trial_ends_at": ent.trial_ends_at.isoformat() + "Z" if ent.trial_ends_at else None,
         "saves": {"used": saves_used, "limit": ent.save_limit},   # limit null = unlimited
         # Whole-library distinct counts for the profile stat cards (authoritative,

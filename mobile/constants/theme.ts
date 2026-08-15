@@ -483,8 +483,30 @@ export const TARGET_TILE = 180;
  * list, not a mosaic) and at 6 so a desktop browser does not shred the grid
  * into a filmstrip.
  */
+/**
+ * What a tile wants to be on a TABLET — and the correction to two rounds of
+ * fixing the tablet grid in the wrong direction (2026-08-15).
+ *
+ * ⚠️ Rounds 1 and 3 both held the tile at ~180pt and added COLUMNS as the canvas
+ * grew: 1180pt → 6 columns of 182pt stamps. Pinterest does the opposite, and it
+ * is measurable — researched on Refero against three Pinterest captures: the iOS
+ * home masonry renders a **181pt** tile on a 390pt canvas, while Pinterest
+ * desktop renders a **~221–248px** tile at ~1280–1440px. The tile GROWS with the
+ * canvas. Holding it constant is precisely what turns a tablet into a filmstrip
+ * of phone-sized thumbnails, which is the "not Pinterest at all" complaint.
+ *
+ * ⚠️ 232 is the MIDPOINT OF A MEASURED RANGE, not a measured value — the render
+ * scale of the desktop capture is inferred, so anywhere in 221–248 is defensible.
+ * Do not treat it as precise.
+ */
+const TARGET_TILE_WIDE = 232;
+
 export function columnsForWidth(width: number): number {
-  return Math.max(2, Math.min(6, Math.round((width - GRID_GAP) / (TARGET_TILE + GRID_GAP))));
+  // ⚠️ Gated at 700 so PHONE output is bit-identical to before: 390 → 2,
+  // 600 → 3. Only tablet-and-wider canvases move.
+  // New output: 768→3, 834→3, 1024→4, 1180→5, 1366→6 (tiles ~214–262pt).
+  const target = width < 700 ? TARGET_TILE : TARGET_TILE_WIDE;
+  return Math.max(2, Math.min(6, Math.round((width - GRID_GAP) / (target + GRID_GAP))));
 }
 
 /**

@@ -7,6 +7,7 @@ import { Label, Body, Rule, Rail, FilledButton } from './kit';
 import { Icon } from './Icon';
 import { colors, spacing, font, tracking, typeface, motion, themed } from '../constants/theme';
 import { useAuth } from '../contexts/AuthContext';
+import { getCachedUsage, onUsage } from '../services/usageCache';
 
 const ONBOARDING_KEY = '@savehere:onboarding:v1';
 const { width: SCREEN_W } = Dimensions.get('window');
@@ -156,8 +157,34 @@ export function OnboardingModal() {
   const isFreshAccount =
     !!createdAt && Date.now() - new Date(createdAt).getTime() < 15 * 60 * 1000;
 
+  /**
+   * ⚠️ A RETURNING USER IS NOT A NEW USER, even though their account is minutes
+   * old (owner, 2026-08-15). Someone who deleted their account and signed up
+   * again passes `isFreshAccount` exactly like a first-timer, so both this tour
+   * and the welcome-back screen would fire on top of each other — and the tour
+   * is the wrong one of the two, because they already know what the app does.
+   * `returning` is derived server-side from the trial grant that outlives a
+   * deleted account (see backend/app/routes/account.py). The seen-flag is still
+   * stamped below, so the tour can never resurface for them later either.
+   */
+  const [returning, setReturning] = useState(() => getCachedUsage()?.returning === true);
+  useEffect(() => onUsage(u => setReturning(u.returning === true)), []);
+
+  /**
+   * ⚠️ `returning` is in the deps because it can arrive AFTER mount — this
+   * component sits outside the auth gate, so the login-time /usage fetch may
+   * still be in flight when it first renders. If it flips true while the tour
+   * is up, the tour is retracted and the key stamped, so the welcome-back
+   * screen owns the moment and the tour cannot resurface later.
+   */
   useEffect(() => {
     if (!storageKey) { setChecked(false); setVisible(false); return; }
+    if (returning) {
+      setVisible(false);
+      AsyncStorage.setItem(storageKey, 'completed');
+      setChecked(true);
+      return;
+    }
     AsyncStorage.getItem(storageKey).then((val) => {
       if (!val && isFreshAccount) {
         setVisible(true);
@@ -168,7 +195,7 @@ export function OnboardingModal() {
       }
       setChecked(true);
     });
-  }, [storageKey]);
+  }, [storageKey, returning]);
 
   const goNext = () => {
     if (step < STEPS.length - 1) {

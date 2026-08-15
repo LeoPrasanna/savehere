@@ -31,18 +31,7 @@ export default function AskScreen() {
   const [error, setError] = useState('');
   const [focused, setFocused] = useState(false);
 
-  /**
-   * Open the keyboard on arrival — you came here to type a question.
-   *
-   * A timer rather than `autoFocus`: the screen transition is still animating on
-   * mount, and focusing mid-transition is the case where iOS shows the caret but
-   * never raises the keyboard. 350ms clears the push animation.
-   */
   const inputRef = useRef<TextInput>(null);
-  useEffect(() => {
-    const t = setTimeout(() => inputRef.current?.focus(), 350);
-    return () => clearTimeout(t);
-  }, []);
   /**
    * Save-count gate. The entry points already hide Ask below the threshold, but
    * a deep link or back-navigation can still land here, so the screen guards
@@ -95,6 +84,24 @@ export default function AskScreen() {
   // null (never fetched) must NOT read as exhausted — a wrong "you're out"
   // shown to someone with budget is worse than showing it a moment late.
   const outOfAi = usage != null && usage.remaining === 0;
+
+  /**
+   * Open the keyboard on arrival — you came here to type a question.
+   *
+   * A timer rather than `autoFocus`: the screen transition is still animating on
+   * mount, and focusing mid-transition is the case where iOS shows the caret but
+   * never raises the keyboard. 350ms clears the push animation.
+   *
+   * ⚠️ Skipped when the budget is gone or the save gate is closed — in both
+   * states the field is not rendered at all, so raising a keyboard for it would
+   * be a keyboard over nothing. It re-runs if `outOfAi` resolves late (the
+   * cached usage can arrive after mount), so the normal case still autofocuses.
+   */
+  useEffect(() => {
+    if (outOfAi || locked) return;
+    const t = setTimeout(() => inputRef.current?.focus(), 350);
+    return () => clearTimeout(t);
+  }, [outOfAi, locked]);
 
   const ask = async (question: string) => {
     const text = question.trim();
@@ -180,7 +187,14 @@ export default function AskScreen() {
             </View>
           )}
 
-          {/* Underlined field with the send action inline. */}
+          {/* ⚠️ THE FIELD IS GONE WHEN THERE IS NOTHING TO SPEND (owner,
+              2026-08-15). It used to render under the out-of-AI notice: an
+              inviting, focused, keyboard-raising text box whose only possible
+              outcome was a 429 after you had typed a whole question. Telling
+              someone a door is locked and leaving the handle turning is worse
+              than not showing the handle. The screen's own autofocus effect is
+              skipped for the same reason. */}
+          {!outOfAi && (
           <View style={styles.field}>
             <View style={styles.fieldRow}>
               <TextInput
@@ -205,6 +219,7 @@ export default function AskScreen() {
             </View>
             <View style={[styles.fieldRule, focused && styles.fieldRuleOn]} />
           </View>
+          )}
 
           {/* Suggestions are hidden when the budget is gone — every one of them
               is a question that would 429. */}
