@@ -51,22 +51,26 @@ difficult to coordinate when building on CI."*
 12.0.0). The counter lives on EAS's servers and increments per build with no
 local file to commit, so the treadmill disappears rather than being managed.
 
-⚠️ **ONE-TIME OWNER ACTION REQUIRED — the remote counter is NOT yet initialized.**
-`eas build:version:get` reports *"No remote versions are configured for this
-project."* Initializing needs an interactive TTY (`build:version:set` has no
-value flag and refuses piped stdin: *"Input is required, but stdin is not
-readable"*), so it could not be done from here. **Run this once, from a real
-terminal, and answer `7`:**
-```
-cd mobile && npx eas-cli@latest build:version:set --platform android --profile preview
-```
-`7` is the highest versionCode ever built, so the next build is 8 and cannot
-collide with anything already on a phone.
-**Belt and braces until you do:** `app.json`'s `versionCode` was bumped 6 → **8**,
-so if a build runs first and EAS seeds the remote counter from the local config,
-it still lands above the installed 7. ⚠️ Once remote versioning is live that
-field is **ignored for builds** (EAS says so on every command) and survives only
-as a historical marker — do not "fix" it later by editing it.
+✅ **RESOLVED 2026-08-15 — no owner action needed after all.** The first build
+after the fix seeded the remote counter from `app.json`'s 8 and emitted
+**`versionCode` 9** (build `e7669501`, commit `b7a6dc4b`). That is the proof:
+five builds straight had produced 7, and the first one under
+`appVersionSource: remote` moved. `build:version:get` now reports 9.
+
+⚠️ **DO NOT run `build:version:set` now.** It was queued as a manual fix while
+the counter was uninitialized, and the number this file used to tell you to
+enter (`7`) is now *below* what is installed on the phone. Setting it would make
+the next build emit 8, which Android refuses to install over 9 — re-creating the
+exact bug above. The command is only ever needed again if the counter is
+somehow lost or a build is published outside EAS.
+
+⚠️ `app.json`'s `versionCode: 8` is now **dead config** — EAS prints
+*"ignored when version source is set to remote"* on every command. Leave it
+there. Two reasons: it is a historical marker of where the seed came from, and
+`runtimeVersion` is the **`fingerprint`** policy, so editing the app config can
+move the fingerprint and orphan every OTA update from the installed APK. If it
+is ever removed, remove it **in a PR that ships a native build anyway**, where
+the fingerprint moves regardless.
 
 ---
 
