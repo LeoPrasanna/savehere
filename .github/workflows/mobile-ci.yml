@@ -60,4 +60,11 @@ jobs:
           npm run test:roll
           npm run test:search
           npm run test:quota
-          npm run test:cover
+          # ⚠️ CALLED DIRECTLY, NOT AS AN npm SCRIPT, AND THAT IS DELIBERATE.
+          # `runtimeVersion` is the `fingerprint` policy, and @expo/fingerprint
+          # hashes **package.json's scripts block**. Adding `test:cover` there
+          # changed the fingerprint on a JS-only round, which orphaned the OTA
+          # update from the installed build — verified with `fingerprint:compare`,
+          # where that one added line was the ENTIRE diff. A dev-only script must
+          # never cost an EAS build. New self-checks go here, not in package.json.
+          node --experimental-strip-types --no-warnings components/coverStyle.test.ts
