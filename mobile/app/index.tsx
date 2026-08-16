@@ -66,12 +66,36 @@ export default function HomeScreen() {
   const [entered, setEntered] = useState(hasEnteredLibrary());
   const [scrolled, setScrolled] = useState(false);
 
-  const load = useCallback(async (category = activeCategory) => {
+  /**
+   * ⚠️ A REFRESH MUST NOT SHRINK THE LIST — this used to throw you back to the
+   * top mid-scroll, on a timer.
+   *
+   * It always asked for `limit: PAGE` (24) at `offset: 0` and replaced the
+   * whole list with the result. So after scrolling to, say, 100 tiles, ANY
+   * refresh collapsed the grid back to 24 — the ScrollView's content shrank
+   * under the thumb and the offset clamped, dumping you near the top.
+   *
+   * That is not a rare path. `load()` runs on screen focus, on `appResumed`,
+   * on `libraryState`, on pull-to-refresh — and **every 4 seconds while any
+   * summary is pending**, which is exactly when a user is scrolling a library
+   * they just added to. Infinite scroll and the poll were fighting: `loadMore`
+   * appended 24, the poll threw them away.
+   *
+   * (It also meant a pending reel below position 24 never got its summary
+   * update at all, because the poll only ever re-read the first page.)
+   *
+   * Now a refresh re-reads AS MANY as are already on screen. Read through the
+   * ref, not `reels`, so `load` keeps a stable identity — it sits in the
+   * dependency list of the focus effect and of that 4-second interval, and
+   * making it change per list change would re-arm both on every fetch.
+   */
+  const load = useCallback(async (category = activeCategory, reset = false) => {
     try {
       setError('');
       const data = await api.listReels({
         category: category !== 'all' ? category : undefined,
-        limit: PAGE,
+        // Server clamps to 1000 (app/routes/reels.py), so this cannot run away.
+        limit: reset ? PAGE : Math.max(PAGE, reelsRef.current.length),
         offset: 0,
       });
       // Reconcile with what this device knows and the server doesn't yet: a
@@ -193,17 +217,54 @@ export default function HomeScreen() {
     if (now) load();
   }), [load]);
 
-  const hasPending = reels.some(r => r.summary_status === 'pending');
+  /**
+   * Poll ONLY the reels that are actually pending — not the whole library.
+   *
+   * ⚠️ This was `setInterval(() => load(), 4000)`, and it was the most
+   * expensive thing on the screen. Three problems, all of them felt as scroll
+   * jank while a summary was being written:
+   *
+   *  1. It refetched and re-parsed the ENTIRE loaded list every 4 seconds. Now
+   *     that `load` preserves how far you have scrolled, that would have meant
+   *     a 150-object JSON parse on the JS thread every 4 seconds — trading a
+   *     scroll-position bug for a frame-rate one.
+   *  2. It replaced the whole array, so every tile's element was recreated on
+   *     each tick. The memo comparator absorbs that, but it is work done 100+
+   *     times to learn that nothing changed.
+   *  3. It only ever read the FIRST page, so a pending reel below position 24
+   *     never received its summary at all — it just sat there saying "READING"
+   *     until you left the screen.
+   *
+   * One `getReel` per pending id fixes all three. In practice that is a single
+   * small request (you rarely have more than one summary in flight), and the
+   * patch is applied in place: same length, same order, same aspects, so
+   * nothing reflows and only the one card that changed re-renders.
+   */
+  const pendingKey = reels
+    .filter(r => r.summary_status === 'pending')
+    .map(r => r.id)
+    .join(',');
   useEffect(() => {
-    if (!entered || !hasPending) return;
-    const t = setInterval(() => { load(); }, 4000);
+    if (!entered || !pendingKey) return;
+    const ids = pendingKey.split(',');
+    const t = setInterval(async () => {
+      const settled = await Promise.all(
+        ids.map(id => api.getReel(id).catch(() => null)),
+      );
+      const done = settled.filter((r): r is Reel => !!r && r.summary_status !== 'pending');
+      if (done.length === 0) return;
+      setReels(prev => prev.map(r => done.find(d => d.id === r.id) ?? r));
+    }, 4000);
     return () => clearInterval(t);
-  }, [entered, hasPending, load]);
+  }, [entered, pendingKey]);
 
   const onCategoryChange = (cat: string) => {
     setActiveCategory(cat);
     setLoading(true);
-    load(cat);
+    // `reset` — a different category starts at page one. Without it the new
+    // category would be fetched at the OLD one's length, which is neither
+    // correct pagination nor a page size anyone asked for.
+    load(cat, true);
   };
 
   // ⚠️ A local `goHome()` used to live here for a header Home button that round
@@ -391,17 +452,42 @@ export default function HomeScreen() {
             whichever column is currently shortest, so neighbours sit at
             different heights the way a real contact sheet does.
 
-            ponytail: a ScrollView, not a FlatList — masonry and row
-            virtualization are incompatible without measuring every tile, and a
-            personal library is tens-to-hundreds of items. If someone turns up
-            with 2,000 saves this is the thing that gets slow; the fix then is a
-            windowed masonry (react-native-super-grid or a measured
-            FlashList), not a smaller diff here. */}
+            ponytail: a ScrollView, not a FlatList — EVERY loaded tile is
+            mounted, so the native view count grows with the library (roughly a
+            dozen views per card: frame, pressable, image, scrim, overlay,
+            three texts). `removeClippedSubviews` below is what keeps that
+            affordable; it is load-bearing, not a micro-optimisation.
+
+            ⚠️ AN EARLIER VERSION OF THIS NOTE CLAIMED VIRTUALIZATION WAS
+            IMPOSSIBLE HERE — "masonry and row virtualization are incompatible
+            without measuring every tile". That is no longer true, and it would
+            have sent the next person down the wrong road. Tile geometry in this
+            grid is fully DETERMINISTIC before layout: `aspectFor(reel)` hashes
+            the id, and the column width comes from `columnsForWidth(width)`. So
+            every tile's exact height and y-offset is computable without
+            measuring anything. If this ever needs windowing, that is the
+            opening — not a third-party grid.
+
+            It is still not worth doing yet: the screen paginates 24 at a time,
+            and nothing has been profiled on a real device. Do that first. */}
         <ScrollView
           style={styles.grid}
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={32}
+          /**
+           * Detaches off-screen tiles from the native view hierarchy while
+           * keeping them mounted in React. This is the one lever that makes an
+           * unvirtualized masonry behave on Android, where the cost is the
+           * native view count, not the JS.
+           *
+           * ⚠️ Android only, deliberately. On iOS this prop has a long history
+           * of blanking content in exactly this shape — a nested,
+           * absolutely-positioned column layout — and a blank tile is a worse
+           * bug than a slow scroll. iOS also handles large view counts far
+           * better, so there is little to win there.
+           */
+          removeClippedSubviews={Platform.OS === 'android'}
           onScroll={e => {
             const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
             setScrolled(contentOffset.y > 4);

@@ -5,6 +5,51 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ LIBRARY SCROLL (2026-08-16) — a refresh was resetting your scroll position
+
+Asked for "make library scrolling smooth". The real defect was not smoothness:
+**`load()` always fetched `limit: PAGE` (24) at `offset: 0` and replaced the whole
+list**, so after scrolling to ~100 tiles any refresh collapsed the grid back to 24 —
+content shrank under the thumb and the offset clamped near the top.
+
+It runs on focus, on `appResumed`, on `libraryState`, on pull-to-refresh, and
+**every 4 s while a summary is pending** — exactly when you are scrolling a library
+you just added to. `loadMore` appended 24; the poll threw them away.
+
+⚠️ Same bug's second face: the poll only re-read page one, so **a pending reel below
+position 24 never received its summary** — it read READING until you left the screen.
+
+**Fixes.** `load` now re-reads as many as are already on screen (via `reelsRef`, so its
+identity stays stable — it sits in the deps of both the focus effect and that
+interval). And the poll no longer refetches the library at all: one `getReel` per
+pending id, patched in place, so length/order/aspects are unchanged and only the one
+card that changed re-renders.
+
+**Measured (49 real reels, mean 2,578 B/reel):**
+
+| Poll | every 4 s | per minute |
+|---|---|---|
+| before (24, resets scroll) | 60.4 KB | 0.9 MB |
+| naive scroll fix (150) | 377.6 KB | 5.5 MB |
+| **now (pending only)** | **2.5 KB** | **37.8 KB** |
+
+Also `removeClippedSubviews` on the grid, **Android only** — it detaches off-screen
+tiles from the native hierarchy. Not iOS: that prop blanks content in exactly this
+nested absolutely-positioned column shape, and a blank tile beats a slow scroll.
+
+⚠️ **NOT PROFILED ON A DEVICE — no FPS number here is claimed.** The payload figures
+are measured; the scroll-feel improvement is reasoned, not observed. To settle it:
+shake the device → **Performance Monitor**, scroll, and report the UI vs JS rows. JS
+dropping alone = render work; both dropping = native view count.
+
+⚠️ **A stale comment was corrected, not just the code.** It claimed masonry
+virtualization was "incompatible without measuring every tile". That is false here —
+`aspectFor()` hashes the id and `columnsForWidth()` gives the width, so every tile's
+height and y-offset is known before layout. Windowing is available whenever a profile
+justifies it; do not reach for a third-party grid.
+
+---
+
 ## ▶ 🔴 OTA TRAP FOUND 2026-08-15 — ONE npm SCRIPT ORPHANED A WHOLE UPDATE
 
 Round 6 was JS-only and should have shipped over the air. The published update
