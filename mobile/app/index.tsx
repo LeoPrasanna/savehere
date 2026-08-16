@@ -475,19 +475,18 @@ export default function HomeScreen() {
           contentContainerStyle={styles.list}
           showsVerticalScrollIndicator={false}
           scrollEventThrottle={32}
-          /**
-           * Detaches off-screen tiles from the native view hierarchy while
-           * keeping them mounted in React. This is the one lever that makes an
-           * unvirtualized masonry behave on Android, where the cost is the
-           * native view count, not the JS.
-           *
-           * ⚠️ Android only, deliberately. On iOS this prop has a long history
-           * of blanking content in exactly this shape — a nested,
-           * absolutely-positioned column layout — and a blank tile is a worse
-           * bug than a slow scroll. iOS also handles large view counts far
-           * better, so there is little to win there.
-           */
-          removeClippedSubviews={Platform.OS === 'android'}
+          /* ⚠️ `removeClippedSubviews` WAS HERE AND WAS REMOVED (2026-08-16).
+             It was added the same day, on Android only, to detach off-screen
+             tiles from the native hierarchy — and the note justifying it also
+             admitted the prop "blanks content in exactly this shape" on iOS,
+             a nested column layout. Hours later the owner reported the phone
+             grid mangled. It is not proven to be the cause (the frame's
+             flex/aspectRatio conflict is the other suspect and was fixed in
+             the same change), but it bought a scroll improvement that was
+             explicitly "reasoned, not observed" — no FPS number was ever
+             claimed for it. Unmeasured gain, live visual regression: it goes.
+             Put it back only behind a Performance Monitor reading that shows
+             the native view count actually hurting. */
           onScroll={e => {
             const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
             setScrolled(contentOffset.y > 4);

@@ -253,27 +253,33 @@ const styles = themed(() => StyleSheet.create({
   // rectangle IS the picture. Wrap it in a padded card and it becomes a sticker.
   frame: {
     /**
-     * ⚠️ `flex: 1` HERE MEANS TWO DIFFERENT THINGS, depending on who renders
-     * the card. Read this before "simplifying" it.
+     * ⚠️ WIDTH, NOT `flex: 1` — AND THIS IS THE FIX FOR THE MANGLED LIBRARY
+     * GRID (owner screenshot, 2026-08-16). Do not put `flex` back.
      *
-     *   app/index.tsx      the parent is a masonry COLUMN, so flex is the
-     *                      HEIGHT axis. Height should really come from
-     *                      `aspectRatio` against the column's width, and
-     *                      `flex: 1` (i.e. flexBasis 0) is a competing opinion
-     *                      about the same dimension. Yoga resolves it correctly
-     *                      when the parent's main axis is undefined — which a
-     *                      ScrollView's content always is — which is why this
-     *                      renders correctly today.
-     *   app/rediscover.tsx the parent is a FlatList ROW (`numColumns`), so flex
-     *                      is the WIDTH axis and is LOAD-BEARING: without it
-     *                      the items do not divide the row evenly.
+     * The tile's height must come from `aspectRatio` against its width, and
+     * nothing else. `flex: 1` means `flexBasis: 0; flexGrow: 1`, which is a
+     * COMPETING opinion about that same height whenever the parent is a
+     * column — and in the masonry it is. Two rules for one dimension, and
+     * which one wins is a Yoga implementation detail.
      *
-     * So it cannot simply become `width: '100%'` — that fixes the ambiguity in
-     * one screen and breaks the other. ponytail: if the tablet grid is ever
-     * traced to this, the fix is for each grid to supply its own sizing rather
-     * than sharing one style across two flex axes, not a value tweak here.
+     * ⚠️ IT WON DIFFERENTLY AFTER THE SDK 57 / RN 0.86.2 UPGRADE. Under RN
+     * 0.85 aspectRatio won and the grid was right; a note here even said so.
+     * After the upgrade flex won, so tiles DIVIDED their column's height
+     * instead of deriving it: a column holding one tile stretched that tile to
+     * the full height of the tallest column, a column holding two gave each
+     * half. That is the giant tile beside two squashed ones, the black
+     * letterbox bands (the image keeps `cover` inside a frame of the wrong
+     * shape), and the titles colliding. Nothing about the grid's own maths
+     * changed — the tile's height rule did.
+     *
+     * ⚠️ WHY THE CARD CANNOT JUST CARRY `flex: 1` FOR EVERYONE. In
+     * `app/rediscover.tsx` the parent is a FlatList ROW, where flex is the
+     * WIDTH axis and IS needed to divide the row evenly. That is the grid's
+     * job, not the card's, so Rediscover now wraps each card in its own
+     * `flex: 1` view and the card stays purely "as wide as I am given, as tall
+     * as my ratio says". One rule per dimension, in one place.
      */
-    flex: 1,
+    width: '100%',
     backgroundColor: colors.card,
     overflow: 'hidden',
     /**

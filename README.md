@@ -70,8 +70,11 @@ SaveHere is an **iOS-first mobile app** (Android next) that turns the short-form
 - 🅰️ **Inter**, one family across the whole app — hierarchy is carried by size,
   weight and letter-spacing rather than colour
 - 🧱 **Staggered masonry library** — tiles go to whichever column is shortest, with
-  the aspect seeded by platform (landscape thumbnails from YouTube/LinkedIn,
-  vertical from Instagram/TikTok) so it never reflows when an image loads.
+  the aspect **hashed from the reel id** so it never reflows when an image loads.
+  All four ratios are portrait: seeding them by *platform* was tried and reverted,
+  because landscape wells for YouTube/LinkedIn put two tile shapes in one grid and
+  that is what made the wall look inconsistent. A tile's width comes from its grid
+  and its height comes from that ratio — one rule per dimension, never both.
   **The library is the one sanctioned exception to the zero-radius rule**
   (owner, Aug 2026): 16px corners and a 12px gutter, researched against
   Pinterest, where gutter and page margin are equal and the radius is a constant
