@@ -5,6 +5,48 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ 🔴 PHONE LIBRARY GRID MANGLED (2026-08-16) — one tile filled a whole column
+
+Owner screenshot: a 3-reel library where the **left column's single tile is as tall
+as the right column's two tiles combined**, a black letterbox band above the second
+tile, and titles colliding. Not Pinterest — not even a grid.
+
+**The defect.** `ReelCard`'s `styles.frame` set **both `flex: 1` and `aspectRatio`**
+on the same view ([`components/ReelCard.tsx`](mobile/components/ReelCard.tsx)). Under
+the library's masonry these are two competing rules for the *same dimension*: `flex: 1`
+is `flexBasis: 0; flexGrow: 1`, and in a COLUMN parent that is the height — the exact
+height `aspectRatio` is supposed to derive from the width. Which rule wins is a Yoga
+implementation detail, and the screenshot is what losing looks like: tiles **dividing**
+their column's height (1 tile → all of it, 2 tiles → half each) instead of deriving it.
+The letterbox band is the same bug seen through the image: `cover` inside a frame of
+the wrong shape.
+
+**Fix — the one this file said to make.** Round 3 (item 1b below) found this exact
+conflict, left it alone, and named the correct remedy: *per-grid sizing, not a value
+tweak*. That is now done. The frame is `width: '100%'` and owns nothing but its ratio;
+the two `numColumns` grids (`rediscover.tsx`, `search.tsx`) wrap each cell in their own
+`flex: 1` view, because in a ROW flex is the width axis and dividing the row is the
+**grid's** job, not the card's. One rule per dimension, in one place.
+
+⚠️ **A SECOND SUSPECT WAS REMOVED IN THE SAME CHANGE, and the two cannot be told
+apart from here.** `removeClippedSubviews` (added to this grid **earlier the same
+day**, see the section below) is gone again. Its own justification conceded the prop
+"blanks content in exactly this shape" on iOS, and the scroll win it bought was
+recorded as *"reasoned, not observed"* — no FPS number was ever claimed. An unmeasured
+gain does not outrank a live visual regression. Both edits are individually correct, so
+nothing is being guessed at; but **if the grid is right on the next build, which of the
+two fixed it is unknown.** Restore the prop only behind a Performance Monitor reading.
+
+⚠️ **This is very likely the tablet bug from round 3 as well** (item 1, still open,
+still no tablet screenshot) — same style, same conflict, and a tablet's shorter columns
+make a stretched tile more obvious, not less. `[Likely]`, not confirmed: it will take
+the owner's tablet to close item 1.
+
+**Ships over the air — JS only, no native change, no new npm script** (see the OTA
+trap below).
+
+---
+
 ## ▶ LIBRARY SCROLL (2026-08-16) — a refresh was resetting your scroll position
 
 Asked for "make library scrolling smooth". The real defect was not smoothness:
@@ -36,6 +78,12 @@ card that changed re-renders.
 Also `removeClippedSubviews` on the grid, **Android only** — it detaches off-screen
 tiles from the native hierarchy. Not iOS: that prop blanks content in exactly this
 nested absolutely-positioned column shape, and a blank tile beats a slow scroll.
+
+⚠️ **REVERSED THE SAME DAY — see the section above.** The owner reported a mangled
+phone grid hours after this shipped, and this prop was one of the two suspects. It is
+out. The reasoning that added it never survived its own caveat: a prop known to blank
+content *in this exact layout shape* was kept because Android "handles it better", in
+exchange for a scroll improvement this section itself labels unmeasured.
 
 ⚠️ **NOT PROFILED ON A DEVICE — no FPS number here is claimed.** The payload figures
 are measured; the scroll-feel improvement is reasoned, not observed. To settle it:
@@ -477,7 +525,7 @@ Items 1 and 2 are Android lifecycle behaviour and need an APK regardless.
 | # | Item | Status / root cause |
 |---|---|---|
 | 1 | Tablet/iPad library overlaps, "not Pinterest at all" | ⚠️ **ONE CONFIRMED BUG FIXED; the reported symptom is still unconfirmed.** The confirmed part: round 1 named `width < 600 ? 2 : width < 1024 ? 3 : 4` as *the* reason grids looked wrong on tablets and replaced it — **in `app/index.tsx` only**. `app/rediscover.tsx` still had that exact line, so the Rediscover grid kept the bug the whole time (fix applied at one call site instead of the shared place — the pattern this repo keeps hitting). There is now ONE `columnsForWidth()` in `constants/theme.ts` and both screens import it; on a tablet Rediscover goes 3 → 4 columns and matches the library. **Whether that is what the owner saw is unknown** — see below, and still send a screenshot. |
-| 1b | Tablet grid — what was ruled OUT | ❌ **Deliberately not guessed.** The column math was already "fixed" once (round 1, item 14 → `TARGET_TILE`), and it computes correctly: 768pt → 4 cols at 177pt, 834pt → 4 at 193pt, i.e. the same tile size as a phone. Two theories were examined and **both discarded**: `styles.frame`'s `flex: 1` + `aspectRatio` is a genuine Yoga ambiguity but resolves correctly when the parent's main axis is undefined (which is why the phone is right), and the shortest-column distribution is correct at every column count. Reproducing a NATIVE tablet layout is not possible on this dev box, and a web measurement would not be evidence for Yoga. **Do not apply a third speculative fix without a screenshot.** ⚠️ One thing found while ruling this out and left alone on purpose: `ReelCard`'s `styles.frame` uses `flex: 1`, which is the HEIGHT axis under the library's masonry column (competing with `aspectRatio`) but the WIDTH axis under Rediscover's FlatList row, where it is load-bearing. It cannot become `width: '100%'` without breaking Rediscover. If the tablet grid is ever traced here, the fix is per-grid sizing, not a value tweak — noted at the style. |
+| 1b | Tablet grid — what was ruled OUT | ❌ **Deliberately not guessed.** The column math was already "fixed" once (round 1, item 14 → `TARGET_TILE`), and it computes correctly: 768pt → 4 cols at 177pt, 834pt → 4 at 193pt, i.e. the same tile size as a phone. Two theories were examined and **both discarded**: `styles.frame`'s `flex: 1` + `aspectRatio` is a genuine Yoga ambiguity but resolves correctly when the parent's main axis is undefined (which is why the phone is right), and the shortest-column distribution is correct at every column count. Reproducing a NATIVE tablet layout is not possible on this dev box, and a web measurement would not be evidence for Yoga. **Do not apply a third speculative fix without a screenshot.** ⚠️ One thing found while ruling this out and left alone on purpose: `ReelCard`'s `styles.frame` uses `flex: 1`, which is the HEIGHT axis under the library's masonry column (competing with `aspectRatio`) but the WIDTH axis under Rediscover's FlatList row, where it is load-bearing. It cannot become `width: '100%'` without breaking Rediscover. If the tablet grid is ever traced here, the fix is per-grid sizing, not a value tweak — noted at the style. **→ SUPERSEDED 2026-08-16: it was this.** An owner screenshot of the *phone* showed tiles dividing their column's height, which is `flex: 1` beating `aspectRatio`. The remedy this row predicted — per-grid sizing — is what shipped (top of file). Two corrections to what is written above: calling the conflict "resolves correctly" was **wrong**, it was merely resolving in our favour at the time; and "cannot become `width: '100%'` without breaking Rediscover" was **half right** — the value moves, and Rediscover keeps working because the `flex: 1` moves to the grid cell that should always have owned it. |
 | 2 | Profile panel still on screen when a share opens the app | ✅ **`ProfilePanel` is a `Modal` — its own native window.** The share overlay in `_layout.tsx` is an absolutely positioned sibling `View`, so it can never paint over it at any zIndex; that is why "cover it with the saving overlay" was never going to work. The panel is now *told* to close via a new `closeProfile` bus event. |
 | 3 | EAS build doesn't fire on merge to `develop` | ✅ **RESOLVED — CONFIRMED WORKING 2026-08-14.** The diagnosis held: it was the GitHub connection's **base directory**, not a code bug. `eas workflow:list` now returns the registered workflow (`Android preview build`, `build-preview.yml`), and merging PR #70 to `develop` fired an Android `preview` build on its own — `Started by GitHub App`, on the merge commit. The GitHub-Actions-plus-`EXPO_TOKEN` fallback is therefore **not needed and should not be built**. ⚠️ Two standing consequences: the free-tier queue (88 min on this project once) now sits between every merge and a testable APK, and `autoIncrement` writes the bumped `versionCode` back into `mobile/app.json` **on the build machine, not locally** — so a local manual `eas build` still leaves an uncommitted bump behind. That is exactly where the stray `versionCode` 5 → 6 in the tree came from before PR #70 picked it up. |
 | 4 | Delete a save should feel instant; tags don't update on cards | ✅ **Three causes, all fixed.** (a) `reel/[id]` *awaited* the DELETE before navigating — on a cold Render instance that is ~50 s staring at the reel you just deleted (same shape as the category bug from round 1). (b) `app/index.tsx` refetches in a `useFocusEffect`, so an optimistic delete would have flickered straight back from a server that hadn't processed it — new `services/libraryEdits.ts` holds in-flight deletes out of any server list, exactly as `todoMerge.ts` does for to-dos. (c) That same focus effect did `setLoading(true)`, **blanking the whole grid to skeletons on every return from a card** — the single biggest "feels slow" moment in the app. It now refreshes in place and only shows skeletons when there is genuinely nothing to show. Category changes are also pushed to the grid as a self-retiring patch, which is the "tags don't update" half. ⚠️ `ReelCard` no longer calls the API itself (it swallowed delete failures with `.catch(() => {})`, so a failed delete was invisible) — both call sites now own it. |

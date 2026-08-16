@@ -88,19 +88,27 @@ export default function RediscoverScreen() {
             <Rule />
           </View>
         }
+        /* ⚠️ THE CELL CARRIES `flex: 1`, NOT THE CARD. In a `numColumns` row
+           flex is the WIDTH axis, and dividing the row evenly is the grid's
+           job. The card only knows "as wide as I'm given, as tall as my ratio
+           says" — it used to carry `flex: 1` itself, which in the library's
+           masonry COLUMN meant height instead and fought its own aspectRatio.
+           See the frame style in components/ReelCard.tsx. */
         renderItem={({ item, index }) => (
-          item.__ghost
-            ? <View style={{ flex: 1 }} />
-            /* ⚠️ The API call lives HERE, not in ReelCard — the card stopped
-               firing it (and silently swallowing failures) so the screen that
-               owns the list can report the outcome. `markDeleted` keeps the
-               row out of the library's own refetch while the request is in
-               flight. */
-            : <ReelCard reel={item} index={index} onDelete={id => {
+          <View style={{ flex: 1 }}>
+            {item.__ghost ? null : (
+              /* ⚠️ The API call lives HERE, not in ReelCard — the card stopped
+                 firing it (and silently swallowing failures) so the screen that
+                 owns the list can report the outcome. `markDeleted` keeps the
+                 row out of the library's own refetch while the request is in
+                 flight. */
+              <ReelCard reel={item} index={index} onDelete={id => {
                 markDeleted(id);
                 setReels(prev => prev.filter(r => r.id !== id));
                 api.deleteReel(id).catch(() => unmarkDeleted(id));
               }} />
+            )}
+          </View>
         )}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}

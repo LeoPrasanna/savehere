@@ -192,12 +192,17 @@ export default function SearchScreen() {
         columnWrapperStyle={{ gap: GRID_GAP, paddingHorizontal: GRID_GAP }}
         contentContainerStyle={styles.list}
         showsVerticalScrollIndicator={false}
+        /* The cell carries `flex: 1`, not the card — flex is the WIDTH axis in
+           a `numColumns` row, and dividing the row is the grid's job. Same rule
+           as rediscover.tsx; see the frame style in components/ReelCard.tsx. */
         renderItem={({ item, index: i }) => (
-          item.__ghost
-            ? <View style={{ flex: 1 }} />
-            /* The screen owns the delete, not the card — a card that fires its
-               own API call swallows the failure. Same rule as index.tsx. */
-            : <ReelCard reel={item as Reel} index={i} onDelete={removeReel} />
+          <View style={{ flex: 1 }}>
+            {item.__ghost ? null : (
+              /* The screen owns the delete, not the card — a card that fires its
+                 own API call swallows the failure. Same rule as index.tsx. */
+              <ReelCard reel={item as Reel} index={i} onDelete={removeReel} />
+            )}
+          </View>
         )}
       />
     );
