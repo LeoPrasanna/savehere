@@ -5,6 +5,32 @@ Items are ordered by dependency — complete top sections before bottom ones.
 
 ---
 
+## ▶ SILENT AI FAILURES (2026-09-07) — two paths failed without ever saying so
+
+Found by running the ECC `silent-failure-hunter` over `backend/app/` (37 except
+sites reviewed; `quota.py` came back clean and is the reference implementation).
+Both defects produced a **wrong diagnosis** rather than a crash, which is why
+neither ever showed up in a log.
+
+| # | Defect | Fix |
+|---|---|---|
+| 1 | **A dead transcription path looked like a run of silent reels.** `transcriber.transcribe()` swallowed every Whisper failure into `return ""` — byte-identical to the success `""` meaning "no speech". The module had **zero logging**. Downstream, the `len(text) < 50` guard then wrote `summary_status="skipped"` and logged *"no extractable text"*, an actively wrong cause. The outer handler at [`reels.py:1033`](backend/app/routes/reels.py:1033) could never fire, because `transcribe()` had already eaten the exception. An expired `OPENAI_API_KEY` or a sustained 429 would have taken the whole feature down invisibly. | `logger.error` with exception type and message before the `return ""`. Contract unchanged — callers still get `""`. |
+| 2 | **Users were charged for an empty result nobody could explain.** `workout_extractor._parse_model_json()` caught broad `Exception` and returned its fallback (`{"exercises": []}`, `{"tasks": []}`, `{"days": []}`, 4 call sites) with **no log**. `charge_ai_action` runs *before* the Claude call, so a malformed reply meant the quota unit was spent and the result was indistinguishable from "this reel genuinely had no exercises". The file already states the right principle three lines below, at the `max_tokens` branch: *"Loud and retryable, never silently downgraded."* | Narrowed to `json.JSONDecodeError` (a non-parse bug now surfaces instead of vanishing into the fallback) and logs the error plus a 200-char snippet of the raw reply — matching [`summarizer.py:261`](backend/app/services/summarizer.py:261), which already did this correctly. |
+
+**Verified:** `python -m pytest tests/ -q` → **330 passed** (327 + 3 new in
+`tests/test_workout_extractor.py::TestParseModelJson`, one of which fails if the
+narrowed `except` is ever widened back to `Exception`).
+
+### Still open from the same audit — same class, not yet fixed
+
+| Sev | Where | What |
+|---|---|---|
+| MED | [`services/librarian.py:120,175`](backend/app/services/librarian.py:120) | **Zero logging in the module**, two broad swallows. Ask-library failures — including the Anthropic 429s CLAUDE.md calls out by name — are unobservable. The user sees the friendly message; we never learn it fired. |
+| MED | [`services/extractor.py:561`](backend/app/services/extractor.py:561) | `_fetch_page` logs 403/429 **status codes** but silently drops transport exceptions across all 8 crawler identities. DNS/TLS/timeout failures return `None` with no trace. The yt-dlp loop 300 lines below does this correctly (keeps `last_err`, logs at :916) — same pattern, one instrumented and one not. |
+| LOW | `extractor.py:326,407` · `reels.py:1068` | Graceful-degradation chains and the mark-failed handler. Defensible silence, but a debug line would cost nothing. |
+
+---
+
 ## ▶ 🔴 PHONE LIBRARY GRID MANGLED (2026-08-16) — one tile filled a whole column
 
 Owner screenshot: a 3-reel library where the **left column's single tile is as tall

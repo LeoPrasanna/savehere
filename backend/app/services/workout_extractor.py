@@ -183,7 +183,15 @@ Respond ONLY with the JSON object"""
 
 
 def _parse_model_json(raw_text: str, fallback: dict) -> dict:
-    """Strip optional code fences and parse JSON; return fallback on failure."""
+    """Strip optional code fences and parse JSON; return fallback on failure.
+
+    The fallback is LOGGED and the catch is narrow, for the same reason the
+    max_tokens branch below is loud: an empty {"exercises": []} is
+    indistinguishable from a reel that genuinely had no exercises — except the
+    user was already charged for the AI action before this ran. Silence here
+    means paying for a result nobody can explain. Only a parse failure is
+    swallowed; anything else is a real bug and must surface.
+    """
     raw = (raw_text or "").strip()
     if raw.startswith("```"):
         raw = raw.split("```")[1]
@@ -191,7 +199,9 @@ def _parse_model_json(raw_text: str, fallback: dict) -> dict:
             raw = raw[4:]
     try:
         return json.loads(raw)
-    except Exception:
+    except json.JSONDecodeError as e:
+        logger.error(f"[EXTRACT] unparseable model JSON ({e}) — falling back to "
+                     f"{sorted(fallback)}: {raw[:200]!r}")
         return fallback
 
 
