@@ -120,3 +120,23 @@ class TestParseVtt:
 
     def test_empty(self):
         assert extractor._parse_vtt("WEBVTT\n") == ""
+
+
+class TestFetchPageObservability:
+    """A host we cannot reach used to return None in complete silence — only
+    403/429 status codes were logged, never transport errors. The caller then
+    reported it as 'no text on the page', which is the wrong cause."""
+
+    def test_transport_failures_are_reported_once(self, monkeypatch, caplog):
+        def always_fails(url, headers=None, **kw):
+            raise OSError("name resolution failed")
+        monkeypatch.setattr(extractor._http, "get", always_fails)
+        monkeypatch.setattr(extractor.time, "sleep", lambda _s: None)
+
+        with caplog.at_level("ERROR"):
+            assert extractor._fetch_page("https://unreachable.example/p") is None
+
+        hits = [r for r in caplog.records if "identities failed to reach" in r.message]
+        assert len(hits) == 1, "expected exactly one summary line, not one per identity"
+        assert "OSError" in hits[0].message
+        assert "unreachable.example" in hits[0].message

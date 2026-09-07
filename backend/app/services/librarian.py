@@ -1,9 +1,11 @@
 import anthropic
 import json
+import logging
 import re
 from collections.abc import Iterator
 from app.config import settings
 
+logger = logging.getLogger(__name__)
 client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 # Only send the most relevant saves to Claude, not the whole library. Fewer items
@@ -117,7 +119,11 @@ def stream_answer(question: str, reels: list[dict]) -> Iterator[str]:
         ) as stream:
             for text in stream.text_stream:
                 yield text
-    except Exception:
+    except Exception as e:
+        # Broad on purpose — the friendly sentence must cover any failure. But it
+        # is the ONLY signal this path produces, and the user sees it, not us:
+        # without the log a sustained 429 is indistinguishable from nobody asking.
+        logger.error(f"[ASK] stream failed: {type(e).__name__}: {e}")
         yield "Something went wrong while searching your library. Please try again in a moment."
 
 
@@ -172,7 +178,8 @@ def ask_library(question: str, reels: list[dict]) -> dict:
             }],
         )
         result = _parse(msg.content[0].text)
-    except Exception:
+    except Exception as e:
+        logger.error(f"[ASK] failed for {len(relevant)} relevant saves: {type(e).__name__}: {e}")
         return {
             "answer": "Something went wrong while searching your library. Please try again in a moment.",
             "source_ids": [],

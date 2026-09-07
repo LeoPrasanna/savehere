@@ -85,3 +85,31 @@ class TestNonCooking:
                                text="Some content here that is long enough to pass." * 2,
                                category="news", notes="")
         assert out["tasks"] == []
+
+
+class TestParseModelJson:
+    """The fallback must be loud and the catch must stay narrow. An empty
+    {"exercises": []} is indistinguishable from a reel that had no exercises —
+    but the user was already charged for the AI action, so a silent fallback
+    means paying for a result nobody can explain."""
+
+    def test_malformed_json_falls_back_and_logs(self, caplog):
+        with caplog.at_level("ERROR"):
+            got = we._parse_model_json("not json at all", {"exercises": []})
+        assert got == {"exercises": []}
+        assert "unparseable model JSON" in caplog.text
+
+    def test_fenced_json_still_parses(self):
+        assert we._parse_model_json('```json\n{"days": [1]}\n```', {"days": []}) == {"days": [1]}
+
+    def test_non_parse_errors_are_not_swallowed(self, monkeypatch):
+        """Guards the narrowing: a bug that isn't a parse failure must surface,
+        not disappear into the fallback."""
+        def boom(_):
+            raise TypeError("not a parse problem")
+        monkeypatch.setattr(we.json, "loads", boom)
+        try:
+            we._parse_model_json("{}", {"exercises": []})
+        except TypeError:
+            return
+        raise AssertionError("TypeError was swallowed — the except is too broad")
