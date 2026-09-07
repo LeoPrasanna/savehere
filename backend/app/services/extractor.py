@@ -553,12 +553,22 @@ def _fetch_page(url: str) -> Optional[str]:
     pattern, independent of how convincing any single request looks.
     """
     host = urlparse(url).hostname or ""
+    # Transport failures are counted, not logged per identity: eight warnings per
+    # failed save would drown the 403/429 lines that actually tell us something.
+    # Only 403/429 got logged before, so a host that was unreachable — DNS, TLS,
+    # timeout — returned None in complete silence, and the caller reported it as
+    # "no text on the page". Same shape as the yt-dlp loop below, which already
+    # keeps a last_err and reports it once.
+    last_err: Optional[Exception] = None
+    transport_failures = 0
     with _gate(host):
         time.sleep(random.uniform(0.15, 0.6))
         for ident in _IDENTITIES:
             try:
                 resp = _http.get(url, headers=ident)
-            except Exception:
+            except Exception as e:
+                last_err = e
+                transport_failures += 1
                 continue
             if resp.status_code == 200 and len(resp.text) > 500:
                 return resp.text[:_MAX_PAGE_PARSE_BYTES]
@@ -567,6 +577,11 @@ def _fetch_page(url: str) -> Optional[str]:
                     f"[FETCH] {resp.status_code} from {host} as "
                     f"{ident['User-Agent'].split('/')[0]}"
                 )
+    if last_err is not None:
+        logger.error(
+            f"[FETCH] {transport_failures}/{len(_IDENTITIES)} identities failed to reach "
+            f"{host}: {type(last_err).__name__}: {last_err}"
+        )
     return None
 
 
