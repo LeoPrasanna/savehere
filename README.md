@@ -213,7 +213,8 @@ savehere/
 │   ├── CONTEXT.md                 # architecture + decisions handoff
 │   └── REMOTE_DEV.md              # Codespaces + Claude Code setup guide
 ├── CLAUDE.md                      # project instructions for Claude Code
-├── TODO.md                        # prioritized roadmap / release checklist
+├── TODO.md                        # open work only — the release gate
+├── docs/SHIPPED.md                 # what's done + why: decisions, rejected options, traps
 └── .env.example
 ```
 
@@ -327,7 +328,7 @@ python scripts/set_tier.py <user-id> pro         # → pro — then sign out and
 4. **iOS Share Extension** + Apple Developer account — the core capture flow.
 5. **RevenueCat / Apple IAP** — the webhook is written and tested but deliberately not registered yet.
 
-Full checklist in **[TODO.md](TODO.md)** — it's the release gate, and every decision above is recorded there with its reasoning. Architecture lives in **[docs/CONTEXT.md](docs/CONTEXT.md)**.
+Open work in **[TODO.md](TODO.md)** — it's the release gate. The reasoning behind every decision above, plus the bugs that cost real time, is in **[docs/SHIPPED.md](docs/SHIPPED.md)**. Architecture lives in **[docs/CONTEXT.md](docs/CONTEXT.md)**.
 
 ---
 
