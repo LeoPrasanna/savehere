@@ -414,9 +414,13 @@ def _youtube_oembed(url: str) -> dict:
 # your services" — so the `facebookexternalhit` spoof in _PREVIEW_HEADERS is a
 # named violation of the one clause that is unambiguous. The endpoints below
 # serve the caption to ANY non-empty UA (verified: curl, python-requests and
-# SaveHere/1.0 all return 200), so there was never anything to gain by lying.
+# Findable/1.0 all return 200), so there was never anything to gain by lying.
 # Bonus: a non-browser UA gets a 128 KB response instead of 605 KB.
-_HONEST_UA = {"User-Agent": "SaveHere/1.0 (+https://savehere.app)"}
+# ⚠️ The URL must be one we actually control. It previously pointed at
+# savehere.app, a domain nobody here owns — an honest-UA block that cites a
+# domain you do not own is exactly the thing it exists to avoid. Point it at
+# the real product site once that domain exists.
+_HONEST_UA = {"User-Agent": "Findable/1.0 (+https://github.com/LeoPrasanna/savehere)"}
 
 _IG_SHORTCODE = re.compile(r"instagram\.com/(?:reel|reels|p|tv)/([A-Za-z0-9_-]+)", re.I)
 # ⚠️ THE THUMBNAIL COMES FROM THE <img> TAG, NOT FROM THE EMBEDDED JSON.

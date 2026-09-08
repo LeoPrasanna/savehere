@@ -10,7 +10,7 @@ import { api, apiBaseUrl } from './api';
  * routes were both rejected:
  *
  *   Read the stored access token.  It lives ~1 h and only auto-refreshes while
- *       the app is open, so someone who opened SaveHere at breakfast and shares
+ *       the app is open, so someone who opened Findable at breakfast and shares
  *       a reel at lunch has a four-hour-old token. That is the MAJORITY case.
  *   Refresh it from Kotlin.  Supabase rotates refresh tokens, so a native
  *       refresh revokes the one the app is still holding and the next launch

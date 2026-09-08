@@ -2,7 +2,7 @@ import { Platform, Appearance } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
- * SaveHere design system — "Contact Sheet".
+ * Findable design system — "Contact Sheet".
  *
  * ── Reference lock (Refero, 2026-08-01) ──────────────────────────────────────
  * Primary:  Julia Krantz (juliakrantz.com) — "darkroom contact sheet": a grid of
@@ -20,7 +20,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  *
  * ── Why this replaced a colour-first system ──────────────────────────────────
  * The outgoing direction rotated four saturated brand colours across card
- * surfaces. SaveHere's cards are THUMBNAILS — every one arrives with its own
+ * surfaces. Findable's cards are THUMBNAILS — every one arrives with its own
  * palette, and brand colour on the surface around them fought all of it. Here
  * the chrome is achromatic on purpose so the user's saved content is the only
  * colour on screen. That is the whole thesis; do not add an accent "just for

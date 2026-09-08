@@ -418,7 +418,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
             <Rule />
 
             <View style={styles.footer}>
-              <Label>SaveHere</Label>
+              <Label>Findable</Label>
               <Label>{`v${APP_VERSION}`}</Label>
             </View>
           </ScrollView>

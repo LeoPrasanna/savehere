@@ -10,7 +10,7 @@ export default function HelpScreen() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <Title>Not just a bookmark.</Title>
         <Body style={styles.sub}>
-          Everything SaveHere can do with what you save.
+          Everything Findable can do with what you save.
         </Body>
 
         <View style={styles.list}>

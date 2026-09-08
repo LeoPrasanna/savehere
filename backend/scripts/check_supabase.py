@@ -27,7 +27,7 @@ def main() -> int:
     pub = settings.SUPABASE_PUBLISHABLE_KEY  # sb_publishable_...
     jwks_url = settings.SUPABASE_JWKS_URL
 
-    print("SaveHere - Supabase connectivity check")
+    print("Findable - Supabase connectivity check")
     print("-" * 40)
 
     missing = []

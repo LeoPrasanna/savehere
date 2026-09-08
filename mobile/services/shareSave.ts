@@ -6,7 +6,7 @@ import { recordNote } from './notifyStore';
 import { refreshUsage } from './usageCache';
 
 /**
- * Save a shared link WITHOUT the user having to look at SaveHere.
+ * Save a shared link WITHOUT the user having to look at Findable.
  *
  * ⚠️ THE POINT OF THIS FILE. A share is an interruption of something else —
  * you are mid-scroll in Instagram, you want the reel kept, you want to carry on
@@ -16,7 +16,7 @@ import { refreshUsage } from './usageCache';
  * summary was always asynchronous anyway.
  *
  * ⚠️ PHASE A. Android still LAUNCHES the app to deliver ACTION_SEND, so there
- * is a brief flash of SaveHere before it hands control back. Removing that
+ * is a brief flash of Findable before it hands control back. Removing that
  * needs a translucent no-display Activity (a custom config plugin + Kotlin),
  * which is Phase B. iOS needs a Share Extension plus an App Group to share the
  * session — blocked on the Apple Developer account. This module is written so
@@ -29,7 +29,7 @@ import { refreshUsage } from './usageCache';
  *
  * Instagram's page is ~670 KB and this runs on mobile data, so a couple of
  * seconds is normal. Capped because the alternative — waiting indefinitely —
- * keeps the user in SaveHere, which is the exact thing this feature exists to
+ * keeps the user in Findable, which is the exact thing this feature exists to
  * avoid. The save is already committed by this point; only the caption is at
  * stake, and the server re-summarises on demand.
  */
@@ -69,7 +69,7 @@ async function canNotify(): Promise<boolean> {
 /**
  * ⚠️ WITHOUT THIS, A NOTIFICATION POSTED WHILE THE APP IS FOREGROUNDED IS
  * SILENTLY SWALLOWED — which is exactly our case: we post it and then exit, so
- * at the moment it fires SaveHere is still the app on screen. expo-notifications
+ * at the moment it fires Findable is still the app on screen. expo-notifications
  * defaults to "don't interrupt the user in the app they're already looking at",
  * a sensible default that is wrong for a notification whose entire job is to be
  * the receipt for work the user is about to walk away from.
@@ -182,7 +182,7 @@ export async function saveSharedLink(url: string): Promise<boolean> {
     // nothing later.
     await notify(
       `Couldn't save that ${where} link`,
-      e?.message || 'Open SaveHere and paste it to try again.',
+      e?.message || 'Open Findable and paste it to try again.',
     );
     return false;
   }

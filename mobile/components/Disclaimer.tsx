@@ -45,21 +45,21 @@ const VARIANTS: Record<DisclaimerVariant, { heading: string; text: string; stron
   },
   ownership: {
     heading: 'Personal reference only',
-    text: 'SaveHere stores links and AI summaries for personal reference only. Saved content belongs to its original creators.',
+    text: 'Findable stores links and AI summaries for personal reference only. Saved content belongs to its original creators.',
   },
   medical: {
     heading: 'Not medical advice',
-    text: "This content appears to contain medical or other sensitive advice. SaveHere keeps it for your reference only and is not responsible for how it's used — always consult a qualified professional before acting on it. Action plans are disabled for this save.",
+    text: "This content appears to contain medical or other sensitive advice. Findable keeps it for your reference only and is not responsible for how it's used — always consult a qualified professional before acting on it. Action plans are disabled for this save.",
     strong: true,
   },
   health: {
     heading: 'Not medical advice',
-    text: "Health content — general information only, and not tailored to you. SaveHere isn't responsible for how it's used; talk to a doctor or qualified professional before acting on it.",
+    text: "Health content — general information only, and not tailored to you. Findable isn't responsible for how it's used; talk to a doctor or qualified professional before acting on it.",
     strong: true,
   },
   finance: {
     heading: 'Not financial advice',
-    text: "Finance content — general information only, not financial, investment, tax or legal advice. SaveHere is not a licensed adviser and isn't responsible for how this is used; markets carry risk and you can lose money. Speak to a qualified adviser before acting on it.",
+    text: "Finance content — general information only, not financial, investment, tax or legal advice. Findable is not a licensed adviser and isn't responsible for how this is used; markets carry risk and you can lose money. Speak to a qualified adviser before acting on it.",
     strong: true,
   },
 };

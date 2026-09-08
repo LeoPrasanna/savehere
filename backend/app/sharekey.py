@@ -10,7 +10,7 @@ Native context, no supabase-js — so it cannot use the Supabase session the way
 every other request does. Two obvious routes were considered and rejected:
 
   Read the stored access token.  A Supabase access token lives ~1 h and only
-      auto-refreshes while the app is open. Someone who opens SaveHere at
+      auto-refreshes while the app is open. Someone who opens Findable at
       breakfast and shares a reel at lunch has a four-hour-old token, so the
       silent save 401s. That is the MAJORITY case, not an edge case.
 

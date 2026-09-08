@@ -192,7 +192,7 @@ export default function HomeScreen() {
    * ⚠️ ROUTER FOCUS IS NOT THE ONLY WAY THIS LIST GOES STALE — and until
    * 2026-08-14 it was the only thing that refreshed it. Two ways in:
    *
-   *  - `appResumed` (owner report): a reel shared from Instagram while SaveHere
+   *  - `appResumed` (owner report): a reel shared from Instagram while Findable
    *    sat in the background is saved by the native share Activity, which never
    *    enters the JS process at all. Returning to a still-mounted screen fires
    *    no focus event, so the grid kept showing its pre-share list until the

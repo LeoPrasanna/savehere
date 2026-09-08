@@ -10,13 +10,13 @@ const {
  * ANDROID PHASE B — the invisible share, as a config plugin.
  *
  * Phase A (`expo-share-intent`) puts an ACTION_SEND filter on MainActivity, so
- * receiving a share launches the whole app: it works, and it flashes SaveHere
+ * receiving a share launches the whole app: it works, and it flashes Findable
  * for 1–2 s in the middle of someone's Instagram scroll. This plugin moves the
  * filter to a translucent, content-less Activity that saves the link and
  * finishes, so the user never leaves Instagram.
  *
  * ⚠️ IT REMOVES THE FILTER FROM MainActivity, and that removal is not optional.
- * Two components advertising the same ACTION_SEND filter puts TWO SaveHere
+ * Two components advertising the same ACTION_SEND filter puts TWO Findable
  * entries in the Android share sheet — a visible bug, and the user has no way
  * to tell which one is the good one. `expo-share-intent` is therefore
  * configured with `disableAndroid: true` in app.json; this plugin also strips
