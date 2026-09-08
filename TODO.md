@@ -342,6 +342,19 @@ These cost real time already. Full context in [`docs/SHIPPED.md`](docs/SHIPPED.m
   tens-to-hundreds of saves; at a few thousand the fix is a **windowed masonry**, not a
   smaller diff.
 
+**Auth**
+- ⏰ **The Apple client secret is a JWT that expires — 6 months maximum.** Unlike
+  Google's static client secret, which never expires, Apple's must be regenerated. When
+  it lapses **Sign in with Apple breaks for every user with no code change and no deploy
+  to blame**, which makes it near-impossible to diagnose from the app side. Prefer giving
+  Supabase the Team ID / Key ID / `.p8` so it can rotate the secret itself, rather than
+  pasting a pre-generated JWT. **Set a calendar reminder at 5 months either way.**
+- The Apple signing key `.p8` can only be **downloaded once**. Store it before leaving
+  the page; a lost key means generating a new one and reconfiguring.
+- The Apple **Services ID** is a separate identifier from the bundle ID
+  (`com.savehere.app`) and is what acts as the OAuth client ID for the web flow. Putting
+  the bundle ID in that field is the common misconfiguration.
+
 **Shell**
 - Backticks inside `git commit -m "..."` get shell-evaluated and silently eat text — use
   `git commit -F <file>`. Git Bash also mangles `git show <ref>:<path>`; prefix
