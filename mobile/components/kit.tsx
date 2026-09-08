@@ -69,7 +69,7 @@ export function Title({ children, style, numberOfLines }: {
 export function Wordmark({ size = font.display, style }: { size?: number; style?: StyleProp<TextStyle> }) {
   return (
     <Text style={[styles.wordmark, { fontSize: size, letterSpacing: size * -0.025 }, style]}>
-      SaveHere
+      Findable
     </Text>
   );
 }

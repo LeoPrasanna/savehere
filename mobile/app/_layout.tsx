@@ -104,7 +104,7 @@ function AppProfilePanel() {
  * ⚠️ Why this needed a native module at all. Android delivers a share as an
  * `ACTION_SEND` Intent carrying `EXTRA_TEXT`; that is NOT a deep link, so
  * `Linking.getInitialURL()` and expo-router never see it. Declaring
- * `intentFilters` in app.json alone would have put SaveHere in the share sheet
+ * `intentFilters` in app.json alone would have put Findable in the share sheet
  * and then opened it with nothing attached — visible, and broken. Reading the
  * extra requires native code, which is what `expo-share-intent` supplies.
  *
@@ -125,7 +125,7 @@ function ShareIntentHandler() {
    * ⚠️ EVERY URL IS HANDLED AT MOST ONCE PER PROCESS.
    *
    * Owner report, 2026-08-12: sharing returned you to Instagram, but opening
-   * SaveHere afterwards re-ran the share — landing you back on the platform or
+   * Findable afterwards re-ran the share — landing you back on the platform or
    * on Home instead of the app you asked for.
    *
    * `resetShareIntent()` alone is not enough here, and the reason is specific
@@ -240,7 +240,7 @@ function Gate() {
    * ⚠️ THE APP'S ONLY LIFECYCLE LISTENER. There was none at all before
    * 2026-08-14, and its absence is the single root cause of two owner reports:
    *
-   *  - a reel shared into SaveHere while it sat in the background never showed
+   *  - a reel shared into Findable while it sat in the background never showed
    *    up in the library until a manual pull-to-refresh. The native share
    *    Activity saves without ever entering the JS process, and coming back to
    *    a still-running app is NOT a router focus event — so `useFocusEffect`,

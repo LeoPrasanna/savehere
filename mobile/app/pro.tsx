@@ -81,7 +81,7 @@ export default function ProScreen() {
           contentContainerStyle={[styles.body, { paddingBottom: spacing.lg }]}
           showsVerticalScrollIndicator={false}
         >
-          <Label wide style={styles.eyebrow}>SaveHere Pro</Label>
+          <Label wide style={styles.eyebrow}>Findable Pro</Label>
           <Title style={styles.hero}>Everything you save,{'\n'}actually working for you.</Title>
           <Body style={styles.lede}>
             The free tier keeps your links safe. Pro is what turns them into something you use.
@@ -173,7 +173,7 @@ export default function ProScreen() {
           <Label wide style={styles.pickHead}>Order</Label>
           <Rule />
           <View style={styles.orderRow}>
-            <Body tone="primary">SaveHere Pro · {plan.period}</Body>
+            <Body tone="primary">Findable Pro · {plan.period}</Body>
             <Text style={styles.orderAmt}>{money(pricing, plan.price)}</Text>
           </View>
           <Rule />

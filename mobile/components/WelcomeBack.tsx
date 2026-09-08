@@ -14,7 +14,7 @@ const KEY = '@savehere:welcomeback:v1';
  * Shown ONCE to someone who deleted their account and came back.
  *
  * ⚠️ IT IS NOT THE ONBOARDING TOUR, and that distinction is the whole point
- * (owner, 2026-08-15). A returning user knows what SaveHere is — walking them
+ * (owner, 2026-08-15). A returning user knows what Findable is — walking them
  * through "save a link, get a summary" again is patronising and it is the thing
  * that makes a re-signup feel like starting from zero. So this is one screen,
  * not four: it acknowledges that they were here before, says plainly what did
@@ -71,7 +71,7 @@ export function WelcomeBack() {
           <Label wide>Welcome back</Label>
           <Title style={styles.title}>Good to see you again.</Title>
           <Body style={styles.sub}>
-            You've used SaveHere before, so we'll skip the tour. Three things worth knowing before
+            You've used Findable before, so we'll skip the tour. Three things worth knowing before
             you start again.
           </Body>
 
@@ -91,7 +91,7 @@ export function WelcomeBack() {
               {
                 head: 'Sharing is the fast way in',
                 detail:
-                  'Share a reel to SaveHere straight from Instagram, YouTube or Facebook and it saves in the background — you never have to open the app to keep something.',
+                  'Share a reel to Findable straight from Instagram, YouTube or Facebook and it saves in the background — you never have to open the app to keep something.',
               },
             ].map((row, i) => (
               <View key={row.head}>

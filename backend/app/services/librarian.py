@@ -54,7 +54,7 @@ def _rank_relevant(question: str, reels: list[dict], top_n: int) -> list[dict]:
     top = [r for score, _, r in scored if score > 0][:top_n]
     return top or reels[:top_n]                  # no overlap → recent fallback
 
-ASK_PROMPT = """You are the user's personal librarian for SaveHere, an app where they save short videos and posts that get AI summaries. Answer the user's question using ONLY the saved items listed below.
+ASK_PROMPT = """You are the user's personal librarian for Findable, an app where they save short videos and posts that get AI summaries. Answer the user's question using ONLY the saved items listed below.
 
 Question: {question}
 
@@ -74,7 +74,7 @@ RULES:
 # rendered token-by-token (you need the whole object to parse). Sources are
 # computed from the finished answer instead (see sources_from_answer), so the
 # model just writes naturally and every token can hit the screen immediately.
-STREAM_PROMPT = """You are the user's personal librarian for SaveHere, an app where they save short videos and posts that get AI summaries. Answer the user's question using ONLY the saved items listed below.
+STREAM_PROMPT = """You are the user's personal librarian for Findable, an app where they save short videos and posts that get AI summaries. Answer the user's question using ONLY the saved items listed below.
 
 Question: {question}
 

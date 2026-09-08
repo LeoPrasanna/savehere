@@ -463,7 +463,7 @@ export function LoginScreen() {
 
           <Text style={styles.legal}>
             By continuing you agree to our <Text style={styles.legalStrong}>Terms</Text> and{' '}
-            <Text style={styles.legalStrong}>Privacy Policy</Text>. SaveHere stores links and
+            <Text style={styles.legalStrong}>Privacy Policy</Text>. Findable stores links and
             AI-generated summaries for personal reference; saved content belongs to its original
             creators, and AI summaries may be imperfect.
           </Text>

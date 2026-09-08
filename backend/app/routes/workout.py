@@ -33,7 +33,7 @@ ITINERARY_LIMIT = 3
 # One message everywhere a sensitive reel is refused an action plan. Enforced
 # server-side (the client hides the buttons, but that's cosmetic).
 SENSITIVE_DETAIL = (
-    "This save looks like medical or other sensitive advice, so SaveHere won't "
+    "This save looks like medical or other sensitive advice, so Findable won't "
     "turn it into an action plan. The summary is for reference only — please "
     "consult a qualified professional."
 )

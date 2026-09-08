@@ -2,7 +2,7 @@ import { categoryMeta, colors, themed } from './theme';
 
 export type Feature = { icon: string; color: string; title: string; desc: string; detail: string };
 
-// Everything SaveHere can do — shown on the landing FAQ and the "What you can do"
+// Everything Findable can do — shown on the landing FAQ and the "What you can do"
 // tab. themed(): every `color` resolves through the token layer, which inverts
 // between schemes.
 //
@@ -16,7 +16,7 @@ export const FEATURES: Feature[] = themed(() => [
     color: categoryMeta.fitness.color,
     title: 'Save a workout reel',
     desc: 'Recreate it as a guided plan.',
-    detail: 'Save any gym or fitness reel, then tap "Build Workout". SaveHere turns it into a structured plan — exercises with sets, reps and rest timers. Tweak the numbers, then hit Start for a hands-free, step-by-step session with countdowns.',
+    detail: 'Save any gym or fitness reel, then tap "Build Workout". Findable turns it into a structured plan — exercises with sets, reps and rest timers. Tweak the numbers, then hit Start for a hands-free, step-by-step session with countdowns.',
   },
   {
     icon: 'cooking',
@@ -44,7 +44,7 @@ export const FEATURES: Feature[] = themed(() => [
     color: colors.accent,
     title: 'Ask your library',
     desc: 'Get answers from your own saves.',
-    detail: 'Ask a question like "what was that high-protein recipe?" and SaveHere answers using ONLY your saved items — then shows you which ones it used. Your personal, searchable second brain.',
+    detail: 'Ask a question like "what was that high-protein recipe?" and Findable answers using ONLY your saved items — then shows you which ones it used. Your personal, searchable second brain.',
   },
   {
     icon: 'rediscover',

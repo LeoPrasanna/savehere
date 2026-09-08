@@ -33,7 +33,7 @@ if settings.SENTRY_DSN:
     )
     logging.getLogger(__name__).info("[SENTRY] error monitoring enabled")
 
-app = FastAPI(title="SaveHere API", version="1.0.0")
+app = FastAPI(title="Findable API", version="1.0.0")
 
 # Dev: allow any origin (any localhost port / Codespace tunnel). Production: read
 # the allowlist from ALLOWED_ORIGINS (comma-separated). Defaults to "*" so a fresh
@@ -72,7 +72,7 @@ def startup():
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "SaveHere API"}
+    return {"status": "ok", "service": "Findable API"}
 
 
 # A known-stable, short, public YouTube Short used for the live extraction probe.

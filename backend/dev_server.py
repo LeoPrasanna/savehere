@@ -1,4 +1,4 @@
-"""Interactive dev server — the REAL SaveHere app, no Supabase login required.
+"""Interactive dev server — the REAL Findable app, no Supabase login required.
 
 For local/Codespace UI testing only. It:
   • overrides auth to a single fixed dev user (so there's no login wall — we have
@@ -104,7 +104,7 @@ _SESSION = {
 def dev_login():
     payload = json.dumps(_SESSION)
     return f"""<!doctype html><meta charset=utf-8>
-<title>SaveHere dev login</title>
+<title>Findable dev login</title>
 <body style="font-family:system-ui;background:#0B0A0F;color:#F5F0E8;display:grid;place-items:center;height:100vh;margin:0">
 <div style="text-align:center">
 <div style="font-size:20px;font-weight:700">Signing you in as the dev user…</div>
@@ -142,5 +142,5 @@ def spa(full_path: str):
 
 if __name__ == "__main__":
     mode = "BYPASS (no login — visit /dev-login)" if BYPASS else "REAL Supabase auth (log in via the app)"
-    print(f"\n  SaveHere dev server\n  mode: {mode}\n  web bundle: mobile/{WEB_DIR}\n  → open the forwarded :8000 URL\n")
+    print(f"\n  Findable dev server\n  mode: {mode}\n  web bundle: mobile/{WEB_DIR}\n  → open the forwarded :8000 URL\n")
     uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

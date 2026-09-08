@@ -128,7 +128,7 @@ export default function SupportScreen() {
    */
   const mail = (subject: string) => {
     const body = encodeURIComponent(diagnostics(email ?? null, tier));
-    const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`SaveHere — ${subject}`)}&body=${body}`;
+    const url = `mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent(`Findable — ${subject}`)}&body=${body}`;
     Linking.openURL(url).then(() => setMailFailed(false)).catch(() => setMailFailed(true));
   };
 
@@ -213,7 +213,7 @@ export default function SupportScreen() {
         <Label wide style={styles.section}>Response times</Label>
         <Rule />
         <Body style={styles.note}>
-          SaveHere is built and supported by one person, so replies come in days rather than
+          Findable is built and supported by one person, so replies come in days rather than
           minutes — and they come from a human, not a queue. If something is losing your saves or
           charging you wrongly, put that in the subject line and it goes to the front.
         </Body>

@@ -1,4 +1,4 @@
-"""Regenerate SaveHere brand assets — ember bookmark + sparkle, sharper pass.
+"""Regenerate Findable brand assets — ember bookmark + sparkle, sharper pass.
 
 Everything is drawn at 4× and downsampled (LANCZOS) so edges stay crisp.
 Outputs (all under mobile/assets/):

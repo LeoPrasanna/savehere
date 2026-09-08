@@ -47,7 +47,7 @@ function parseError(e: any): string {
     return 'Request timed out. The server is taking too long — try again.';
   if (detail.includes('minutes long')) return detail;
   if (detail.includes('Could not extract')) return "Could not read this URL. Check it's a public Reel, Short, or TikTok and try again.";
-  if (detail.includes('login') || detail.includes('private')) return 'This content is private or requires login. SaveHere can only save public content.';
+  if (detail.includes('login') || detail.includes('private')) return 'This content is private or requires login. Findable can only save public content.';
   if (detail.includes('fetch') || detail.includes('Network'))
     return "Can't reach the server. Make sure the backend is running on port 8000.";
   return detail || 'Something went wrong. Try again.';
