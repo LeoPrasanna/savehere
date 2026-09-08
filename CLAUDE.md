@@ -5,7 +5,7 @@
 > so a fresh session (where the prior chat history and personal memory are NOT
 > available) can still work the way the owner expects.
 
-**At the start of a session, read [`docs/CONTEXT.md`](docs/CONTEXT.md) and [`TODO.md`](TODO.md)** — they hold the current state, decisions, and the prioritized backlog. For how to set up a remote dev environment, see [`docs/REMOTE_DEV.md`](docs/REMOTE_DEV.md).
+**At the start of a session, read [`docs/CONTEXT.md`](docs/CONTEXT.md) and [`TODO.md`](TODO.md)** — they hold the current state and the open backlog. `TODO.md` carries **only open work**; the shipped record, the reasoning behind past decisions and the traps worth not relearning live in [`docs/SHIPPED.md`](docs/SHIPPED.md) (split out 2026-09-07). For how to set up a remote dev environment, see [`docs/REMOTE_DEV.md`](docs/REMOTE_DEV.md).
 
 ---
 
