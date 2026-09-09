@@ -419,6 +419,17 @@ These cost real time already. Full context in [`docs/SHIPPED.md`](docs/SHIPPED.m
   immediately; drop that and the account is permanently nameless, because Apple's relay
   addresses (`…@privaterelay.appleid.com`) make the email fallback useless too.
 
+**Detail screen**
+- 🧨 **Tags and "Your Notes" were REMOVED from the reel detail screen (owner,
+  2026-09-09) — do not reinstate either.** Tags are still generated and still power
+  search and the category rail; they are simply no longer printed. The `notes` COLUMN,
+  `api.updateNotes` and every saved note are **untouched server-side** — this was a UI
+  removal on purpose, because it is reversible and dropping the column would not be.
+- ⚠️ Removing Notes removed the **input** to re-summarize. Any copy that said "paste the
+  text in Notes and re-summarize" was a dead instruction the moment the field went, and
+  all of it was rewritten in the same commit — `Disclaimer.tsx`'s `ai` variant included.
+  If Notes ever comes back, that copy has to come back with it.
+
 **Naming**
 - 🧨 **The App Store listing name is `Findable Saves`; the app is `Findable`. THE MISMATCH
   IS DELIBERATE — do not "fix" it.** Only the listing name must be globally unique, and

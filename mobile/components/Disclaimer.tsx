@@ -31,9 +31,10 @@ export type DisclaimerVariant =
 const VARIANTS: Record<DisclaimerVariant, { heading: string; text: string; strong?: boolean }> = {
   ai: {
     heading: 'AI-generated',
-    // Don't promise direct editing — summaries aren't editable. The real
-    // correction path is Notes + re-summarize, so point at that instead.
-    text: 'It can be incomplete or wrong. Double-check anything important. To correct it, add details in Notes and re-summarize.',
+    // Don't promise direct editing — summaries aren't editable, and Notes was
+    // removed from the detail screen (owner, 2026-09-09), so re-summarize is
+    // now the ONLY correction path. Don't point at Notes again.
+    text: 'It can be incomplete or wrong. Double-check anything important. Re-summarize to try again.',
   },
   fitness: {
     heading: 'Not fitness advice',

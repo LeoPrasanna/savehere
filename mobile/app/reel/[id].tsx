@@ -34,8 +34,6 @@ export default function ReelDetailScreen() {
   const [reel, setReel] = useState<Reel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [notes, setNotes] = useState('');
-  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [resummarizing, setResummarizing] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [taskList, setTaskList] = useState<TaskListResponse | null>(null);
@@ -101,7 +99,6 @@ export default function ReelDetailScreen() {
   const [savingCategory, setSavingCategory] = useState(false);
   // Transient "Copied ✓" feedback on the hero copy-link chip.
   const [copied, setCopied] = useState(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Load the reel; any failure (offline, server down) is caught and shown as a
   // retryable message instead of bubbling up as an uncaught "Failed to fetch".
@@ -109,7 +106,7 @@ export default function ReelDetailScreen() {
     setLoading(true);
     setError('');
     api.getReel(id)
-      .then(data => { setReel(data); setNotes(data.notes ?? ''); })
+      .then(data => setReel(data))
       .catch(() => setError("Couldn't load this reel. Check your connection or that the server is running, then retry."))
       .finally(() => setLoading(false));
   }, [id]);
@@ -166,21 +163,10 @@ export default function ReelDetailScreen() {
     else Alert.alert('', msg);
   };
 
-  const handleNotesChange = (text: string) => {
-    setNotes(text);
-    setSaveStatus('idle');
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(() => saveNotes(text), 1000);
-  };
-
   const handleResummarize = async () => {
     if (!reel) return;
     setResummarizing(true);
     try {
-      // Flush any just-typed note first — the 1s auto-save debounce may not have
-      // fired yet, so without this the latest notes wouldn't reach the re-summary.
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      if (notes.trim()) { try { await api.updateNotes(id, notes); } catch {} }
       const updated = await api.resummarize(id);
       setReel(updated);
       haptics.success();
@@ -210,30 +196,16 @@ export default function ReelDetailScreen() {
     }
   };
 
-  const saveNotes = async (text: string) => {
-    setSaveStatus('saving');
-    try {
-      await api.updateNotes(id, text);
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus('idle'), 2000);
-    } catch {
-      setSaveStatus('idle');
-    }
-  };
-
   const handleGenerateTasks = async () => {
     setGeneratingTasks(true);
     setTaskError('');
     try {
-      // Make sure any just-typed note is persisted before we generate, so the
-      // cooking fallback can infer from the user's intent.
-      if (notes.trim()) { try { await api.updateNotes(id, notes); } catch {} }
       const result = await api.generateTasks(id);
       setTaskList(result);
       setReel(prev => prev ? { ...prev, tasks_count: (prev.tasks_count ?? 0) + 1 } : prev);
     } catch (e: any) {
       let msg = isCooking
-        ? "Couldn't read a recipe from this content. Try adding the dish name in Notes and tapping again."
+        ? "Couldn't read a recipe from this content."
         : "Couldn't extract steps from this content.";
       if (e?.message) msg = e.message;   // api.ts already extracted the server detail
       setTaskError(msg);
@@ -246,10 +218,6 @@ export default function ReelDetailScreen() {
     setGeneratingItin(true);
     setItinError('');
     try {
-      // Flush any just-typed note first (same reason as re-summarize): the note
-      // can steer the itinerary (e.g. "we only have 3 days").
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-      if (notes.trim()) { try { await api.updateNotes(id, notes); } catch {} }
       const res = await api.generateItinerary(id);
       setItin(res);
       haptics.success();
@@ -576,7 +544,7 @@ export default function ReelDetailScreen() {
             <Text style={styles.emptyHint}>
               {aiBackNow
                 ? "This one was saved while today's AI actions were used up, so it never got a summary. You have actions again — run it now."
-                : "You've used today's AI actions, so this one was saved without a summary. Nothing was lost: the link, title and thumbnail are here, and you can add notes now."}
+                : "You've used today's AI actions, so this one was saved without a summary. Nothing was lost: the link, title and thumbnail are here, and you can re-summarize tomorrow."}
             </Text>
             {aiBackNow ? (
               <Pressable style={[styles.pill, { marginTop: spacing.sm }]} onPress={handleSummarizeNow} disabled={summarizing}>
@@ -615,53 +583,20 @@ export default function ReelDetailScreen() {
             </Text>
             <Text style={styles.emptyHint}>
               {loginWalled
-                ? 'Paste the post text into Notes below, then tap Re-summarize to generate a summary.'
-                : 'This reel uses on-screen text or visuals with no speech or description — we can\'t extract that yet. Paste the text in Notes and tap Re-summarize.'}
+                ? 'This post is behind a login, so its text could not be read.'
+                : 'This reel uses on-screen text or visuals with no speech or description — we can\'t extract that yet. '}
             </Text>
             <Text style={styles.quotaNote}>Each re-summarize uses 1 AI action from your daily quota — your tier sets the cap.</Text>
           </View>
         )}
       </View>
 
-      {/* ── Tags ─────────────────────────────────────── */}
-      {reel.tags.length > 0 && (
-        <View style={styles.card}>
-          <View style={styles.cardTitleRow}>
-            <Icon name="pricetags" size={15} color={colors.accent} />
-            <Text style={styles.cardTitle}>Tags</Text>
-          </View>
-          <View style={styles.tags}>
-            {reel.tags.map(tag => (
-              <View key={tag} style={styles.tag}><Text style={styles.tagText}>#{tag}</Text></View>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* ── Notes ────────────────────────────────────── */}
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-          <View style={styles.cardTitleRow}>
-            <Icon name="create" size={15} color={colors.accent} />
-            <Text style={styles.cardTitle}>Your Notes</Text>
-          </View>
-          {saveStatus === 'saving' && <Text style={styles.saveStatus}>Saving…</Text>}
-          {saveStatus === 'saved' && <Text style={[styles.saveStatus, { color: colors.success }]}>Saved ✓</Text>}
-        </View>
-        <TextInput
-          style={styles.notesInput}
-          placeholder={
-            loginWalled && reel.summary.length === 0
-              ? `Paste the ${platform.label} post text here, then tap Re-summarize above…`
-              : 'Add your notes, key takeaways, or reminders…'
-          }
-          placeholderTextColor={colors.textSecondary}
-          value={notes}
-          onChangeText={handleNotesChange}
-          multiline
-          textAlignVertical="top"
-        />
-      </View>
+      {/* ⚠️ TAGS AND "YOUR NOTES" WERE REMOVED HERE (owner, 2026-09-09) — do
+          not reinstate either without being asked. Tags are still generated and
+          still power search and the category rail; they are simply no longer
+          printed on this screen. The `notes` COLUMN and every saved note are
+          untouched server-side: this is a UI removal, deliberately reversible,
+          because dropping the column would not be. */}
 
       {/* ── Add to Follow Through ────────────────────────
           Above the AI sections on purpose: it's free, instant, and works on
@@ -1175,9 +1110,6 @@ const styles = themed(() => StyleSheet.create({
   bulletDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.accent, marginTop: 7 },
   bulletText: { flex: 1, color: colors.textPrimary, fontSize: font.md, lineHeight: 23 },
 
-  tags: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  tag: { backgroundColor: colors.tagBg, borderRadius: radius.full, paddingHorizontal: spacing.sm + 2, paddingVertical: 6 },
-  tagText: { color: colors.tagText, fontSize: font.xs, fontWeight: '600' },
 
   disclaimer: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 6,
@@ -1185,14 +1117,6 @@ const styles = themed(() => StyleSheet.create({
     borderRadius: radius.sm, padding: spacing.sm,
   },
   disclaimerText: { flex: 1, color: colors.warning, fontSize: font.xs, lineHeight: 16 },
-
-  saveStatus: { color: colors.textSecondary, fontSize: font.xs },
-  notesInput: {
-    backgroundColor: colors.surface, borderRadius: radius.md,
-    borderWidth: 1, borderColor: colors.border,
-    color: colors.textPrimary, fontSize: font.md,
-    padding: spacing.md, minHeight: 96, lineHeight: 22,
-  },
 
   actionsSection: { gap: spacing.sm },
   actionRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
