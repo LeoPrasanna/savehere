@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, StyleSheet, KeyboardAvoidingView, Platform,
   ScrollView, ActivityIndicator, TextInputProps, Animated,
-  Easing, AccessibilityInfo, Alert,
+  Easing, AccessibilityInfo,
 } from 'react-native';
 import type { ReactNode } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,7 +11,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Icon } from './Icon';
 import { Pressable } from './Pressable';
 import { supabase } from '../services/supabase';
-import { signInWithProvider, OAuthProvider } from '../services/oauth';
+import * as AppleAuthentication from 'expo-apple-authentication';
+import { signInWithProvider, signInWithApple, OAuthProvider } from '../services/oauth';
 import { useAuth } from '../contexts/AuthContext';
 import * as haptics from '../services/haptics';
 
@@ -20,26 +21,20 @@ import { MockReel, MOCK_REEL_H } from './MockReel';
 import { colors, spacing, font, radius, tracking, typeface, themed, gradients, hazeLocations, isDark } from '../constants/theme';
 
 /**
- * APPLE IS STILL A MOCK; GOOGLE IS REAL (owner, 2026-08-12).
+ * APPLE AND GOOGLE ARE BOTH REAL (Apple wired 2026-09-09).
  *
- * Apple sign-in cannot work at all until the $99 Apple Developer account exists
- * (open blocker in TODO.md) — it needs a Services ID and a signing key, neither
- * of which can be created without it. A button that opens a browser to a 400 is
- * worse than one that explains itself, so this stays.
+ * Apple uses the NATIVE sheet (`expo-apple-authentication` + Supabase's
+ * `signInWithIdToken`), not the browser flow Google uses — see the long note
+ * in services/oauth.ts for why that choice avoids a key that expires every six
+ * months. The consequence here is that the Apple button is **iOS-only**: the
+ * native API does not exist on Android or web, so the button is not rendered
+ * there at all rather than shown and then failing.
  *
- * ⚠️ APPLE GUIDELINE 4.8 IS NOT VIOLATED BY SHIPPING GOOGLE FIRST — but it will
- * be the moment this app is submitted to the App Store. The rule is that an app
- * offering a third-party social login must ALSO offer Sign in with Apple; it
- * binds at iOS review, not on Android. Google-only is fine for the Android
- * builds being tested now, and Apple must be wired before the first iOS
- * submission. Do not remove this note until it is.
+ * ⚠️ GUIDELINE 4.8 IS NOW SATISFIED FOR iOS — an app offering a third-party
+ * social login must also offer Sign in with Apple. Do not make the Apple button
+ * conditional on anything other than platform availability, and do not ship an
+ * iOS build with Google present and Apple absent.
  */
-function notYet(provider: string) {
-  haptics.warning();
-  const msg = `${provider} sign-in isn't wired up yet — use Google or email for now.`;
-  if (Platform.OS === 'web') window.alert(msg);
-  else Alert.alert('Not available yet', msg);
-}
 
 type Mode = 'signin' | 'signup';
 type Step = 'welcome' | 'form';
@@ -310,12 +305,27 @@ export function LoginScreen() {
    * not a failure, and reporting it as one is the most common way this flow is
    * made to feel broken.
    */
+  /**
+   * Apple's native sheet exists only on iOS 13+. `isAvailableAsync` is the
+   * supported check — a Platform.OS test alone would still render the button
+   * on an iOS simulator/OS where the API is missing.
+   */
+  const [appleReady, setAppleReady] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    AppleAuthentication.isAvailableAsync()
+      .then((ok) => { if (alive) setAppleReady(ok); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   const social_signin = async (provider: OAuthProvider) => {
     if (social) return;
     haptics.tap();
     setSocial(provider);
     setError(''); setNotice('');
-    const { error: err, cancelled } = await signInWithProvider(provider);
+    const { error: err, cancelled } =
+      provider === 'apple' ? await signInWithApple() : await signInWithProvider(provider);
     setSocial(null);
     if (cancelled) return;
     if (err) { fail(err); return; }
@@ -411,21 +421,21 @@ export function LoginScreen() {
             <Label wide style={styles.welcomeSub}>Everything you saved · actually findable</Label>
           </View>
 
-          {/*
-            Three entry points. GOOGLE AND EMAIL ARE REAL; Apple is still a mock
-            and says so when tapped rather than failing silently — it cannot work
-            until the Apple Developer account exists (see notYet above).
-          */}
+          {/* Three entry points. Apple is iOS-only (see the note above). */}
           <View style={styles.authRow}>
-            <Pressable
-              style={[styles.authBtn, !!social && styles.authBtnOff]}
-              onPress={() => notYet('Apple')}
-              disabled={!!social}
-              accessibilityRole="button"
-              accessibilityLabel="Continue with Apple — not available yet"
-            >
-              <Ionicons name="logo-apple" size={24} color={colors.textPrimary} />
-            </Pressable>
+            {appleReady ? (
+              <Pressable
+                style={[styles.authBtn, !!social && social !== 'apple' && styles.authBtnOff]}
+                onPress={() => social_signin('apple')}
+                disabled={!!social}
+                accessibilityRole="button"
+                accessibilityLabel="Continue with Apple"
+              >
+                {social === 'apple'
+                  ? <ActivityIndicator color={colors.textPrimary} />
+                  : <Ionicons name="logo-apple" size={24} color={colors.textPrimary} />}
+              </Pressable>
+            ) : null}
             <Pressable
               style={[styles.authBtn, !!social && social !== 'google' && styles.authBtnOff]}
               onPress={() => social_signin('google')}
@@ -448,7 +458,9 @@ export function LoginScreen() {
             </Pressable>
           </View>
           <Label tone="ink" wide style={styles.authHint}>
-            {social === 'google' ? 'Opening Google…' : 'Google or email'}
+            {social === 'google' ? 'Opening Google…'
+              : social === 'apple' ? 'Opening Apple…'
+              : appleReady ? 'Apple, Google or email' : 'Google or email'}
           </Label>
 
           {/* Errors have to be visible on THIS step too. They used to render
