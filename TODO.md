@@ -399,6 +399,16 @@ These cost real time already. Full context in [`docs/SHIPPED.md`](docs/SHIPPED.m
   immediately; drop that and the account is permanently nameless, because Apple's relay
   addresses (`…@privaterelay.appleid.com`) make the email fallback useless too.
 
+**iOS build**
+- 🧨 **`USE_CCACHE=0` is load-bearing in `eas.json` — do not remove it to speed builds up.**
+  React Native writes `CC`/`LD` = `$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang.sh` onto
+  the **project** build configuration, so it applies to every target — but
+  `REACT_NATIVE_PATH` comes from the Pods xcconfig, which `expo-share-intent`'s
+  **ShareExtension** target never gets. It expands to empty and fastlane dies with
+  `unable to spawn process '/../../node_modules/…/ccache-clang.sh'`. Cost of the fix is a
+  cold compile every build; the cost of removing it is no iOS build at all. First hit
+  2026-09-09 on the first TestFlight attempt.
+
 **Shell**
 - Backticks inside `git commit -m "..."` get shell-evaluated and silently eat text — use
   `git commit -F <file>`. Git Bash also mangles `git show <ref>:<path>`; prefix

@@ -11,7 +11,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.savehere.app",
       "buildNumber": "1.0.0",
-      "icon": "./assets/icon.png"
+      "icon": "./assets/icon.png",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -61,7 +64,24 @@
         "origin": false
       },
       "eas": {
-        "projectId": "e81a906f-8918-45c6-b743-bd50185b263b"
+        "projectId": "e81a906f-8918-45c6-b743-bd50185b263b",
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "ShareExtension",
+                  "bundleIdentifier": "com.savehere.app.share-extension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.savehere.app"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        }
       }
     },
     "owner": "leo-app-dev-team",

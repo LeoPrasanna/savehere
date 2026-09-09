@@ -11,6 +11,15 @@
       "channel": "development"
     },
     "preview": {
+      // USE_CCACHE=0 is REQUIRED for iOS, not a preference. React Native sets
+      // CC/LD to "$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang.sh" on the
+      // PROJECT build configuration (node_modules/react-native/scripts/cocoapods/
+      // utils.rb), so it lands on every target — but REACT_NATIVE_PATH is only
+      // defined by the Pods xcconfig, which expo-share-intent's ShareExtension
+      // target does not get. It expands to empty and the build dies with
+      // "unable to spawn process '/../../node_modules/.../ccache-clang.sh'".
+      // Costs a cold compile per build; the alternative is no iOS build at all.
+      "env": { "USE_CCACHE": "0" },
       "distribution": "internal",
       "ios": {
         "enterpriseProvisioning": "adhoc"
@@ -23,6 +32,15 @@
       "channel": "preview"
     },
     "testflight": {
+      // USE_CCACHE=0 is REQUIRED for iOS, not a preference. React Native sets
+      // CC/LD to "$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang.sh" on the
+      // PROJECT build configuration (node_modules/react-native/scripts/cocoapods/
+      // utils.rb), so it lands on every target — but REACT_NATIVE_PATH is only
+      // defined by the Pods xcconfig, which expo-share-intent's ShareExtension
+      // target does not get. It expands to empty and the build dies with
+      // "unable to spawn process '/../../node_modules/.../ccache-clang.sh'".
+      // Costs a cold compile per build; the alternative is no iOS build at all.
+      "env": { "USE_CCACHE": "0" },
       // TestFlight needs STORE distribution — `preview` is ad-hoc (registered
       // devices only) and its IPA cannot be uploaded. Points at the STAGING env
       // on purpose: the `production` env var EXPO_PUBLIC_API_URL is
@@ -38,6 +56,15 @@
       "channel": "preview"
     },
     "production": {
+      // USE_CCACHE=0 is REQUIRED for iOS, not a preference. React Native sets
+      // CC/LD to "$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang.sh" on the
+      // PROJECT build configuration (node_modules/react-native/scripts/cocoapods/
+      // utils.rb), so it lands on every target — but REACT_NATIVE_PATH is only
+      // defined by the Pods xcconfig, which expo-share-intent's ShareExtension
+      // target does not get. It expands to empty and the build dies with
+      // "unable to spawn process '/../../node_modules/.../ccache-clang.sh'".
+      // Costs a cold compile per build; the alternative is no iOS build at all.
+      "env": { "USE_CCACHE": "0" },
       "autoIncrement": true,
       "ios": {
         "buildConfiguration": "Release"
