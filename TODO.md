@@ -6,7 +6,7 @@ condensed on 2026-09-07, it was moved.
 
 **Current state:** backend live at `https://savehere-api-staging.onrender.com`
 (Render free tier, CI-gated auto-deploy from `develop`, `savehere-dev` Supabase +
-Postgres). **331 backend tests pass.** Prod is deliberately not deployed — its
+Postgres). **334 backend tests pass.** Prod is deliberately not deployed — its
 service is commented out in `render.yaml`.
 
 | Legend | |
@@ -15,6 +15,36 @@ service is commented out in `render.yaml`.
 | `[~]` | partially done — the remaining half is stated |
 | 🔴 | blocks launch |
 | 👤 | needs the owner, not code |
+
+---
+
+## ▶ STAGING OUTAGE 2026-09-07 → 09-09 — two days down, nothing said why
+
+`savehere-dev` hit Supabase's **free-tier 7-day idle pause**. `create_tables()`
+runs `alembic upgrade head` in the startup hook, so it raised `OperationalError`,
+uvicorn exited status 3, and Render crash-looped — keeping the last-good build
+live while every new deploy died. From outside it looked like nothing: TLS
+connected, no HTTP response, **no error anywhere**. Diagnosis needed a Render
+deploy log plus a local repro of the migration.
+
+**Restored 2026-09-09, data intact** (PostgreSQL 17.6, 10 tables, 174 reels).
+
+Fixed in the same pass:
+- **Startup now fails loudly.** `create_tables()` logs `[STARTUP] DATABASE
+  UNREACHABLE at <host>`, names a paused/deleted project when the error looks
+  like one, and lists the three things to check. It still re-raises — a backend
+  that cannot reach its database must not come up and answer requests.
+- **Dependencies pinned.** Eight were `>=`, so Render installed whatever was
+  newest: **anthropic 1.4.0** against a local **0.111.0** (a major bump) and
+  **openai 3.8.0** against **2.43.0**. Tests never caught it because they mock
+  the AI clients — the untested majors only ever ran in production. `yt-dlp`
+  stays floating on purpose; stale yt-dlp silently rots extraction.
+
+### ⚠️ Standing risk — this recurs
+The free tier pauses again after **7 idle days**. Either accept it and unpause
+when staging is needed, or move to Supabase Pro. Prod needs Pro regardless (see
+the blocker below) — free has no backups, and this time the data survived only
+because a pause is reversible. A deletion would not have been.
 
 ---
 
