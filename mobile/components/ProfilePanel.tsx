@@ -54,7 +54,7 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const panelWidth = Math.min(340, width * 0.9);
-  const { email, displayName, profile, signOut, deleteAccount } = useAuth();
+  const { displayName, profile, signOut, deleteAccount } = useAuth();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // Seeded from the login-time fetch (services/usageCache), so the stats row
@@ -212,7 +212,14 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
               </View>
               <View style={styles.accountText}>
                 <Text style={styles.name} numberOfLines={1}>{displayName}</Text>
-                <Label numberOfLines={1}>{email ?? 'Synced to your account'}</Label>
+                {/* ⚠️ THE EMAIL WAS HERE AND IS NOT COMING BACK (owner,
+                    2026-09-09). It was never useful — you know your own address
+                    — and Sign in with Apple made it actively bad: a relay
+                    account renders as 8WDNK9ZB6B@PRIVATERELAY.APPLEID.COM,
+                    which identifies nothing and is the first thing you see in
+                    the panel. `email` is still read from the session for
+                    displayName's fallback; it is simply not printed. */}
+                <Label numberOfLines={1}>Synced to your account</Label>
                 {/* Only once usage loads — otherwise it flashes "Free" then
                     corrects, which reads as a downgrade glitch to a paying user. */}
                 {usage && (
