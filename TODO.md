@@ -412,6 +412,17 @@ These cost real time already. Full context in [`docs/SHIPPED.md`](docs/SHIPPED.m
   form. The **New App form is the only authoritative check**. Test a name there BEFORE any
   rename lands in code.
 
+**Share intent**
+- 🧨 **`mobile/app/+native-intent.ts` is load-bearing — deleting it breaks every iOS
+  share with "Unmatched Route".** expo-router scans for that exact filename and hands it
+  every incoming URL. The share extension wakes the app with
+  `savehere://dataUrl=savehereShareKey?nonce=…`, which is a doorbell, not a route — the
+  payload is in the shared app group. Without the file the router tries to navigate to a
+  path called `dataUrl=savehereShareKey` and renders its 404, so `ShareIntentHandler`
+  never runs. First hit 2026-09-09, first TestFlight build.
+- ⚠️ `redirectSystemPath` sees **every** deep link, `savehere://auth/callback` included.
+  Anything that is not a share must be returned untouched or OAuth sign-in breaks.
+
 **iOS build**
 - 🧨 **`USE_CCACHE=0` is load-bearing in `eas.json` — do not remove it to speed builds up.**
   React Native writes `CC`/`LD` = `$(REACT_NATIVE_PATH)/scripts/xcode/ccache-clang.sh` onto
