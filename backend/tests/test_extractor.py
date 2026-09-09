@@ -29,6 +29,9 @@ class TestDetectPlatform:
         assert extractor.detect_platform("https://www.youtube.com/shorts/x") == "youtube"
         assert extractor.detect_platform("https://www.tiktok.com/@a/video/1") == "tiktok"
         assert extractor.detect_platform("https://www.linkedin.com/posts/x") == "linkedin"
+        # The LinkedIn APP only ever shares lnkd.in links — a share from LinkedIn
+        # was rejected as unrecognised until 2026-09-09 because of this one host.
+        assert extractor.detect_platform("https://lnkd.in/p/dpiMt3YS") == "linkedin"
         assert extractor.detect_platform("https://www.facebook.com/reel/1") == "facebook"
         assert extractor.detect_platform("https://fb.watch/x") == "facebook"
         assert extractor.detect_platform("https://example.com/x") == "unknown"

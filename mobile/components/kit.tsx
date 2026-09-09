@@ -68,7 +68,30 @@ export function Title({ children, style, numberOfLines }: {
  */
 export function Wordmark({ size = font.display, style }: { size?: number; style?: StyleProp<TextStyle> }) {
   return (
-    <Text style={[styles.wordmark, { fontSize: size, letterSpacing: size * -0.025 }, style]}>
+    <Text
+      style={[
+        styles.wordmark,
+        {
+          fontSize: size,
+          letterSpacing: size * -0.025,
+          /**
+           * ⚠️ THE PADDING IS A FIX, NOT SPACING — removing it clips the final
+           * "e" (owner report, first TestFlight build, 2026-09-09).
+           *
+           * Negative letterSpacing is subtracted after the LAST glyph too, so
+           * the frame iOS measures ends inside that glyph's ink. The letter is
+           * drawn and then cropped by its own text box. It only shows on a
+           * device: the web export lays text out with the browser's metrics
+           * and looks fine, which is why it survived to a build.
+           *
+           * Scaled off `size` so it holds at every call site (22 in the home
+           * header, 52 on the login screen).
+           */
+          paddingRight: Math.ceil(size * 0.06),
+        },
+        style,
+      ]}
+    >
       Findable
     </Text>
   );

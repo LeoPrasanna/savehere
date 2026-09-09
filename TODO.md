@@ -112,6 +112,26 @@ because a pause is reversible. A deletion would not have been.
 
 ---
 
+## 🔴 iOS share does not return you to the app you came from
+
+- [ ] 🔴 **Sharing from Instagram/YouTube leaves the source app stuck.** Owner report,
+  first TestFlight build 2026-09-09: "Findable opens but never closes, the Instagram or
+  YouTube are kind of stuck." **Not the same bug as the Unmatched Route fix (#91)** —
+  that one is fixed; this is what happens after the save succeeds.
+  **Cause, as far as the evidence goes:** `ShareIntentHandler` ends with
+  `if (ok && Platform.OS === 'android') BackHandler.exitApp()`. There is no iOS branch
+  because **iOS has no public API to exit an app** — Apple rejects `exit(0)`. So on iOS
+  the app is brought to the foreground by the extension's `application.open(url)` and
+  simply stays there, and the share sheet you launched from is left presented behind it.
+  **The real fix is to stop opening the app at all:** do the save INSIDE the share
+  extension (its own network call against the API), so the extension completes and iOS
+  returns you to Instagram with nothing to dismiss. That is a native change to
+  `ShareExtensionViewController.swift`, needs a new build, and needs the auth token
+  shared through the `group.com.savehere.app` app group. Sized as its own PR — nothing
+  in JS can fix this.
+  ⚠️ Do not "fix" this by hiding the app or navigating somewhere clever; the app being
+  foregrounded is the symptom, and every JS workaround makes it worse.
+
 ## 🔴 Monetization — required before launch
 
 - [~] 🔴 👤 **RevenueCat.** Manages IAP entitlements, per-territory pricing and promo

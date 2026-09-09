@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Platform, Animated, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Platform, Animated, ActivityIndicator, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from './Icon';
@@ -88,9 +88,18 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
     }).start();
   }, []);
 
-  const handleDelete = async () => {
-    const confirmed = Platform.OS === 'web' ? window.confirm('Remove this save?') : true;
-    if (!confirmed) return;
+  /**
+   * ⚠️ ON NATIVE THIS USED TO CONFIRM NOTHING — `confirmed` was hardcoded
+   * `true` off web, so a long press DELETED THE SAVE INSTANTLY, with no dialog
+   * and no undo (owner report, first TestFlight build, 2026-09-09: "long
+   * pressing a reel on library it's getting deleted").
+   *
+   * A long press is not a deliberate enough gesture to destroy data on its own
+   * — it is what a thumb does while scrolling, and the deletion is permanent.
+   * The detail screen's delete has always confirmed; the gesture that replaced
+   * the visible × simply never got the same treatment.
+   */
+  const runDelete = () => {
     haptics.tap();
     /**
      * ⚠️ `onDelete` FIRES IMMEDIATELY, not in the animation's completion
@@ -112,6 +121,22 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
       useNativeDriver: true,
     }).start();
     onDelete?.(reel.id);
+  };
+
+  const handleDelete = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Remove this save?')) runDelete();
+      return;
+    }
+    haptics.warning();
+    Alert.alert(
+      'Remove this save?',
+      'It will be deleted from your library. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: runDelete },
+      ],
+    );
   };
 
   const platform = platformMeta[reel.platform] ?? platformMeta.unknown;
