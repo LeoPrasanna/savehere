@@ -74,13 +74,23 @@
     }
   },
   "submit": {
-    "testflight": {},
+    // ascAppId is the App Store Connect "Apple ID" — a public identifier (it is
+    // the number in every apps.apple.com URL), NOT a credential. Same record for
+    // both profiles: one app, two channels.
+    //
+    // The ascApiKey* fields that used to sit here were PLACEHOLDERS
+    // ("path/to/AuthKey.p8"), which is worse than absent — eas submit would have
+    // tried to read that path and failed. Omitted on purpose: EAS prompts for an
+    // Apple login instead. Fill them in only when submission needs to run
+    // unattended in CI, and the .p8 must NOT be committed.
+    "testflight": {
+      "ios": {
+        "ascAppId": "6810128841"
+      }
+    },
     "production": {
       "ios": {
-        "ascAppId": "YOUR_APP_STORE_CONNECT_APP_ID",
-        "ascApiKeyPath": "path/to/AuthKey.p8",
-        "ascApiKeyIssuerId": "YOUR_ISSUER_ID",
-        "ascApiKeyId": "YOUR_KEY_ID"
+        "ascAppId": "6810128841"
       }
     }
   }

@@ -173,8 +173,8 @@ price edit. Also: **Pro is only 2x the trial's 10/day**, so the upgrade story re
   **does not exist** (commented out in `render.yaml`) — do not build TestFlight from it
   until that service is live. Signing cert + provisioning are created by EAS on the
   first iOS build.
-- [ ] 👤 **TestFlight beta** before submitting for review. Gated on reserving the name
-  **Findable** in App Store Connect — a rejection there means amending the PR #85 rename.
+- [ ] 👤 **TestFlight beta** before submitting for review. App record created 2026-09-09,
+  App Store Connect Apple ID **6810128841** (already in `eas.json` → `submit`).
 - [~] **Support URL** — in-app page done 2026-08-14 (`mobile/app/support.tsx`); the
   public URL is still needed for App Store Connect.
 
@@ -398,6 +398,19 @@ These cost real time already. Full context in [`docs/SHIPPED.md`](docs/SHIPPED.m
   is **not in the identity token**. `signInWithApple` copies it into `first_name`
   immediately; drop that and the account is permanently nameless, because Apple's relay
   addresses (`…@privaterelay.appleid.com`) make the email fallback useless too.
+
+**Naming**
+- 🧨 **The App Store listing name is `Findable Saves`; the app is `Findable`. THE MISMATCH
+  IS DELIBERATE — do not "fix" it.** Only the listing name must be globally unique, and
+  plain `Findable` was already reserved by someone else (2026-09-09). `expo.name` /
+  `CFBundleDisplayName` has no uniqueness rule, so the icon still reads **Findable**.
+  Changing `expo.name` to match the listing would rename the app on every home screen for
+  no reason; changing the listing to `Findable` is impossible.
+- ⚠️ **Searching the App Store does NOT prove a name is free.** App Store Connect reserves
+  a name the moment an app record is created, and an unpublished reservation is invisible
+  to store search — which is exactly how `Findable` passed a search and then failed at the
+  form. The **New App form is the only authoritative check**. Test a name there BEFORE any
+  rename lands in code.
 
 **iOS build**
 - 🧨 **`USE_CCACHE=0` is load-bearing in `eas.json` — do not remove it to speed builds up.**
