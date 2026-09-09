@@ -46,6 +46,17 @@ function AppStack() {
           color: colors.textSecondary,
         },
         headerShadowVisible: false,
+        /**
+         * ⚠️ WITHOUT THIS, iOS LABELS EVERY BACK BUTTON WITH THE ROUTE'S
+         * FILENAME — the owner saw "‹ index" on the search screen.
+         *
+         * react-navigation defaults the back label to the previous screen's
+         * title, and index.tsx sets `headerShown: false`, so it has no title
+         * to borrow and falls through to the route name. Naming the file is a
+         * leak of the codebase into the product. 'minimal' shows the chevron
+         * alone, which is also what every stack here wants anyway.
+         */
+        headerBackButtonDisplayMode: 'minimal',
         // Hamburger on every stack route — the owner's requirement that it be
         // reachable everywhere. It was a Home button; Home is a tab now.
         headerRight: () => <HeaderMenuButton />,

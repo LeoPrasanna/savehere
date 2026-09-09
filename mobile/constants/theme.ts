@@ -383,6 +383,27 @@ function repaint(next: ColorScheme) {
 export function setScheme(p: SchemePreference, opts?: { persist?: boolean }) {
   const changed = p !== _preference;
   _preference = p;
+  /**
+   * ⚠️ TELL THE NATIVE SIDE TOO, OR ONLY HALF THE APP CHANGES THEME.
+   *
+   * Owner report, first TestFlight build (2026-09-09): in dark mode the iOS
+   * navigation bar drew a WHITE capsule behind the back button and a white
+   * circle behind the hamburger. Nothing was wrong with either component —
+   * they were painting correctly on top of native chrome that was still in
+   * LIGHT appearance, because the phone's own setting was light and only our
+   * JS tokens had been told about the change. Every native surface has the
+   * same problem: the keyboard, alerts, the text-selection UI, scroll bars.
+   *
+   * ⚠️ ORDER MATTERS — this runs BEFORE resolve(). `Appearance.getColorScheme()`
+   * returns the OVERRIDE once one is set, so resolve('system') would otherwise
+   * read back whatever we last forced and 'system' would stick on that value
+   * forever. `'unspecified'` clears the override and makes RN re-read the real
+   * system scheme (Appearance.js:102) — that is exactly what 'system' means,
+   * and it is the API's word for it, NOT `null`, which does not typecheck.
+   */
+  if (Platform.OS !== 'web') {
+    Appearance.setColorScheme(p === 'system' ? 'unspecified' : p);
+  }
   const next = resolve(p);
   if (next === _active) {
     if (changed) _schemeSubs.forEach(fn => fn());

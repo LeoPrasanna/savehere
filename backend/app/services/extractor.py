@@ -198,7 +198,14 @@ def detect_platform(url: str) -> str:
         return "youtube"
     elif "tiktok.com" in url:
         return "tiktok"
-    elif "linkedin.com" in url:
+    # ⚠️ `lnkd.in` IS THE ONLY URL THE LINKEDIN APP EVER GIVES YOU.
+    # Sharing a post from LinkedIn produces https://lnkd.in/p/<id>, never a
+    # linkedin.com link — so recognising only "linkedin.com" meant the share
+    # path from LinkedIn was rejected 100% of the time with "Couldn't recognize
+    # this link", while pasting a desktop URL worked. Owner report, first
+    # TestFlight build, 2026-09-09. `_fetch_page` already follows redirects, so
+    # naming the platform here is the whole fix.
+    elif "linkedin.com" in url or "lnkd.in" in url:
         return "linkedin"
     elif "facebook.com" in url or "fb.watch" in url or "fb.com" in url:
         return "facebook"
