@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { supabase } from './supabase';
 
 /**
@@ -123,6 +124,65 @@ export async function signInWithProvider(
 
     return { error: 'Sign-in did not complete. Try again.' };
   } catch (e) {
+    return { error: messageFor(e) };
+  }
+}
+
+/**
+ * Sign in with Apple — the NATIVE flow, deliberately not `signInWithProvider`.
+ *
+ * Apple hands iOS an identity token directly and Supabase verifies it
+ * (`signInWithIdToken`). No browser, no PKCE round trip, and — the part that
+ * matters operationally — NO Services ID and NO `.p8` signing key. The web
+ * OAuth flow would need both, and its client secret is a JWT that Apple caps
+ * at SIX MONTHS: every login in the app would break twice a year unless
+ * somebody remembered to rotate it. This path has nothing to expire.
+ *
+ * Apple's side is therefore just: the App ID's "Sign In with Apple" capability
+ * (EAS syncs it from the entitlement this package adds), and the BUNDLE ID
+ * listed under Client IDs in Supabase → Auth → Providers → Apple. Same bundle
+ * ID in both the dev and prod projects; nothing here is per-environment.
+ *
+ * iOS-only. Android keeps Google — offering Apple there would drag the whole
+ * Services ID + key + rotation apparatus back in for users who don't need it.
+ */
+export async function signInWithApple(): Promise<{ error: string | null; cancelled?: boolean }> {
+  try {
+    const credential = await AppleAuthentication.signInAsync({
+      requestedScopes: [
+        AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+        AppleAuthentication.AppleAuthenticationScope.EMAIL,
+      ],
+    });
+
+    if (!credential.identityToken) {
+      return { error: 'Apple did not return a sign-in token. Try again.' };
+    }
+
+    const { error } = await supabase.auth.signInWithIdToken({
+      provider: 'apple',
+      token: credential.identityToken,
+    });
+    if (error) return { error: messageFor(error) };
+
+    // ⚠️ APPLE SENDS THE NAME EXACTLY ONCE — on the first authorisation, and
+    // never again on any later sign-in. It is NOT in the identity token, so
+    // Supabase cannot recover it. Miss this and the account is permanently
+    // nameless (displayName falls back to the email prefix, and Apple's relay
+    // addresses look like `a1b2c3@privaterelay.appleid.com`).
+    const given = credential.fullName?.givenName?.trim();
+    if (given) {
+      // Best-effort: a failure here costs a display name, not the session the
+      // user just successfully created.
+      await supabase.auth.updateUser({ data: { first_name: given } }).catch(() => {});
+    }
+
+    return { error: null };
+  } catch (e) {
+    // Tapping "Cancel" on the Apple sheet is a decision, not a failure.
+    if ((e as { code?: string })?.code === 'ERR_REQUEST_CANCELED') {
+      return { error: null, cancelled: true };
+    }
     return { error: messageFor(e) };
   }
 }

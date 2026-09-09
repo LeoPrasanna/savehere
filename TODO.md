@@ -50,9 +50,9 @@ because a pause is reversible. A deletion would not have been.
 
 ## 🔴 Launch blockers
 
-- [ ] 🔴 👤 **Apple Developer account — $99/year.** Gates everything iOS: real-device
-  testing, App Store submission, Sign in with Apple, TestFlight. Several items below
-  are blocked only by this.
+- [x] 🔴 👤 **Apple Developer account — $99/year.** Enrolled as **Individual**, Team ID
+  `G28LWZ4B23`, renews 2027-09-02; **Small Business Program accepted** (15%, not 30%).
+  Unblocked real-device testing, TestFlight and Sign in with Apple.
 - [ ] 🔴 👤 **Production email SMTP.** Supabase's built-in sender caps at ~2–4/hour
   ("email rate limit exceeded"), unusable for real signups. Wire custom SMTP under
   Authentication → Emails before re-enabling "Confirm email". Free tiers: **Brevo**
@@ -82,10 +82,18 @@ because a pause is reversible. A deletion would not have been.
   `https://ymclmbmmwtczspnmccsy.supabase.co/auth/v1/callback`, client ID + secret into
   Supabase → Auth → Providers → Google, and `savehere://auth/callback` under Auth →
   URL Configuration. **Cost: none** at any volume this app will see.
-- [ ] 🔴 **Sign in with Apple.** Currently a mock. Blocked on the Developer account
-  (Services ID + signing key). ⚠️ **Guideline 4.8 binds at iOS review, not on Android** —
-  shipping Google-only on Android is fine, but Apple must be wired before the first
-  App Store submission.
+- [~] 🔴 **Sign in with Apple.** Code done (`expo-apple-authentication` +
+  `signInWithIdToken`, iOS-only, see `services/oauth.ts`). **NO Services ID and NO `.p8`
+  key** — the native ID-token flow needs neither, which also removes the 6-month secret
+  rotation listed under Traps. Remaining, both 👤:
+  1. The App ID `com.savehere.app` does not exist in the portal yet. **EAS creates it and
+     syncs the Sign In with Apple capability on the first iOS build** — no manual step.
+  2. Supabase → Auth → Providers → Apple → enable, Client IDs = `com.savehere.app`,
+     Secret Key **empty**. Do this in **BOTH** projects (dev `ymclmbmmwtczspnmccsy`,
+     prod `lukmwwcilrjqqtgqbynq`) — the config is identical, Apple's side is per bundle
+     ID, not per environment.
+  ⚠️ **Guideline 4.8 binds at iOS review, not on Android** — Google-only is fine for the
+  Android builds; an iOS build must not ship with Google present and Apple absent.
 - [~] 🔴 **Share sheet — Phase B (invisible Android share).** Built 2026-08-13 on
   `feat/android-invisible-share`; **never compiled or run** — no Android SDK on the dev
   box, so it needs an EAS build to confirm. A translucent `ShareActivity` (config plugin
@@ -124,8 +132,8 @@ because a pause is reversible. A deletion would not have been.
      `https://<backend>/api/billing/revenuecat` with the same Authorization value.
   ⚠️ Tier takes effect on the user's **next token refresh (≤1h) or re-login**, not
   instantly — the JWT claim is what `entitlements.py` reads.
-- [ ] 🔴 👤 **Apple Small Business Program.** Enroll (<$1M/yr) → 15% commission instead
-  of 30%. Materially improves every margin below.
+- [x] 🔴 👤 **Apple Small Business Program.** Enrolled — **15%**, not 30%. Every margin
+  below assumes this.
 - [ ] 👤 **Two intro prices still unset — deliberately not guessed.** The **USD monthly
   revert price** (₹99→₹120 is a 17.5% discount; the analogue is ~$8.49) and whether the
   **weekly** plans carry an offer at all. A plan without `introMonths` renders the plain
@@ -373,17 +381,18 @@ These cost real time already. Full context in [`docs/SHIPPED.md`](docs/SHIPPED.m
   smaller diff.
 
 **Auth**
-- ⏰ **The Apple client secret is a JWT that expires — 6 months maximum.** Unlike
-  Google's static client secret, which never expires, Apple's must be regenerated. When
-  it lapses **Sign in with Apple breaks for every user with no code change and no deploy
-  to blame**, which makes it near-impossible to diagnose from the app side. Prefer giving
-  Supabase the Team ID / Key ID / `.p8` so it can rotate the secret itself, rather than
-  pasting a pre-generated JWT. **Set a calendar reminder at 5 months either way.**
-- The Apple signing key `.p8` can only be **downloaded once**. Store it before leaving
-  the page; a lost key means generating a new one and reconfiguring.
-- The Apple **Services ID** is a separate identifier from the bundle ID
-  (`com.savehere.app`) and is what acts as the OAuth client ID for the web flow. Putting
-  the bundle ID in that field is the common misconfiguration.
+- ⏰ **The Apple client secret is a JWT that expires — 6 months maximum**, and when it
+  lapses Sign in with Apple breaks for every user with no code change and no deploy to
+  blame. **This is why we do NOT use Apple's web OAuth flow** (2026-09-09): the native
+  ID-token flow has no client secret, no Services ID and no `.p8`, so there is nothing to
+  rotate and no calendar reminder to forget. The trap is recorded because it comes back
+  the day someone wants Apple sign-in on **Android or web** — that needs the full
+  Services ID + `.p8` + 6-month rotation apparatus. Don't add it without that price in
+  mind.
+- Apple sends the user's **name exactly once**, on the first authorisation only, and it
+  is **not in the identity token**. `signInWithApple` copies it into `first_name`
+  immediately; drop that and the account is permanently nameless, because Apple's relay
+  addresses (`…@privaterelay.appleid.com`) make the email fallback useless too.
 
 **Shell**
 - Backticks inside `git commit -m "..."` get shell-evaluated and silently eat text — use
