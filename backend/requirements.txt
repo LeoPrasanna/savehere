@@ -1,13 +1,37 @@
+# PINNED ON PURPOSE (2026-09-09). Everything except yt-dlp is exact.
+#
+# ⚠️ THIS FILE IS WHY STAGING DIED FOR TWO DAYS AND WHY IT WAS INVISIBLE.
+# Eight of these were `>=`, so every Render build installed whatever was newest
+# while local and CI had older resolved versions. The gap was real and large:
+# Render installed anthropic 1.4.0 against a local 0.111.0 (a MAJOR bump) and
+# openai 3.8.0 against 2.43.0. Tests never caught it because they mock the AI
+# clients — so the untested majors only ran in production.
+#
+# The versions below are the ones the suite actually passes against.
+# Bump deliberately: change the pin, run `python -m pytest tests/ -q`, and let
+# CI prove it BEFORE it reaches a deploy.
+#
+# ponytail: direct deps only — TRANSITIVES (pydantic, starlette, httpcore, …)
+# are still resolved fresh on every build and can still drift. That is the
+# residual risk and it is accepted: a real lockfile (pip-compile / uv lock) is
+# the upgrade path, worth doing the first time a transitive breaks a deploy.
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 python-dotenv==1.0.1
-anthropic>=0.34.0
-yt-dlp>=2024.8.6
-openai>=1.40.0
+anthropic==0.111.0
+openai==2.43.0
 sqlalchemy==2.0.32
-alembic>=1.13.0
-psycopg2-binary>=2.9.9        # Postgres driver (prod); SQLite needs no driver
-httpx>=0.27.0
-sentry-sdk[fastapi]>=2.0.0
-pyjwt[crypto]>=2.9.0
-pytest>=8.0.0
+alembic==1.18.5
+psycopg2-binary==2.9.12       # Postgres driver (prod); SQLite needs no driver
+httpx==0.28.1
+sentry-sdk[fastapi]==2.63.0
+pyjwt[crypto]==2.13.0
+pytest==9.1.1
+
+# ⚠️ DELIBERATELY UNPINNED — the ONE exception, and it must stay that way.
+# Extraction breaks when yt-dlp goes stale: the platforms change their players
+# and only a fresh yt-dlp keeps up. render.yaml force-upgrades it on every
+# deploy (`pip install -U --no-cache-dir yt-dlp`) and a monthly cron redeploys
+# prod for the same reason. Pinning this would trade a loud dependency surprise
+# for a silent, slow decay of the core save pipeline.
+yt-dlp>=2026.6.9

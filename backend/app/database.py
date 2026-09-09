@@ -1,9 +1,14 @@
 from sqlalchemy import create_engine, event, Column, String, DateTime, Date, JSON, Text, Integer, Boolean, ForeignKey
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
+import logging
 import uuid
 
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 # check_same_thread is a SQLite-only flag; omit it for Postgres/other drivers so a
 # DATABASE_URL swap (with auth) needs no code change.
@@ -278,4 +283,38 @@ def create_tables():
     # Absolute script location so it works regardless of the process cwd
     # (env.py supplies the DB URL from settings, so no url is set here).
     cfg.set_main_option("script_location", str(backend_dir / "alembic"))
-    command.upgrade(cfg, "head")
+
+    try:
+        command.upgrade(cfg, "head")
+    except OperationalError as e:
+        # WHY THIS BLOCK EXISTS (outage 2026-09-07 → 09-09).
+        #
+        # The savehere-dev Supabase project hit the free tier's 7-day idle pause.
+        # This call then raised OperationalError, uvicorn exited with status 3,
+        # and Render crash-looped — serving NOTHING, with no line anywhere saying
+        # why. Diagnosing it took a deploy log plus a local repro, because the
+        # symptom (TLS connects, no HTTP response) looks like a hundred things.
+        #
+        # The re-raise is deliberate: a backend that cannot reach its database
+        # must NOT come up and start answering requests. This block only makes
+        # the death legible.
+        host = "?"
+        try:                                    # never let logging hide the error
+            host = make_url(settings.DATABASE_URL).host or "?"
+        except Exception:
+            pass
+        paused = "Tenant or user not found" in str(e) or "ENOTFOUND" in str(e)
+        logger.critical(
+            "[STARTUP] DATABASE UNREACHABLE at %s — the app cannot start.\n"
+            "          %s\n"
+            "          Checked in order: is the Supabase project PAUSED (free tier "
+            "pauses after 7 days idle)? is DATABASE_URL set on THIS Render service? "
+            "is it the SESSION pooler (:5432), not direct (IPv6) or transaction (:6543)?\n"
+            "          Underlying error: %s",
+            host,
+            "This looks like a PAUSED or DELETED Supabase project — restore it in the "
+            "Supabase dashboard, then redeploy." if paused
+            else "The database refused or dropped the connection.",
+            e,
+        )
+        raise
