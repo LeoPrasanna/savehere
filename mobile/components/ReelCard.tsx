@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Platform, Animated, ActivityIndicator, Alert } 
 import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Icon } from './Icon';
+import { cardTitle } from '../services/cardTitle';
 import { GeneratedCover } from './GeneratedCover';
 import { Reel, thumbCandidates } from '../services/api';
 import * as haptics from '../services/haptics';
@@ -245,8 +246,11 @@ function ReelCardInner({ reel, index = 0, onDelete, aspect = 3 / 4 }: ReelCardPr
               {quotaLabel ? `AI RESUMES ${quotaLabel.toUpperCase()}` : 'AI RESUMES AFTER RESET'}
             </Text>
           )}
+          {/* cardTitle, not reel.title: the stored title is cut for the detail
+              screen (90 chars) and a tile has two lines of ~30. See the note in
+              services/cardTitle.ts. numberOfLines stays as the hard backstop. */}
           <Text style={styles.title} numberOfLines={2}>
-            {reel.title || (isPending ? 'Saving…' : 'Untitled')}
+            {cardTitle(reel.title) || (isPending ? 'Saving…' : 'Untitled')}
           </Text>
           <Text style={styles.meta} numberOfLines={1}>
             {(reel.category || 'other').toUpperCase()}

@@ -84,10 +84,20 @@ export function Wordmark({ size = font.display, style }: { size?: number; style?
            * device: the web export lays text out with the browser's metrics
            * and looks fine, which is why it survived to a build.
            *
-           * Scaled off `size` so it holds at every call site (22 in the home
-           * header, 52 on the login screen).
+           * ⚠️ 0.06 WAS TOO SMALL — it bought 2px at size 22 and the gap is
+           * visibly wider than that (owner, still clipped after the first fix).
+           * The wordmark sits at the left of a `space-between` row with a 36px
+           * button at the other end, so there is nothing to compete with and
+           * over-reserving costs the layout nothing; under-reserving costs a
+           * letter. Sized to the whole tracking debt (8 glyphs x 0.025em) plus
+           * the face's right side bearing, rounded up.
+           *
+           * flexShrink 0 is belt-and-braces: RN defaults to 0, but the home
+           * header nests this inside a `flex:1, minWidth:0` column, and that is
+           * exactly the shape where a future change starts shrinking it.
            */
-          paddingRight: Math.ceil(size * 0.06),
+          paddingRight: Math.ceil(size * 0.3),
+          flexShrink: 0,
         },
         style,
       ]}
