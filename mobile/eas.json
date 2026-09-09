@@ -22,6 +22,16 @@
       "autoIncrement": true,
       "channel": "preview"
     },
+    "testflight": {
+      "//": "TestFlight needs STORE distribution — `preview` is ad-hoc (registered devices only) and its IPA cannot be uploaded. Points at the STAGING env on purpose: the `production` env var EXPO_PUBLIC_API_URL is https://savehere-api-prod.onrender.com, a service that does not exist yet (commented out in render.yaml). A production-profile TestFlight build would ship testers a dead API. Switch to the production profile the day that service is live.",
+      "distribution": "store",
+      "autoIncrement": true,
+      "ios": {
+        "buildConfiguration": "Release"
+      },
+      "environment": "preview",
+      "channel": "preview"
+    },
     "production": {
       "autoIncrement": true,
       "ios": {
@@ -32,6 +42,7 @@
     }
   },
   "submit": {
+    "testflight": {},
     "production": {
       "ios": {
         "ascAppId": "YOUR_APP_STORE_CONNECT_APP_ID",

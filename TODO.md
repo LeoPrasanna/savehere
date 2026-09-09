@@ -168,8 +168,13 @@ price edit. Also: **Pro is only 2x the trial's 10/day**, so the upgrade story re
 - [ ] 👤 **Age rating** — questionnaire in App Store Connect (likely 4+).
 - [ ] 🔴 👤 **Privacy policy URL** — required for any app with network access. Host a
   one-page policy and add the URL.
-- [ ] **EAS production profile** — bundle ID, Apple signing certificate, provisioning.
-- [ ] 👤 **TestFlight beta** before submitting for review.
+- [~] **EAS iOS profiles** — a `testflight` profile exists (store distribution, staging
+  env). ⚠️ The `production` profile points at `savehere-api-prod.onrender.com`, which
+  **does not exist** (commented out in `render.yaml`) — do not build TestFlight from it
+  until that service is live. Signing cert + provisioning are created by EAS on the
+  first iOS build.
+- [ ] 👤 **TestFlight beta** before submitting for review. Gated on reserving the name
+  **Findable** in App Store Connect — a rejection there means amending the PR #85 rename.
 - [~] **Support URL** — in-app page done 2026-08-14 (`mobile/app/support.tsx`); the
   public URL is still needed for App Store Connect.
 
