@@ -122,10 +122,18 @@ because a pause is reversible. A deletion would not have been.
   expo-share-intent writes `ShareExtensionViewController.swift` in its own
   `withXcodeProject` mod. Registered after it, ours ran before the file existed and
   threw "found 0".
+  ⚠️ **The generated file is `ShareViewController.swift`, NOT
+  `ShareExtensionViewController.swift`.** The template inside `node_modules` carries the
+  longer name; `constants.js:8` (`shareExtensionViewControllerFileName`) writes the
+  shorter one. Searching for the template's name finds nothing, ever.
   ⚠️ **The error text only ever existed on expo.dev.** `eas build:view --json` returns
   `UNKNOWN_ERROR`, the CLI does not stream phase logs, and the downloadable log is
-  encrypted at rest. **Read the Prebuild phase on expo.dev before theorising** — two
-  theories and three build slots went to guessing at an error nobody had read.
+  encrypted at rest. **Read the Prebuild phase on expo.dev before theorising** — five
+  build slots went to guessing at an error nobody had read.
+  ⚠️ **A local harness that builds its own fixture can validate your mistake instead of
+  catching it.** The harness created the fake Swift under the *template's* name, so it
+  "passed" against the same wrong assumption the plugin held. Fixture names must come
+  from the library's own constants, never retyped.
 - [ ] 👤 **Verify on device:** share from Instagram, YouTube **and LinkedIn**; you should
   stay in the source app and the save should appear in the library within seconds.
 
