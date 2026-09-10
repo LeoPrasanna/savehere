@@ -25,6 +25,7 @@ import { TaskList } from '../../components/TaskList';
 import { TodoEditor } from '../../components/TodoEditor';
 import { Disclaimer } from '../../components/Disclaimer';
 import { TAB_BAR_CLEARANCE } from '../../components/TabBar';
+import { readFailure } from '../../services/readFailure';
 import { colors, spacing, font, radius, gradients, shadow, typeface, tracking, onImage, platformMeta, categoryFor, categoryMeta, CATEGORY_OPTIONS, themed } from '../../constants/theme';
 
 export default function ReelDetailScreen() {
@@ -336,7 +337,11 @@ export default function ReelDetailScreen() {
   const cat = categoryFor(reel.category);
   const isSummarizing = (reel.summary_status === 'pending' && !pendingStalled) || summarizing;
   const isCooking = (reel.category || '').toLowerCase() === 'cooking';
-  const loginWalled = reel.platform === 'linkedin' || reel.platform === 'facebook';
+  // Why there is no summary — see services/readFailure.ts. This used to be
+  // `platform === 'linkedin' || platform === 'facebook'`, i.e. a platform name
+  // wearing a diagnosis: a Facebook card whose title and thumbnail we plainly
+  // HAD still told the reader to go and log in.
+  const why = readFailure(reel);
   // Medical/high-stakes content: reference only — no tasks, no workout, show the
   // disclaimer instead. The backend refuses generation for these too; hiding the
   // buttons here just keeps the UI honest.
@@ -546,15 +551,27 @@ export default function ReelDetailScreen() {
           </View>
         ) : (
           <View style={styles.emptySummary}>
-            <Icon name={loginWalled ? 'lock' : 'eye'} size={28} color={colors.textSecondary} style={{ marginBottom: spacing.xs }} />
+            <Icon
+              name={why === 'walled' ? 'lock' : 'eye'}
+              size={28}
+              color={colors.textSecondary}
+              style={{ marginBottom: spacing.xs }}
+            />
             <Text style={styles.emptyTitle}>
-              {loginWalled
+              {why === 'walled'
                 ? `${platform.label} requires login — we couldn't read this automatically`
+                : why === 'no-caption'
+                ? 'Nothing to summarize — this post has no caption'
                 : 'We couldn\'t read the text in this reel yet'}
             </Text>
             <Text style={styles.emptyHint}>
-              {loginWalled
+              {why === 'walled'
                 ? 'This post is behind a login, so its text could not be read.'
+                /* Said plainly, because this is not a failure and the reader
+                   should not go looking for a fix that does not exist. We read
+                   the post; the words are burned into the video. */
+                : why === 'no-caption'
+                ? 'We read this one fine — there just aren\'t any words in it. Everything is in the video itself, and the title above is the whole caption.'
                 : 'This reel uses on-screen text or visuals with no speech or description — we can\'t extract that yet. '}
             </Text>
           </View>
