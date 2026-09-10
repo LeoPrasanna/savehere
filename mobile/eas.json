@@ -19,7 +19,21 @@
       // target does not get. It expands to empty and the build dies with
       // "unable to spawn process '/../../node_modules/.../ccache-clang.sh'".
       // Costs a cold compile per build; the alternative is no iOS build at all.
-      "env": { "USE_CCACHE": "0" },
+      // SENTRY_DISABLE_AUTO_UPLOAD kills a build otherwise. @sentry/react-native's
+      // Expo plugin runs sentry-cli inside the "Run fastlane" phase to upload
+      // source maps, which needs an org slug AND an auth token — neither of
+      // which exists here. Without them sentry-cli exits non-zero and takes the
+      // whole build with it (build 107ceb3c, 2026-09-10, the first build after
+      // Sentry landed in #100 — the defect was invisible until something
+      // actually compiled it).
+      //
+      // ⚠️ THE COST IS REAL: no source maps means Sentry shows MINIFIED stack
+      // traces. Crashes are still reported, but reading one means matching
+      // bundle offsets by hand. Remove this the day SENTRY_AUTH_TOKEN and the
+      // org/project slugs are set (eas secret:create + the plugin config in
+      // app.json) — the upload is worth having, it is just not worth blocking
+      // every build on.
+      "env": { "USE_CCACHE": "0", "SENTRY_DISABLE_AUTO_UPLOAD": "true" },
       "distribution": "internal",
       "ios": {
         "enterpriseProvisioning": "adhoc"
@@ -40,7 +54,21 @@
       // target does not get. It expands to empty and the build dies with
       // "unable to spawn process '/../../node_modules/.../ccache-clang.sh'".
       // Costs a cold compile per build; the alternative is no iOS build at all.
-      "env": { "USE_CCACHE": "0" },
+      // SENTRY_DISABLE_AUTO_UPLOAD kills a build otherwise. @sentry/react-native's
+      // Expo plugin runs sentry-cli inside the "Run fastlane" phase to upload
+      // source maps, which needs an org slug AND an auth token — neither of
+      // which exists here. Without them sentry-cli exits non-zero and takes the
+      // whole build with it (build 107ceb3c, 2026-09-10, the first build after
+      // Sentry landed in #100 — the defect was invisible until something
+      // actually compiled it).
+      //
+      // ⚠️ THE COST IS REAL: no source maps means Sentry shows MINIFIED stack
+      // traces. Crashes are still reported, but reading one means matching
+      // bundle offsets by hand. Remove this the day SENTRY_AUTH_TOKEN and the
+      // org/project slugs are set (eas secret:create + the plugin config in
+      // app.json) — the upload is worth having, it is just not worth blocking
+      // every build on.
+      "env": { "USE_CCACHE": "0", "SENTRY_DISABLE_AUTO_UPLOAD": "true" },
       // TestFlight needs STORE distribution — `preview` is ad-hoc (registered
       // devices only) and its IPA cannot be uploaded. Points at the STAGING env
       // on purpose: the `production` env var EXPO_PUBLIC_API_URL is
@@ -64,7 +92,21 @@
       // target does not get. It expands to empty and the build dies with
       // "unable to spawn process '/../../node_modules/.../ccache-clang.sh'".
       // Costs a cold compile per build; the alternative is no iOS build at all.
-      "env": { "USE_CCACHE": "0" },
+      // SENTRY_DISABLE_AUTO_UPLOAD kills a build otherwise. @sentry/react-native's
+      // Expo plugin runs sentry-cli inside the "Run fastlane" phase to upload
+      // source maps, which needs an org slug AND an auth token — neither of
+      // which exists here. Without them sentry-cli exits non-zero and takes the
+      // whole build with it (build 107ceb3c, 2026-09-10, the first build after
+      // Sentry landed in #100 — the defect was invisible until something
+      // actually compiled it).
+      //
+      // ⚠️ THE COST IS REAL: no source maps means Sentry shows MINIFIED stack
+      // traces. Crashes are still reported, but reading one means matching
+      // bundle offsets by hand. Remove this the day SENTRY_AUTH_TOKEN and the
+      // org/project slugs are set (eas secret:create + the plugin config in
+      // app.json) — the upload is worth having, it is just not worth blocking
+      // every build on.
+      "env": { "USE_CCACHE": "0", "SENTRY_DISABLE_AUTO_UPLOAD": "true" },
       "autoIncrement": true,
       "ios": {
         "buildConfiguration": "Release"
