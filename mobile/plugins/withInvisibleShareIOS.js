@@ -1,18 +1,23 @@
 /**
- * ⚠️ NOT REGISTERED IN app.json RIGHT NOW — AND DO NOT RE-ADD IT UNTIL THE
- * PREBUILD FAILURE IS UNDERSTOOD. IT BREAKS EVERY iOS BUILD.
+ * ⚠️ REGISTRATION ORDER IN app.json IS LOAD-BEARING. THIS PLUGIN MUST BE LISTED
+ * *BEFORE* "expo-share-intent", WHICH LOOKS BACKWARDS AND IS NOT.
  *
- * Three EAS builds died in the Prebuild phase with this plugin registered
- * (c080fa09 as a dangerous mod, 1e85219c as an Xcode mod). A fourth build,
- * identical except that this plugin was removed, FINISHED — so the cause is
- * this file, not the `share-config` local module and not the
- * NSExtensionActivationSupportsText rule. Both of those shipped fine.
+ * @expo/config-plugins runs mods in REVERSE registration order. withMod.js:199:
  *
- * What is NOT yet known is why. The mod patches correctly in a local harness
- * that runs it against a faithful copy of the expo-share-intent 8.0.1 template
- * (see the PR), and EAS's Prebuild log is encrypted at rest and unreadable from
- * the CLI, so the actual error message has never been seen. Two theories have
- * already been wrong; the next step is READING THE LOG, not a third theory.
+ *     const results = await action({...});   // this plugin's action
+ *     return nextMod(results);               // THEN the previously registered one
+ *
+ * So the LAST plugin registered runs FIRST. expo-share-intent writes
+ * ShareExtensionViewController.swift in its own withXcodeProject mod
+ * (ios/withIosShareExtensionXcodeTarget.js:33). Registered after it, this mod
+ * ran BEFORE the file existed and threw "found 0".
+ *
+ * Three EAS builds were spent learning that: c080fa09 (dangerous mod),
+ * 1e85219c (Xcode mod, still registered last), and 7612e5a9 (plugin removed —
+ * FINISHED, which is what proved the plugin was the cause). The error text was
+ * only ever visible on expo.dev; the CLI reports UNKNOWN_ERROR and the
+ * downloadable log is encrypted at rest. READ THE PREBUILD PHASE ON expo.dev
+ * before theorising if this ever breaks again.
  */
 
 const fs = require('fs');
