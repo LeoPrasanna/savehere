@@ -40,11 +40,17 @@
       [
         "expo-share-intent",
         {
-          "disableAndroid": true
+          "disableAndroid": true,
+          "iosActivationRules": {
+            "NSExtensionActivationSupportsWebURLWithMaxCount": 1,
+            "NSExtensionActivationSupportsWebPageWithMaxCount": 1,
+            "NSExtensionActivationSupportsText": true
+          }
         }
       ],
       "expo-notifications",
       "./plugins/withInvisibleShare",
+      "./plugins/withInvisibleShareIOS",
       [
         "expo-splash-screen",
         {

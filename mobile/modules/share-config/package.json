@@ -1,0 +1,8 @@
+{
+  "name": "share-config",
+  "version": "1.0.0",
+  "description": "Hands the save-scoped share key to the iOS Share Extension via the App Group.",
+  "main": "index.ts",
+  "license": "UNLICENSED",
+  "author": "Findable"
+}

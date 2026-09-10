@@ -112,25 +112,21 @@ because a pause is reversible. A deletion would not have been.
 
 ---
 
-## 🔴 iOS share does not return you to the app you came from
+## iOS share — invisible, like Android
 
-- [ ] 🔴 **Sharing from Instagram/YouTube leaves the source app stuck.** Owner report,
-  first TestFlight build 2026-09-09: "Findable opens but never closes, the Instagram or
-  YouTube are kind of stuck." **Not the same bug as the Unmatched Route fix (#91)** —
-  that one is fixed; this is what happens after the save succeeds.
-  **Cause, as far as the evidence goes:** `ShareIntentHandler` ends with
-  `if (ok && Platform.OS === 'android') BackHandler.exitApp()`. There is no iOS branch
-  because **iOS has no public API to exit an app** — Apple rejects `exit(0)`. So on iOS
-  the app is brought to the foreground by the extension's `application.open(url)` and
-  simply stays there, and the share sheet you launched from is left presented behind it.
-  **The real fix is to stop opening the app at all:** do the save INSIDE the share
-  extension (its own network call against the API), so the extension completes and iOS
-  returns you to Instagram with nothing to dismiss. That is a native change to
-  `ShareExtensionViewController.swift`, needs a new build, and needs the auth token
-  shared through the `group.com.savehere.app` app group. Sized as its own PR — nothing
-  in JS can fix this.
-  ⚠️ Do not "fix" this by hiding the app or navigating somewhere clever; the app being
-  foregrounded is the symptom, and every JS workaround makes it worse.
+- [~] 🔴 **iOS Share Extension saves without opening the app.** Built 2026-09-10
+  (`plugins/withInvisibleShareIOS.js` + the `share-config` local module); **needs a real
+  device to confirm** — Windows cannot prebuild or compile iOS, so none of the Swift has
+  ever been through a compiler locally. Replaced the old blocker: sharing used to
+  foreground the whole app and strand Instagram's share sheet, and iOS has no public API
+  to exit an app, so the app simply must never open.
+  ⚠️ **The upload is a BACKGROUND URLSession and that is not decoration.**
+  `completeRequest` tears the extension process down; a foreground task started just
+  before it dies mid-flight and the save silently never happens.
+  ⚠️ It **falls back** rather than failing: no share key (signed out, offline when it was
+  minted, an older build) means the old open-the-app path runs.
+- [ ] 👤 **Verify on device:** share from Instagram, YouTube **and LinkedIn**; you should
+  stay in the source app and the save should appear in the library within seconds.
 
 ## 🔴 Monetization — required before launch
 
