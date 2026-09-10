@@ -196,21 +196,42 @@ const REPLACEMENT = `  // ── FINDABLE: invisible share (mobile/plugins/withI
 module.exports = function withInvisibleShareIOS(config) {
   return withXcodeProject(config, cfg => {
     const root = cfg.modRequest.platformProjectRoot;
-      const candidates = fs
-        .readdirSync(root, { withFileTypes: true })
-        .filter(d => d.isDirectory())
-        .map(d => path.join(root, d.name, 'ShareExtensionViewController.swift'))
-        .filter(p => fs.existsSync(p));
+    // ⚠️ "ShareViewController.swift", NOT "ShareExtensionViewController.swift".
+    // The TEMPLATE inside node_modules carries the longer name; the file
+    // actually written into the project has the SHORTER one — see
+    // expo-share-intent/plugin/build/ios/constants.js:8
+    // (`shareExtensionViewControllerFileName`). Searching for the template's
+    // name finds nothing, ever, and it cost two builds. Worse, the local
+    // harness "passed" because the fake file was created under the template
+    // name too: it validated the mistake instead of catching it.
+    const TARGET = 'ShareViewController.swift';
+    const dirs = fs
+      .readdirSync(root, { withFileTypes: true })
+      .filter(d => d.isDirectory())
+      .map(d => d.name);
+    const candidates = dirs
+      .map(name => path.join(root, name, TARGET))
+      .filter(p => fs.existsSync(p));
 
-      if (candidates.length !== 1) {
-        throw new Error(
-          '[withInvisibleShareIOS] expected exactly one ShareExtensionViewController.swift under ' +
-            root +
-            ', found ' +
-            candidates.length +
-            ". expo-share-intent's layout changed — re-check plugins/withInvisibleShareIOS.js.",
-        );
-      }
+    if (candidates.length !== 1) {
+      // Name what WAS found. A bare "found 0" is what turned a one-line
+      // mistake into a multi-build hunt.
+      const seen = dirs
+        .map(name => {
+          let swift = [];
+          try {
+            swift = fs.readdirSync(path.join(root, name)).filter(f => f.endsWith('.swift'));
+          } catch {}
+          return name + '/[' + swift.join(', ') + ']';
+        })
+        .join(' ');
+      throw new Error(
+        '[withInvisibleShareIOS] expected exactly one ' + TARGET + ' under ' + root +
+          ', found ' + candidates.length +
+          '. Swift files actually present: ' + (seen || '(no subdirectories)') +
+          ". Re-check plugins/withInvisibleShareIOS.js against expo-share-intent's layout.",
+      );
+    }
 
       const file = candidates[0];
       const source = fs.readFileSync(file, 'utf8');
