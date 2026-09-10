@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { withDangerousMod } = require('@expo/config-plugins');
+const { withXcodeProject } = require('@expo/config-plugins');
 
 /**
  * iOS PHASE B — the invisible share, matching Android.
@@ -18,6 +18,17 @@ const { withDangerousMod } = require('@expo/config-plugins');
  * alone. If a version bump changes that function, prebuild THROWS — a two-minute
  * failure with a named cause, instead of a thirty-minute Swift compile error or,
  * far worse, a silent revert to the visible behaviour.
+ *
+ * ⚠️ withXcodeProject, NOT withDangerousMod — AND THAT IS THE WHOLE POINT.
+ * Build c080fa09 died in Prebuild with this as a dangerous mod, because
+ * "all dangerous mods run first before other mods" (withDangerousMod's own
+ * docstring) and expo-share-intent writes the extension in one of those. Two
+ * dangerous mods race, and this one lost: the .swift did not exist yet, so the
+ * assertion below fired on a file that was simply not written yet rather than on
+ * real template drift. Every dangerous mod has finished by the time an Xcode
+ * mod runs, so the file is guaranteed to be there. Nothing about the Xcode
+ * project itself is touched — the config is returned untouched; this mod is
+ * used purely for its position in the order.
  *
  * ⚠️ IT FALLS BACK, IT DOES NOT FAIL. No share key stored (signed out, offline
  * at mint time, an older app version) means `findableSaveDirectly` returns false
@@ -161,10 +172,8 @@ const REPLACEMENT = `  // ── FINDABLE: invisible share (mobile/plugins/withI
   }`;
 
 module.exports = function withInvisibleShareIOS(config) {
-  return withDangerousMod(config, [
-    'ios',
-    async cfg => {
-      const root = cfg.modRequest.platformProjectRoot;
+  return withXcodeProject(config, cfg => {
+    const root = cfg.modRequest.platformProjectRoot;
       const candidates = fs
         .readdirSync(root, { withFileTypes: true })
         .filter(d => d.isDirectory())
@@ -196,8 +205,7 @@ module.exports = function withInvisibleShareIOS(config) {
         );
       }
 
-      fs.writeFileSync(file, source.replace(ANCHOR, REPLACEMENT), 'utf8');
-      return cfg;
-    },
-  ]);
+    fs.writeFileSync(file, source.replace(ANCHOR, REPLACEMENT), 'utf8');
+    return cfg;
+  });
 };
