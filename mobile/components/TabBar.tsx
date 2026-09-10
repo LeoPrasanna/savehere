@@ -57,8 +57,18 @@ const TABS: Tab[] = [
   { key: 'library', icon: 'layers',   label: 'Library' },
   { key: 'save',    icon: 'add',      label: 'Save' },
   { key: 'slate',   icon: 'checkbox', label: 'Slate' },
-  { key: 'ask',     icon: 'ask',      label: 'Ask' },
 ];
+
+/**
+ * Ask sits OUTSIDE the pill in its own capsule (owner, 2026-09-10 — "like
+ * search in the Apple Music menu"). It is the only tab that isn't a place in
+ * the library: the other four move you between views of your own saves, Ask
+ * asks a question of them. Detaching it says that without adding a colour —
+ * the capsule carries the same fill and border as the pill, so this is
+ * emphasis by SEPARATION, not by brightness. See the note on the tab loop
+ * below for why a filled/animated tab was rejected.
+ */
+const ASK: Tab = { key: 'ask', icon: 'ask', label: 'Ask' };
 
 export function TabBar() {
   const router = useRouter();
@@ -119,6 +129,7 @@ export function TabBar() {
         style={[styles.fade, { pointerEvents: 'none' }]}
       />
 
+      <View style={styles.row}>
       <View style={styles.bar}>
         {/* The pill's own fill is a gradient, not a flat wash: a slightly lifted
             top edge is what gives it shape against a dark page. A flat fill
@@ -157,6 +168,28 @@ export function TabBar() {
             </Pressable>
           );
         })}
+      </View>
+
+      {/* Same fill, same border, same 42pt slot as a tab — only detached. */}
+      <Pressable
+        style={styles.askWrap}
+        onPress={() => go(ASK.key)}
+        accessibilityRole="button"
+        accessibilityLabel={ASK.label}
+      >
+        <LinearGradient
+          colors={[colors.tabBarTop, colors.tabBarBottom]}
+          style={[styles.askFill, { pointerEvents: 'none' }]}
+        />
+        <View style={[styles.slot, active === ASK.key && styles.slotOn]}>
+          <Icon
+            name={ASK.icon}
+            size={19}
+            color={active === ASK.key ? colors.textPrimary : colors.textSecondary}
+            emphasis={active === ASK.key}
+          />
+        </View>
+      </Pressable>
       </View>
     </View>
   );
@@ -214,7 +247,23 @@ const styles = themed(() => StyleSheet.create({
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     borderRadius: radius.circle,
   },
+  // The pill and the detached Ask capsule, side by side and centred as a unit.
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   tab: { alignItems: 'center', justifyContent: 'center' },
+  // 42 slot + 6+6 padding + 2 border = 56, i.e. exactly the pill's height.
+  askWrap: {
+    padding: 6,
+    borderRadius: radius.circle,
+    borderWidth: 1,
+    borderColor: colors.ghostLine,
+    overflow: 'hidden',
+  },
+  // Carries its own radius for the same reason barFill does — Android clips a
+  // child to the parent's bounding RECTANGLE, not its rounded shape.
+  askFill: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    borderRadius: radius.circle,
+  },
   slot: {
     width: 42, height: 42,
     // Exactly half the box, not the 999 sentinel. Both should resolve to the
