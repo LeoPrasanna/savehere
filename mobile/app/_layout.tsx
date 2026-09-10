@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react-native';
 import { useEffect, useRef, useState } from 'react';
 import { Stack } from 'expo-router/stack';
 import { useRouter } from 'expo-router';
@@ -336,7 +337,43 @@ function Gate() {
   );
 }
 
-export default function RootLayout() {
+/**
+ * Crash reporting. Added 2026-09-10, after a tester-visible crash on the first
+ * TestFlight build that could not be diagnosed AT ALL: the app had no reporting
+ * of any kind (the backend has had Sentry since day one), so the only artifact
+ * was iOS's own "Findable Saves Crashed" dialog.
+ *
+ * ⚠️ NO DSN MEANS NO SENTRY, DELIBERATELY. `EXPO_PUBLIC_SENTRY_DSN` is inlined
+ * at BUILD time, so a build made without it can never gain reporting later, and
+ * `Sentry.init` with an empty dsn logs a warning on every launch and swallows
+ * errors it will never send. Guarding is better than a lie.
+ *
+ * ⚠️ IT WILL NOT CATCH SHARE EXTENSION CRASHES. The extension is a separate
+ * process with no JS runtime; this SDK only sees the app. If sharing breaks
+ * silently, Sentry will be quiet and that silence is not evidence of health.
+ *
+ * `sendDefaultPii` stays FALSE. Saved links are personal — a URL is what
+ * someone is interested in — and there is no version of crash reporting worth
+ * shipping the library to a third party for.
+ */
+const SENTRY_DSN = process.env.EXPO_PUBLIC_SENTRY_DSN;
+
+if (SENTRY_DSN) {
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    sendDefaultPii: false,
+    // Errors only. Performance tracing on a free tier burns the quota that
+    // crashes need, and nothing here is waiting on a latency question.
+    tracesSampleRate: 0,
+    // The channel this build listens to is the honest environment name: a
+    // "production" profile build still talks to staging today (eas.json).
+    environment: process.env.EXPO_PUBLIC_API_URL?.includes('staging')
+      ? 'staging'
+      : 'production',
+  });
+}
+
+function RootLayout() {
   return (
     // ShareIntentProvider must sit ABOVE the router — expo-share-intent reads
     // the launch intent as the app starts, before any route mounts.
@@ -349,6 +386,11 @@ export default function RootLayout() {
     </ShareIntentProvider>
   );
 }
+
+// Sentry.wrap is what installs the error boundary and touch/navigation
+// breadcrumbs. Without it `init` alone still reports crashes, but every report
+// arrives with no trail of what the user did first.
+export default Sentry.wrap(RootLayout);
 
 // themed(): this sheet bakes in the canvas colour, and the canvas inverts
 // between schemes. A plain StyleSheet.create here paints white-on-white.

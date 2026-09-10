@@ -448,6 +448,16 @@ These cost real time already. Full context in [`docs/SHIPPED.md`](docs/SHIPPED.m
   form. The **New App form is the only authoritative check**. Test a name there BEFORE any
   rename lands in code.
 
+**Crash reporting**
+- ⚠️ **`EXPO_PUBLIC_SENTRY_DSN` is inlined at BUILD time.** A build made without it can
+  never gain crash reporting later — no OTA update can add it. It is set in EAS for
+  development/preview/production; if a build ever ships without reporting, that is why.
+- ⚠️ **Sentry does NOT see Share Extension crashes.** The extension is a separate process
+  with no JS runtime. If sharing breaks silently, Sentry will be quiet, and that silence
+  is not evidence of health — check the device's own crash logs instead.
+- The DSN is **not a secret**: it is compiled into every copy of the app and can only
+  write events. It belongs in git and in chat; the `.p8` and the service role key do not.
+
 **Share intent**
 - 🧨 **`mobile/app/+native-intent.ts` is load-bearing — deleting it breaks every iOS
   share with "Unmatched Route".** expo-router scans for that exact filename and hands it
