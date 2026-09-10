@@ -1,3 +1,20 @@
+/**
+ * ⚠️ NOT REGISTERED IN app.json RIGHT NOW — AND DO NOT RE-ADD IT UNTIL THE
+ * PREBUILD FAILURE IS UNDERSTOOD. IT BREAKS EVERY iOS BUILD.
+ *
+ * Three EAS builds died in the Prebuild phase with this plugin registered
+ * (c080fa09 as a dangerous mod, 1e85219c as an Xcode mod). A fourth build,
+ * identical except that this plugin was removed, FINISHED — so the cause is
+ * this file, not the `share-config` local module and not the
+ * NSExtensionActivationSupportsText rule. Both of those shipped fine.
+ *
+ * What is NOT yet known is why. The mod patches correctly in a local harness
+ * that runs it against a faithful copy of the expo-share-intent 8.0.1 template
+ * (see the PR), and EAS's Prebuild log is encrypted at rest and unreadable from
+ * the CLI, so the actual error message has never been seen. Two theories have
+ * already been wrong; the next step is READING THE LOG, not a third theory.
+ */
+
 const fs = require('fs');
 const path = require('path');
 const { withXcodeProject } = require('@expo/config-plugins');

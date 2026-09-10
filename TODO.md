@@ -114,17 +114,20 @@ because a pause is reversible. A deletion would not have been.
 
 ## iOS share — invisible, like Android
 
-- [~] 🔴 **iOS Share Extension saves without opening the app.** Built 2026-09-10
-  (`plugins/withInvisibleShareIOS.js` + the `share-config` local module); **needs a real
-  device to confirm** — Windows cannot prebuild or compile iOS, so none of the Swift has
-  ever been through a compiler locally. Replaced the old blocker: sharing used to
-  foreground the whole app and strand Instagram's share sheet, and iOS has no public API
-  to exit an app, so the app simply must never open.
-  ⚠️ **The upload is a BACKGROUND URLSession and that is not decoration.**
-  `completeRequest` tears the extension process down; a foreground task started just
-  before it dies mid-flight and the save silently never happens.
-  ⚠️ It **falls back** rather than failing: no share key (signed out, offline when it was
-  minted, an older build) means the old open-the-app path runs.
+- [ ] 🔴 **iOS Share Extension saves without opening the app — BUILT, DISABLED, BLOCKED.**
+  `plugins/withInvisibleShareIOS.js` exists and is NOT registered in `app.json`, because
+  registering it fails **every** iOS build in the Prebuild phase (c080fa09 as a dangerous
+  mod, 1e85219c as an Xcode mod). Build 7612e5a9 — identical but with the plugin removed —
+  FINISHED, so the cause is that one file: the `share-config` local module and the
+  `NSExtensionActivationSupportsText` rule both shipped fine.
+  ⚠️ **The blocker is that nobody has read the error.** EAS's Prebuild log is encrypted at
+  rest, `build:view --json` returns only `UNKNOWN_ERROR`, and the CLI does not stream phase
+  logs. The mod patches correctly in a local harness against a faithful copy of the
+  expo-share-intent 8.0.1 template, so the EAS environment differs in some way the error
+  text would name in one line. **Two theories have already been wrong. Read the log
+  (expo.dev → the build → Prebuild) before trying a third.**
+  ⚠️ Until then iOS sharing still opens the app, and Instagram's share sheet is still left
+  stranded behind it. Android is unaffected.
 - [ ] 👤 **Verify on device:** share from Instagram, YouTube **and LinkedIn**; you should
   stay in the source app and the save should appear in the library within seconds.
 
