@@ -50,7 +50,6 @@
       ],
       "expo-notifications",
       "./plugins/withInvisibleShare",
-      "./plugins/withInvisibleShareIOS",
       [
         "expo-splash-screen",
         {
