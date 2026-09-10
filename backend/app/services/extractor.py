@@ -596,6 +596,35 @@ def _fetch_page(url: str) -> Optional[str]:
     return None
 
 
+def clean_title_text(title: str) -> str:
+    """Strip the platform noise out of a raw og:title / yt-dlp title.
+
+    ⚠️ CALL THIS ON EVERY PATH THAT PRODUCES A TITLE. It used to live inline in
+    `_extract_from_page`, which is one of THREE places `extract_info` can return
+    a title from — and not the one Facebook takes. yt-dlp answers a Facebook
+    reel with a title and nothing else, so the engagement-count prefix this had
+    always stripped shipped straight to the card anyway:
+
+        "5.1M views · 189K reactions | This Quote Changes Everything… | Chris Williamson"
+
+    Right regex, wrong number of callers. Fixing it in the shared function is
+    also a smaller diff than guarding each return site.
+    """
+    t = re.sub(r'\s*\|\s*LinkedIn\s*$', '', title or '').strip()
+    # "205K views · 800 reactions | Real title" — Meta puts engagement first.
+    # Non-greedy to the FIRST pipe, so a title carrying its own pipes survives.
+    t = re.sub(
+        r'^[\d.,kmb]+\s+(?:views?|reactions?|likes?|comments?|shares?)\b.*?\|\s*',
+        '', t, flags=re.IGNORECASE,
+    )
+    # og:title can be the entire caption (Instagram dumps the whole recipe in
+    # it). Keep the first line only, capped, so the card title stays readable.
+    t = t.split('\n', 1)[0].strip()
+    if len(t) > 90:
+        t = t[:90].rsplit(' ', 1)[0] + '…'
+    return t
+
+
 def _extract_from_page(url: str) -> dict:
     """Fetch text from a page via JSON-LD (full body) then Open Graph meta tags.
     Best-effort — returns empty fields on failure."""
@@ -613,18 +642,7 @@ def _extract_from_page(url: str) -> dict:
         m = re.search(r'<title[^>]*>(.*?)</title>', page, re.IGNORECASE | re.DOTALL)
         title = unescape(m.group(1).strip()) if m else ''
 
-    # og:title can be the entire caption (Instagram dumps the whole recipe in it).
-    # Keep just the first line, capped, so the card title stays short and readable.
-    clean_title = re.sub(r'\s*\|\s*LinkedIn\s*$', '', title).strip()
-    # Facebook prefixes a reel's og:title with engagement counts, e.g.
-    # "205K views · 800 reactions | Real title" — strip that noise.
-    clean_title = re.sub(
-        r'^[\d.,kmb]+\s+(?:views?|reactions?|likes?|comments?|shares?)\b.*?\|\s*',
-        '', clean_title, flags=re.IGNORECASE,
-    )
-    clean_title = clean_title.split('\n', 1)[0].strip()
-    if len(clean_title) > 90:
-        clean_title = clean_title[:90].rsplit(' ', 1)[0] + '…'
+    clean_title = clean_title_text(title)
 
     return {
         "title": clean_title,
@@ -907,20 +925,27 @@ def extract_info(url: str) -> dict:
             logger.warning(f"[EXTRACT] attempt #{i + 1} failed for {url}: {type(e).__name__}: {e}")
             continue
 
+    # What yt-dlp gave us when it produced metadata but no readable text. Kept as
+    # a floor for the fallback paths below, so falling through can only ADD.
+    ydl_floor: dict = {}
+
     if ydl_info:
-        title = ydl_info.get("title") or ""
+        title = clean_title_text(ydl_info.get("title") or "")
         description = ydl_info.get("description") or ""
         transcript, cue_starts = _get_captions(ydl_info)
         best_text = transcript or description
         thumb = _pick_thumbnail(ydl_info, platform)
         duration = int(ydl_info.get("duration") or 0)
-        # yt-dlp with process=False can return a truthy but EMPTY shell for gated
-        # platforms — notably Facebook reels yield a dict with no title, thumbnail
-        # or text. Trusting it here short-circuits the public-og: fallback below,
-        # which DOES read the title/thumbnail/caption via the crawler UA. So only
-        # take this path when yt-dlp actually produced something; otherwise fall
-        # through to the page-meta / oEmbed fallbacks.
-        if title or thumb or best_text.strip():
+        # yt-dlp with process=False can return a truthy but near-EMPTY shell for
+        # gated platforms — notably Facebook, which yields a title and a
+        # thumbnail and NO text at all. This guard used to read
+        # `title or thumb or text`, which the title alone satisfied: the save
+        # returned here, the public-og:/oEmbed fallbacks that actually carry a
+        # Facebook caption were never tried, and every Facebook save became a
+        # login-walled card with a picture on it. TEXT is what this branch has
+        # to have — the fallbacks cannot improve on a transcript, but they are
+        # the only source of one when yt-dlp has none.
+        if best_text.strip():
             record_result(platform, True)
             return {
                 "title": title,
@@ -936,7 +961,13 @@ def extract_info(url: str) -> dict:
                 "extracted": bool((best_text or "").strip()) or bool(thumb),
                 "meta": _build_meta(ydl_info, duration, transcript, cue_starts, description),
             }
-        logger.info(f"[EXTRACT] yt-dlp returned an empty shell for {url} — using page-meta fallback")
+        # No text. Keep whatever metadata yt-dlp did produce and go looking for
+        # the words elsewhere; the fallbacks below merge this back in.
+        ydl_floor = {
+            "title": title, "thumb": thumb,
+            "uploader": ydl_info.get("uploader") or "", "duration": duration,
+        }
+        logger.info(f"[EXTRACT] yt-dlp returned no text for {url} — trying page-meta/oEmbed fallback")
 
     if last_err:
         logger.error(f"[EXTRACT] all yt-dlp attempts failed for {url}: {type(last_err).__name__}: {last_err}")
@@ -950,9 +981,9 @@ def extract_info(url: str) -> dict:
     # instead of timing out or failing.
     if platform == "youtube":
         meta = _youtube_oembed(url)
-        title = meta.get("title") or ""
-        thumb = meta.get("image") or ""
-        uploader = meta.get("uploader") or ""
+        title = meta.get("title") or ydl_floor.get("title") or ""
+        thumb = meta.get("image") or ydl_floor.get("thumb") or ""
+        uploader = meta.get("uploader") or ydl_floor.get("uploader") or ""
 
         # Last resort before giving up on text: the official Data API. yt-dlp and
         # the page scrape are both bot-blocked from datacenter IPs, so on the
@@ -1007,7 +1038,7 @@ def extract_info(url: str) -> dict:
     elif platform == "facebook":
         native = facebook_oembed(url)
 
-    title = page_meta.get("title") or ""
+    title = page_meta.get("title") or ydl_floor.get("title") or ""
     description = page_meta.get("description") or ""
     if len((native.get("description") or "").strip()) > len(description.strip()):
         description = native["description"].strip()
@@ -1027,10 +1058,10 @@ def extract_info(url: str) -> dict:
         "caption": description,
         "transcript": "",
         "best_text": best_text,
-        "thumbnail_url": page_meta.get("image") or native.get("image") or "",
-        "duration": 0,
+        "thumbnail_url": page_meta.get("image") or native.get("image") or ydl_floor.get("thumb") or "",
+        "duration": ydl_floor.get("duration") or 0,
         "platform": platform,
-        "uploader": native.get("uploader") or "",
+        "uploader": native.get("uploader") or ydl_floor.get("uploader") or "",
         "needs_audio": False,
         "login_required": not best_text,
         # Cache page extractions that actually yielded text (e.g. LinkedIn via JSON-LD).

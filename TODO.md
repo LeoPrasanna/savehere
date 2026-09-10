@@ -229,6 +229,17 @@ price edit. Also: **Pro is only 2x the trial's 10/day**, so the upgrade story re
 
 ## Extraction reliability — open
 
+- [x] **Facebook saves arrived login-walled with a noisy title** (fixed 2026-09-10).
+  Two bugs on one card. (a) yt-dlp answers a Facebook reel with a title and a
+  thumbnail and *no text*, and the "did yt-dlp give us anything?" guard was
+  `title or thumb or text` — so the save returned before the og:/oEmbed
+  fallbacks that actually carry the caption ever ran. It now requires TEXT, and
+  keeps the yt-dlp metadata as a floor when it falls through. (b) The
+  engagement-count prefix (`5.1M views · 189K reactions | …`) *was* being
+  stripped — inline in `_extract_from_page`, one of three paths that can return
+  a title, and not the one Facebook takes. Now `clean_title_text()`, called on
+  every path. Tests in `test_extractor.py`.
+
 - [ ] **Bot-detection on datacenter IPs — decide before prod.** Saving a YouTube Short
   fails with "Sign in to confirm you're not a bot" from a datacenter IP, and
   **Render/Railway/Fly are all datacenter IPs, so deploying does not fix it — usually

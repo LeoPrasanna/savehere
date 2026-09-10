@@ -1,4 +1,6 @@
 """Pure-function tests for the extraction pipeline — the core of save reliability."""
+from unittest.mock import patch
+
 from app.services import extractor
 
 
@@ -143,3 +145,39 @@ class TestFetchPageObservability:
         assert len(hits) == 1, "expected exactly one summary line, not one per identity"
         assert "OSError" in hits[0].message
         assert "unreachable.example" in hits[0].message
+
+
+# ── Facebook: a title-only yt-dlp result must not short-circuit the fallbacks ──
+#
+# Both regressions here shipped together on one card:
+#   "5.1M views · 189K reactions | This Quote Changes Everything… | Chris Williamson"
+#   "Facebook requires login — we couldn't read this automatically"
+# The engagement prefix was already stripped — on a code path Facebook never
+# took — and the caption fallback was skipped because a title alone satisfied
+# the "did yt-dlp give us anything?" guard.
+
+def test_clean_title_strips_engagement_prefix():
+    assert extractor.clean_title_text(
+        "5.1M views · 189K reactions | This Quote Changes Everything | Chris Williamson"
+    ) == "This Quote Changes Everything | Chris Williamson"
+    assert extractor.clean_title_text("205K views | Real title") == "Real title"
+    assert extractor.clean_title_text("Sandeep Jain posted | LinkedIn") == "Sandeep Jain posted"
+    # A title that merely CONTAINS a number must survive untouched.
+    assert extractor.clean_title_text("5 things | I learned") == "5 things | I learned"
+
+
+def test_textless_ydl_result_falls_through_to_page_fallback():
+    """yt-dlp gives Facebook a title and a thumbnail and no words. The caption
+    lives on the og: surface, so the extractor has to keep going — while still
+    keeping the metadata yt-dlp did manage."""
+    shell = {"title": "5.1M views · 189K reactions | Real title", "thumbnail": "https://cdn/t.jpg", "uploader": "Chris"}
+    with patch.object(extractor, "_run_ydl", return_value=shell), \
+         patch.object(extractor, "_pick_thumbnail", return_value="https://cdn/t.jpg"), \
+         patch.object(extractor, "_extract_from_page", return_value={"description": "the actual caption body"}), \
+         patch.object(extractor, "facebook_oembed", return_value={}):
+        out = extractor.extract_info("https://www.facebook.com/reel/123456")
+
+    assert out["best_text"] == "the actual caption body"   # fallback ran
+    assert out["title"] == "Real title"                    # prefix stripped
+    assert out["thumbnail_url"] == "https://cdn/t.jpg"     # ydl metadata kept
+    assert out["login_required"] is False

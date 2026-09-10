@@ -34,7 +34,6 @@ export default function ReelDetailScreen() {
   const [reel, setReel] = useState<Reel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [resummarizing, setResummarizing] = useState(false);
   const [summarizing, setSummarizing] = useState(false);
   const [taskList, setTaskList] = useState<TaskListResponse | null>(null);
   const [generatingTasks, setGeneratingTasks] = useState(false);
@@ -161,23 +160,6 @@ export default function ReelDetailScreen() {
   const notify = (msg: string) => {
     if (Platform.OS === 'web') window.alert(msg);
     else Alert.alert('', msg);
-  };
-
-  const handleResummarize = async () => {
-    if (!reel) return;
-    setResummarizing(true);
-    try {
-      const updated = await api.resummarize(id);
-      setReel(updated);
-      haptics.success();
-    } catch (e: any) {
-      haptics.error();
-      let msg = 'Re-summarize failed.';
-      if (e?.message) msg = e.message;   // api.ts already extracted the server detail
-      notify(msg);
-    } finally {
-      setResummarizing(false);
-    }
   };
 
   // Run/retry the first summary (pending stuck or failed).
@@ -479,26 +461,15 @@ export default function ReelDetailScreen() {
             <Icon name="sparkles" size={15} color={colors.accent} />
             <Text style={styles.cardTitle}>Summary</Text>
           </View>
-          {/* Only offer Re-summarize when there's no summary yet — once it's
-              generated, the header stays clean (it can still be regenerated only
-              when empty, e.g. after pasting the post text into Notes). No per-reel
-              retry cap: each run draws from the daily AI quota instead. */}
-          {reel.summary.length === 0 && !isSummarizing && (
-            <Pressable
-              style={styles.pill}
-              onPress={handleResummarize}
-              disabled={resummarizing}
-            >
-              {resummarizing ? (
-                <ActivityIndicator size="small" color={colors.accent} />
-              ) : (
-                <Ionicons name="refresh" size={13} color={colors.accent} />
-              )}
-              <Text style={styles.pillText}>
-                {resummarizing ? 'Re-summarizing…' : 'Re-summarize'}
-              </Text>
-            </Pressable>
-          )}
+          {/* ⚠️ NO Re-summarize BUTTON HERE (owner, 2026-09-10) — do not put it
+              back. It only ever rendered on an EMPTY summary, and an empty
+              summary on this screen means the extractor could not read the post
+              (login-walled Facebook/LinkedIn). Re-running the same failed
+              extraction cannot produce a different answer, so the button spent
+              an AI action to redisplay the same lock icon. The states where a
+              retry CAN work — `failed`, stalled `pending`, `quota_exceeded`
+              after the reset — keep their own Try again / Summarize now button
+              inside the card body below. */}
         </View>
 
         {isSummarizing ? (
@@ -586,7 +557,6 @@ export default function ReelDetailScreen() {
                 ? 'This post is behind a login, so its text could not be read.'
                 : 'This reel uses on-screen text or visuals with no speech or description — we can\'t extract that yet. '}
             </Text>
-            <Text style={styles.quotaNote}>Each re-summarize uses 1 AI action from your daily quota — your tier sets the cap.</Text>
           </View>
         )}
       </View>
