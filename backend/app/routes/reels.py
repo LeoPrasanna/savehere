@@ -658,8 +658,18 @@ def client_metadata(reel_id: str, body: ClientMetadataRequest,
     # freshly-saved reel (whose own title is still the "Instagram Reel"
     # placeholder, i.e. weak) is precisely the bug — the card showed a real
     # title for a second and then changed to "Login • Instagram".
+    #
+    # ⚠️ THE CLIENT'S TITLE GOES THROUGH `clean_title_text` TOO. This is where a
+    # Facebook title really comes from: the server's own fetch is blocked from a
+    # datacenter IP, the PHONE's fetch is not, so the og:title that reaches the
+    # card was read on the device and posted here — never touching the
+    # extractor, and never touching the cleaner that lives there. That is why
+    # "13M views · 445K reactions | Here's 10 Years Of Therapy…" survived a fix
+    # that demonstrably strips exactly that prefix. Cleaning it on the server
+    # rather than in the app is deliberate: this is untrusted client input at a
+    # trust boundary, and it also means the fix ships without a mobile build.
     if body.title and not _is_login_wall_title(body.title) and _weak_title(reel.title):
-        reel.title = body.title.strip()[:300]
+        reel.title = extractor.clean_title_text(body.title)[:300]
     if body.thumbnail_url and not reel.thumbnail_url:
         reel.thumbnail_url = body.thumbnail_url.strip()
     if body.uploader and not reel.uploader:

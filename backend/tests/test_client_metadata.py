@@ -215,3 +215,17 @@ def test_short_client_text_stays_skipped_but_keeps_title(env):
     assert reel.thumbnail_url == "https://cdninstagram.com/x.jpg"
     assert s.query(AiUsageDB).filter(AiUsageDB.user_id == QUOTA_KEY).first() is None  # no charge
     s.close()
+
+
+def test_client_title_is_cleaned_like_any_other(env):
+    """The phone reads Facebook's og:title from a residential IP and posts it
+    here — which is why the engagement prefix survived a fix that strips exactly
+    that prefix inside the extractor. The client never goes through the
+    extractor, so the cleaning has to happen at this boundary."""
+    client, Session = env
+    rid = _make_reel(Session)
+
+    r = client.post(f"/api/reels/{rid}/client-metadata", json=_payload(
+        title="13M views · 445K reactions | Here's 10 Years Of Therapy | Chris Williamson"))
+    assert r.status_code == 200, r.text
+    assert r.json()["title"] == "Here's 10 Years Of Therapy | Chris Williamson"
