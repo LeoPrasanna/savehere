@@ -114,20 +114,18 @@ because a pause is reversible. A deletion would not have been.
 
 ## iOS share — invisible, like Android
 
-- [ ] 🔴 **iOS Share Extension saves without opening the app — BUILT, DISABLED, BLOCKED.**
-  `plugins/withInvisibleShareIOS.js` exists and is NOT registered in `app.json`, because
-  registering it fails **every** iOS build in the Prebuild phase (c080fa09 as a dangerous
-  mod, 1e85219c as an Xcode mod). Build 7612e5a9 — identical but with the plugin removed —
-  FINISHED, so the cause is that one file: the `share-config` local module and the
-  `NSExtensionActivationSupportsText` rule both shipped fine.
-  ⚠️ **The blocker is that nobody has read the error.** EAS's Prebuild log is encrypted at
-  rest, `build:view --json` returns only `UNKNOWN_ERROR`, and the CLI does not stream phase
-  logs. The mod patches correctly in a local harness against a faithful copy of the
-  expo-share-intent 8.0.1 template, so the EAS environment differs in some way the error
-  text would name in one line. **Two theories have already been wrong. Read the log
-  (expo.dev → the build → Prebuild) before trying a third.**
-  ⚠️ Until then iOS sharing still opens the app, and Instagram's share sheet is still left
-  stranded behind it. Android is unaffected.
+- [~] 🔴 **iOS Share Extension saves without opening the app.** Re-enabled 2026-09-10
+  after four builds. ⚠️ **`./plugins/withInvisibleShareIOS` MUST be listed BEFORE
+  `expo-share-intent` in `app.json` — that looks backwards and is not.**
+  `@expo/config-plugins` runs mods in **reverse** registration order
+  (`withMod.js:199` runs this plugin's action, *then* `nextMod`), and
+  expo-share-intent writes `ShareExtensionViewController.swift` in its own
+  `withXcodeProject` mod. Registered after it, ours ran before the file existed and
+  threw "found 0".
+  ⚠️ **The error text only ever existed on expo.dev.** `eas build:view --json` returns
+  `UNKNOWN_ERROR`, the CLI does not stream phase logs, and the downloadable log is
+  encrypted at rest. **Read the Prebuild phase on expo.dev before theorising** — two
+  theories and three build slots went to guessing at an error nobody had read.
 - [ ] 👤 **Verify on device:** share from Instagram, YouTube **and LinkedIn**; you should
   stay in the source app and the save should appear in the library within seconds.
 
