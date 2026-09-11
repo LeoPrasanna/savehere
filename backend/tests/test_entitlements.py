@@ -420,15 +420,17 @@ class TestAccountDeletionInteraction:
 
 
 class TestAutoSummaryTier:
-    """⚠️ `auto_summary` and `can_ask` MUST stay on the same tier boundary.
+    """⚠️ EVERY TIER GETS A FULL AUTOMATIC SUMMARY BY DEFAULT.
 
-    Free saves get the cheap index pass (tags/category/title, no bullets). The
-    obvious objection is "then Ask reads an empty library" — it cannot, because
-    Ask is Pro-and-trial-only. If anyone ever gives free users Ask without also
-    giving them auto-summary, this is the test that fails.
+    Gating free saves to the cheap index pass shipped on 2026-09-11 and the
+    owner reverted it the same day — the automatic summary is what the product
+    is. The machinery survives behind `FREE_AUTO_SUMMARY` because the argument
+    for gating is a cost argument and it has not gone away; these tests cover
+    the flag in both positions so re-enabling it is a config change, not a
+    rediscovery.
     """
 
-    def test_free_is_indexed_not_summarized(self, env):
+    def test_free_gets_a_full_summary_by_default(self, env):
         _, Session = env
         db = Session()
         try:
@@ -440,8 +442,25 @@ class TestAutoSummaryTier:
         try:
             ent = entitlements_for(AuthUser(id="u-as", email="as@b.co"), db)
             assert ent.tier == "free"
+            assert ent.auto_summary is True      # the reverted behaviour
+            assert ent.can_ask is False          # Ask stays paid — unrelated gate
+        finally:
+            db.close()
+
+    def test_the_gate_still_works_when_turned_back_on(self, env, monkeypatch):
+        _, Session = env
+        db = Session()
+        try:
+            entitlements_for(AuthUser(id="u-as9", email="as9@b.co"), db)
+        finally:
+            db.close()
+        _backdate_trial(Session, "u-as9", days=11)
+        monkeypatch.setattr(settings, "FREE_AUTO_SUMMARY", False)
+        db = Session()
+        try:
+            ent = entitlements_for(AuthUser(id="u-as9", email="as9@b.co"), db)
+            assert ent.tier == "free"
             assert ent.auto_summary is False
-            assert ent.can_ask is False
         finally:
             db.close()
 

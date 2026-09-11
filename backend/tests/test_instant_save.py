@@ -159,10 +159,13 @@ class TestInstantSave:
         assert reel.summary_status == "skipped"  # no AI spend on long-form
 
 
-# ── Tier-gated auto-summary ──────────────────────────────────────────────────
+# ── Auto-summary: full for everyone, index behind a flag ─────────────────────
 #
-# Free saves take the cheap index pass: tags, category and a title, no bullets.
-# The end-to-end proof that it is wired to the TIER and not to something else.
+# ⚠️ THE DEFAULT IS A FULL SUMMARY ON EVERY TIER. Gating free saves to the cheap
+# index pass shipped on 2026-09-11 and the owner reverted it the same day: the
+# automatic summary is what the product is. These tests keep the index path
+# covered in BOTH positions so turning it back on is a config change rather
+# than a rediscovery — the cost argument for it is in TODO.md and is unchanged.
 
 def _expire_trial(Session, user_id):
     from app.database import ProfileDB
@@ -179,7 +182,7 @@ def _expire_trial(Session, user_id):
         db.close()
 
 
-def test_free_tier_save_is_indexed_not_summarized(env, monkeypatch):
+def test_free_tier_save_is_summarized_in_full_by_default(env, monkeypatch):
     client, Session = env
     calls = []
     monkeypatch.setattr(reels_module.summarizer, "summarize",
@@ -192,6 +195,30 @@ def test_free_tier_save_is_indexed_not_summarized(env, monkeypatch):
     client.get("/api/account/usage")        # creates the profile
     _expire_trial(Session, USER)
     r = client.post("/api/reels/save", json={"url": "https://youtube.com/shorts/freeuser1"})
+    assert r.status_code == 200, r.text
+
+    reel = _get_reel(Session, r.json()["id"])
+    assert calls == ["full"], f"free must get the full summary by default, got {calls}"
+    assert reel.summary == FAKE_AI["summary"]
+    assert reel.summary_status == "ready"
+
+
+def test_free_tier_save_is_indexed_when_the_gate_is_on(env, monkeypatch):
+    """The path is kept and covered: flipping one setting re-gates it."""
+    from app.config import settings
+    client, Session = env
+    monkeypatch.setattr(settings, "FREE_AUTO_SUMMARY", False)
+    calls = []
+    monkeypatch.setattr(reels_module.summarizer, "summarize",
+                        lambda **kw: calls.append("full") or dict(FAKE_AI))
+    monkeypatch.setattr(reels_module.summarizer, "index_only",
+                        lambda **kw: calls.append("index") or
+                        {"title": "t", "summary": [], "tags": ["a", "b"],
+                         "category": "tech", "low_content": False, "sensitive": False})
+
+    client.get("/api/account/usage")
+    _expire_trial(Session, USER)
+    r = client.post("/api/reels/save", json={"url": "https://youtube.com/shorts/gated1"})
     assert r.status_code == 200, r.text
 
     reel = _get_reel(Session, r.json()["id"])
@@ -213,10 +240,12 @@ def test_trial_tier_save_gets_the_full_summary(env):
     assert reel.summary_status == "ready"
 
 
-def test_summarize_now_runs_full_even_on_free(env, monkeypatch):
-    """The tier gates AUTOMATIC summaries. A summary the user asked for by name
+def test_summarize_now_runs_full_even_when_gated(env, monkeypatch):
+    """The flag gates AUTOMATIC summaries. A summary the user asked for by name
     — and was charged an AI action for — is always the full thing."""
+    from app.config import settings
     client, Session = env
+    monkeypatch.setattr(settings, "FREE_AUTO_SUMMARY", False)
     calls = []
     monkeypatch.setattr(reels_module.summarizer, "summarize",
                         lambda **kw: calls.append("full") or dict(FAKE_AI))
