@@ -1,5 +1,5 @@
 import { useEffect, useReducer } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import * as haptics from '../services/haptics';
 import { markEnteredLibrary, clearEnteredLibrary, hasEnteredLibrary } from '../services/sessionFlags';
 import { emitUi, onUi } from '../services/uiBus';
 import { colors, spacing, radius, themed } from '../constants/theme';
+import { tabBarSize, MAX_SLOT } from './tabBarSize';
 
 /**
  * The app's primary navigation: five tabs, floating clear of the bottom edge.
@@ -34,7 +35,14 @@ const HIDE_ON = ['/save', '/pro', '/workout/'];
 
 /**
  * How much room the bar occupies ABOVE the safe-area inset — pill height
- * (42 slot + 6+6 padding + 2 border = 56) plus the gap it floats by.
+ * (slot + 6+6 padding + 2 border) plus the gap it floats by.
+ *
+ * ⚠️ SIZED FOR THE LARGEST SLOT, not the current one. The slot now grows with
+ * the screen (see tabBarSize.ts), and this is a module constant that screens
+ * read at build time — it cannot depend on a hook. Reserving the maximum costs
+ * a few points of padding on a small phone and guarantees the bar never covers
+ * a pinned button on a large one, which is the failure this constant exists to
+ * prevent.
  *
  * ⚠️ EVERY SCREEN WITH ITS OWN BOTTOM CHROME MUST ADD THIS. The bar is
  * `position: absolute` at the root, so it silently covers anything a screen
@@ -44,7 +52,7 @@ const HIDE_ON = ['/save', '/pro', '/workout/'];
  *
  * Use as `paddingBottom: insets.bottom + TAB_BAR_CLEARANCE`.
  */
-export const TAB_BAR_CLEARANCE = 72;
+export const TAB_BAR_CLEARANCE = MAX_SLOT + 14 + 16;
 
 interface Tab {
   key: string;
@@ -74,6 +82,12 @@ export function TabBar() {
   const router = useRouter();
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
+  // ⚠️ ABOVE THE EARLY RETURN — this component bails out for HIDE_ON routes, so
+  // a hook called below that point would break the rules of hooks.
+  const { width } = useWindowDimensions();
+  // The gutter the bar cannot use: page padding either side, plus the gap
+  // between the pill and the detached Ask capsule.
+  const size = tabBarSize(width, spacing.md * 2 + spacing.sm);
 
   // Home and Library share the route `/` and are told apart by a session flag,
   // NOT by the pathname — so `usePathname()` never changes between them and
@@ -129,7 +143,7 @@ export function TabBar() {
         style={[styles.fade, { pointerEvents: 'none' }]}
       />
 
-      <View style={styles.row}>
+      <View style={[styles.row, { maxWidth: size.maxWidth }]}>
       <View style={styles.bar}>
         {/* The pill's own fill is a gradient, not a flat wash: a slightly lifted
             top edge is what gives it shape against a dark page. A flat fill
@@ -157,10 +171,14 @@ export function TabBar() {
                   A filled white circle was the brightest thing on the screen
                   and read as a button you had not pressed yet; a ring marks
                   position without shouting. */}
-              <View style={[styles.slot, on && styles.slotOn]}>
+              <View style={[
+                styles.slot,
+                { width: size.slot, height: size.slot, borderRadius: size.slot / 2 },
+                on && styles.slotOn,
+              ]}>
                 <Icon
                   name={t.icon}
-                  size={19}
+                  size={size.icon}
                   color={on ? colors.textPrimary : colors.textSecondary}
                   emphasis={on}
                 />
@@ -170,7 +188,7 @@ export function TabBar() {
         })}
       </View>
 
-      {/* Same fill, same border, same 42pt slot as a tab — only detached. */}
+      {/* Same fill, same border, same slot as a tab — only detached. */}
       <Pressable
         style={styles.askWrap}
         onPress={() => go(ASK.key)}
@@ -181,10 +199,14 @@ export function TabBar() {
           colors={[colors.tabBarTop, colors.tabBarBottom]}
           style={[styles.askFill, { pointerEvents: 'none' }]}
         />
-        <View style={[styles.slot, active === ASK.key && styles.slotOn]}>
+        <View style={[
+          styles.slot,
+          { width: size.slot, height: size.slot, borderRadius: size.slot / 2 },
+          active === ASK.key && styles.slotOn,
+        ]}>
           <Icon
             name={ASK.icon}
-            size={19}
+            size={size.icon}
             color={active === ASK.key ? colors.textPrimary : colors.textSecondary}
             emphasis={active === ASK.key}
           />
@@ -219,6 +241,7 @@ const styles = themed(() => StyleSheet.create({
    * bottom edge.
    */
   bar: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'center',
@@ -248,9 +271,14 @@ const styles = themed(() => StyleSheet.create({
     borderRadius: radius.circle,
   },
   // The pill and the detached Ask capsule, side by side and centred as a unit.
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  tab: { alignItems: 'center', justifyContent: 'center' },
-  // 42 slot + 6+6 padding + 2 border = 56, i.e. exactly the pill's height.
+  // ⚠️ STRETCHES, it no longer hugs its contents. Five fixed 42pt slots read as
+  // a stranded island on a 430pt Pro Max next to Apple Music's near-full-width
+  // bar (owner, 2026-09-11). `maxWidth` is applied inline from tabBarSize so a
+  // tablet centres instead of stretching into a runway.
+  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'stretch' },
+  // flex:1 so the five tabs divide the stretched pill evenly — this is what
+  // makes the touch targets grow with the screen rather than stay 42pt.
+  tab: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   askWrap: {
     padding: 6,
     borderRadius: radius.circle,
@@ -264,12 +292,10 @@ const styles = themed(() => StyleSheet.create({
     position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
     borderRadius: radius.circle,
   },
+  // width/height/borderRadius come in INLINE from tabBarSize — they depend on
+  // the screen. A concrete radius (not the 999 sentinel) because a renderer can
+  // clamp the sentinel, and this ring is the one mark saying which tab you are on.
   slot: {
-    width: 42, height: 42,
-    // Exactly half the box, not the 999 sentinel. Both should resolve to the
-    // same circle, but a concrete value cannot be clamped or rounded down by a
-    // renderer, and this is the one mark that says which tab you are on.
-    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },

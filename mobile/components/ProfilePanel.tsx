@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, Platform, ScrollView, Animated } from 'react-native';
+import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, Platform, ScrollView, Animated, ActivityIndicator } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, Reel, Usage, UsageLog } from '../services/api';
 import { getCachedUsage, refreshUsage, onUsage } from '../services/usageCache';
 import { resumesAtSentence } from '../services/quotaReset';
+import { shareKeyReady, ensureShareKey } from '../services/shareKey';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { Label, Body, Title, Rule, GhostButton, FilledButton, Index } from './kit';
@@ -56,6 +57,11 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   const panelWidth = Math.min(340, width * 0.9);
   const { displayName, profile, signOut, deleteAccount } = useAuth();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  // null until the first read — "Silent share" with no verdict, rather than a
+  // confident "off" that is merely uninitialised.
+  const [shareArmed, setShareArmed] = useState<boolean | null>(null);
+  const [rearming, setRearming] = useState(false);
+  useEffect(() => { shareKeyReady().then(setShareArmed).catch(() => {}); }, []);
   const [deleting, setDeleting] = useState(false);
   // Seeded from the login-time fetch (services/usageCache), so the stats row
   // and the tier badge are already correct on the panel's FIRST frame instead
@@ -413,6 +419,35 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
             {/* ── Session ── */}
             <Label wide style={styles.section}>Session</Label>
             <Rule />
+            {/*
+              ⚠️ THE INVISIBLE SHARE'S ONLY VISIBLE SURFACE, and the reason it
+              is here at all: when arming fails, sharing silently falls back to
+              opening the app — which looks exactly like the bug the share
+              extension exists to fix, with nothing anywhere to tell the two
+              apart. The owner could not answer "is the key even on the device?"
+              and neither could I. Tapping re-arms it.
+            */}
+            {Platform.OS !== 'web' ? (
+              <>
+                <Pressable
+                  style={styles.row}
+                  onPress={async () => {
+                    if (rearming) return;
+                    setRearming(true);
+                    setShareArmed(await ensureShareKey());
+                    setRearming(false);
+                  }}
+                >
+                  <Body tone="primary" style={styles.rowLabel}>
+                    {shareArmed === null ? 'Silent share' : shareArmed ? 'Silent share is on' : 'Silent share is off'}
+                  </Body>
+                  {rearming
+                    ? <ActivityIndicator size="small" color={colors.textTertiary} />
+                    : <Icon name={shareArmed ? 'checkmark' : 'refresh'} size={15} color={colors.textTertiary} />}
+                </Pressable>
+                <Rule />
+              </>
+            ) : null}
             <Pressable style={styles.row} onPress={() => { onClose(); signOut(); }}>
               <Body tone="primary" style={styles.rowLabel}>Sign out</Body>
               <Icon name="login" size={15} color={colors.textTertiary} />

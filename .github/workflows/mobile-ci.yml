@@ -70,3 +70,4 @@ jobs:
           node --experimental-strip-types --no-warnings components/coverStyle.test.ts
           node --experimental-strip-types --no-warnings services/cardTitle.test.ts
           node --experimental-strip-types --no-warnings services/readFailure.test.ts
+          node --experimental-strip-types --no-warnings components/tabBarSize.test.ts

@@ -37,10 +37,35 @@ import { setShareConfig, clearShareConfig } from '../modules/share-config';
  */
 
 const KEY = '@savehere:sharekey:v1';
+/** Did the LAST arming attempt actually finish? See `shareKeyReady`. */
+const STATE = '@savehere:sharekey:armed:v1';
 
 interface ShareConfig {
   key: string;
   apiUrl: string;
+}
+
+/**
+ * True when the invisible share is armed on this device.
+ *
+ * ⚠️ THIS EXISTS BECAUSE THE FAILURE WAS INVISIBLE. Arming ran once per launch,
+ * swallowed every error, and told nobody. A share then quietly fell back to
+ * opening the app — indistinguishable, from the outside, from the bug the whole
+ * extension was built to fix. There was no way for the owner to answer "is the
+ * key even there?" and no way for me to ask their device.
+ *
+ * A cold Render free instance takes ~50 s to answer (see the note in
+ * contexts/AuthContext.tsx), which is precisely how a launch-time mint loses.
+ */
+export async function shareKeyReady(): Promise<boolean> {
+  if (Platform.OS === 'web') return false;
+  return (await AsyncStorage.getItem(STATE).catch(() => null)) === 'armed';
+}
+
+/** Re-arm only if the last attempt didn't finish. Cheap to call on resume. */
+export async function retryShareKeyIfNeeded(): Promise<void> {
+  if (await shareKeyReady()) return;
+  await ensureShareKey();
 }
 
 /**
@@ -52,24 +77,44 @@ interface ShareConfig {
  * share. Without a key the Activity forwards the intent to the app, which is
  * exactly today's Phase A behaviour.
  */
-export async function ensureShareKey(): Promise<void> {
+export async function ensureShareKey(): Promise<boolean> {
   // Both native platforms now have an invisible share: Android's ShareActivity
   // and, since 2026-09-10, the iOS Share Extension. Web has neither.
-  if (Platform.OS === 'web') return;
-  try {
-    const { key } = await api.createShareKey();
-    const config: ShareConfig = { key, apiUrl: apiBaseUrl() };
-    const json = JSON.stringify(config);
-    await AsyncStorage.setItem(KEY, json);
-    // iOS reads from the App Group, not from AsyncStorage. A false return means
-    // the native module is missing (an older build) — the extension then finds
-    // no key and falls back to opening the app, which is the old behaviour, not
-    // a broken one.
-    if (Platform.OS === 'ios') setShareConfig(json);
-  } catch {
-    // Offline, or a backend that predates the endpoint. Leave whatever is
-    // already stored — an older key still works until it is superseded.
+  if (Platform.OS === 'web') return false;
+
+  // ⚠️ RETRIED, because ONE attempt at launch is the wrong number. Minting
+  // needs the backend, the backend is a free Render instance, and a cold one
+  // takes ~50 s to answer — so the request most likely to fail is the one fired
+  // the instant the app opens. It used to fail there silently and never try
+  // again until the next cold start, leaving the share falling back to opening
+  // the app for the rest of the session.
+  const BACKOFF = [0, 3000, 12000];
+  for (let i = 0; i < BACKOFF.length; i++) {
+    if (BACKOFF[i]) await new Promise(r => setTimeout(r, BACKOFF[i]));
+    try {
+      const { key } = await api.createShareKey();
+      const config: ShareConfig = { key, apiUrl: apiBaseUrl() };
+      const json = JSON.stringify(config);
+      await AsyncStorage.setItem(KEY, json);
+      // iOS reads from the App Group, not from AsyncStorage.
+      //
+      // ⚠️ THE RETURN VALUE IS CHECKED NOW. It was discarded, so a build whose
+      // native module was missing or unentitled stored a perfectly good key in
+      // a place the Share Extension cannot see and reported success. "We wrote
+      // it" and "the other process can read it" are different claims.
+      if (Platform.OS === 'ios' && !setShareConfig(json)) {
+        await AsyncStorage.setItem(STATE, 'unarmed').catch(() => {});
+        return false;   // native module absent — retrying cannot fix it
+      }
+      await AsyncStorage.setItem(STATE, 'armed').catch(() => {});
+      return true;
+    } catch {
+      // Offline, cold backend, or a build that predates the endpoint. Leave
+      // whatever is already stored — an older key still works until superseded.
+    }
   }
+  await AsyncStorage.setItem(STATE, 'unarmed').catch(() => {});
+  return false;
 }
 
 /**
@@ -82,6 +127,7 @@ export async function ensureShareKey(): Promise<void> {
  */
 export async function clearShareKey(): Promise<void> {
   await AsyncStorage.removeItem(KEY).catch(() => {});
+  await AsyncStorage.removeItem(STATE).catch(() => {});
   // ⚠️ The App Group copy has to go too. Miss it and the Share Extension keeps
   // a working credential after sign-out and carries on saving into an account
   // nobody is signed into on this device — the exact failure the local delete
