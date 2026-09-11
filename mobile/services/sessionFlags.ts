@@ -27,6 +27,24 @@ export function clearEnteredLibrary(): void {
   enteredLibrary = false;
 }
 
+/**
+ * The save-ceiling alert has been shown once this session.
+ *
+ * ⚠️ SESSION-SCOPED ON PURPOSE, not persisted. Someone sitting at 963/1000
+ * should be told once when they open the app, not on every return to the
+ * library — and equally, should be told AGAIN tomorrow, because the situation
+ * has not gone away. A persisted "dismissed forever" flag would let them walk
+ * into a refused save having been warned once, weeks earlier.
+ */
+let warnedSaveCeiling = false;
+
+/** One-shot per session: true the first time only. */
+export function claimSaveCeilingWarning(): boolean {
+  if (warnedSaveCeiling) return false;
+  warnedSaveCeiling = true;
+  return true;
+}
+
 export function markReopenPanel(): void {
   reopenPanel = true;
 }
@@ -41,4 +59,6 @@ export function consumeReopenPanel(): boolean {
 export function resetSessionFlags(): void {
   enteredLibrary = false;
   reopenPanel = false;
+  // The next account's library has its own count; never inherit this.
+  warnedSaveCeiling = false;
 }

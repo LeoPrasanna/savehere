@@ -13,6 +13,7 @@ import { emitUi, onUi } from '../services/uiBus';
 import { ASK_MIN_REELS } from '../constants/limits';
 import { TAB_BAR_CLEARANCE } from './TabBar';
 import { getSaveCount, hydrateSaveCount, rememberSaveCount } from '../services/saveCount';
+import { RollingTagline } from './RollingTagline';
 
 /**
  * The home screen — "editorial hero" (variant D7, owner-selected 2026-08-03).
@@ -51,6 +52,18 @@ import { getSaveCount, hydrateSaveCount, rememberSaveCount } from '../services/s
 
 /** Both taps hand off to a screen that already owns the job — this screen holds
  *  no paste or ask logic of its own, so there is one implementation of each. */
+/** Things worth doing with a library that already exists. Phrased as
+ *  invitations, not features — this sits under a receipt, and a list of nouns
+ *  next to three numbers reads as a spec sheet. */
+const HOME_TIPS = [
+  'Ask your library a question — answered from your own saves',
+  'Turn a tutorial into a checklist you can tick off',
+  'Build a guided workout, with rest timers',
+  'Pull the recipe out of a cooking video',
+  'Share straight from Instagram — it saves without opening this app',
+  'Rediscover something you forgot you kept',
+];
+
 type Stage = 'empty' | 'learning' | 'ready';
 
 export function Landing({ onEnter }: { onEnter: () => void }) {
@@ -67,6 +80,20 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
 
   useEffect(() => { hydrateSaveCount().then(n => setTotal(t => t ?? n)); }, []);
 
+  /**
+   * Slate counters for the `ready` dashboard below.
+   *
+   * ⚠️ FETCHED ONLY WHEN IT WILL BE SHOWN — i.e. past ASK_MIN_REELS saves. The
+   * screen this replaced pulled twelve reels AND the whole to-do list on every
+   * open, for blocks most users never scrolled to; the rewrite's whole premise
+   * was one count and one control. This is the one extra request, and a brand
+   * new user with four saves still makes none of it.
+   *
+   * `null` means "haven't got it", never zero — an empty slate and an unasked
+   * question look identical as a 0, and only one of them is true.
+   */
+  const [slate, setSlate] = useState<{ open: number; doneToday: number | null } | null>(null);
+
   // Only the COUNT is needed, so ask for one row rather than a page of twenty.
   // The old screen pulled twelve reels plus the whole to-do list to render
   // blocks this design no longer has.
@@ -76,6 +103,19 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
       .then(d => { setTotal(d.total); rememberSaveCount(d.total); })
       .catch(() => setFetchError(true));
   }, [attempt]));
+
+  // Deliberately NOT gated on `stage`: that would make the request depend on a
+  // value derived from a request still in flight, and the dashboard would
+  // arrive a beat after the hero. `total` is seeded from the cache, so a
+  // returning user already reads as `ready` on the first frame.
+  const wantsSlate = (total ?? 0) >= ASK_MIN_REELS;
+  useFocusEffect(useCallback(() => {
+    if (!wantsSlate) return;
+    const today = new Date().toLocaleDateString('en-CA');   // YYYY-MM-DD, local
+    api.listTodos(false, today)
+      .then(d => setSlate({ open: d.stats.open, doneToday: d.stats.completed_today }))
+      .catch(() => {});   // a missing counter just doesn't render; never a blocker
+  }, [wantsSlate, attempt]));
 
   // A share saved while the app was backgrounded changes this count without any
   // router focus event — the native share Activity never enters JS. `attempt`
@@ -111,7 +151,11 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
       // "ask it" above a Paste-a-link control is a promise the screen can't
       // keep. Ask still exists; it is a tab, and the sub-line points there.
       head: 'You saved it.\nNow use it.',
-      sub: 'Every reel, short and post you kept — summarised, and answerable from the Ask tab.',
+      // ⚠️ SHORTER SINCE THE DASHBOARD LANDED (2026-09-11). This used to list
+      // what the library holds and where to ask it — both of which the counters
+      // and the rolling line underneath now say better, and saying them twice
+      // is how a minimal screen stops being one.
+      sub: 'Here’s where you are.',
     },
   }[stage];
 
@@ -169,6 +213,54 @@ export function Landing({ onEnter }: { onEnter: () => void }) {
         {/* Known count, failed refresh: say so, don't hijack the screen. */}
         {fetchError && total !== null && (
           <Label style={styles.stale}>Showing your last known count</Label>
+        )}
+
+        {/*
+          ── The `ready` dashboard (owner, 2026-09-11) ──────────────────────
+          Three counters and a rolling line, under the hero.
+
+          ⚠️ MINIMAL MEANS NO NEW VOCABULARY. No cards, no icons, no colour,
+          no progress rings — numbers in the display face with a Label under
+          each, which is the grammar this screen already speaks. The screen's
+          rule is still one action; these are a receipt, not destinations, so
+          nothing here is tappable. Adding taps would rebuild the eight-link
+          menu this design deleted.
+
+          "Done today" hides when the server didn't answer it — `null` is
+          "didn't ask", and rendering that as a 0 would say "you've done
+          nothing today" to someone who has.
+        */}
+        {stage === 'ready' && (
+          <>
+            <View style={styles.metrics}>
+              <View style={styles.metric}>
+                <Text style={styles.metricN}>{total}</Text>
+                <Label>Saved</Label>
+              </View>
+              {slate ? (
+                <View style={styles.metric}>
+                  <Text style={styles.metricN}>{slate.open}</Text>
+                  <Label>On slate</Label>
+                </View>
+              ) : null}
+              {slate && slate.doneToday !== null ? (
+                <View style={styles.metric}>
+                  <Text style={styles.metricN}>{slate.doneToday}</Text>
+                  <Label>Done today</Label>
+                </View>
+              ) : null}
+            </View>
+            {/* What the library can still do for a save they already have —
+                the one place on this screen that suggests rather than reports. */}
+            <RollingTagline
+              compact
+              shuffle
+              alignLeft
+              lines={HOME_TIPS}
+              numberOfLines={1}
+              style={styles.tips}
+            />
+          </>
         )}
 
         {/* The unlock ladder, only while it means something. Discrete ticks
@@ -255,6 +347,18 @@ const styles = themed(() => StyleSheet.create({
     paddingHorizontal: spacing.md,
   },
   stale: { marginTop: spacing.md },
+
+  // Wide gaps rather than rules or boxes: the separation is whitespace, which
+  // is the only separator this screen uses anywhere else.
+  metrics: { flexDirection: 'row', gap: spacing.xl, marginTop: spacing.xl },
+  metric: { gap: 2 },
+  metricN: {
+    color: colors.textPrimary,
+    fontFamily: typeface.display,
+    fontSize: font.xl,
+    letterSpacing: tracking.display,
+  },
+  tips: { marginTop: spacing.lg, borderBottomWidth: 0 },
 
   ticks: { flexDirection: 'row', gap: 4, marginTop: spacing.xl },
   tick: { flex: 1, height: 4, borderRadius: radius.full, backgroundColor: colors.ghostLine },

@@ -139,6 +139,18 @@ because a pause is reversible. A deletion would not have been.
 
 ## 🔴 Monetization — required before launch
 
+- [x] ⚠️ **Saves are no longer a paywall** (owner, 2026-09-11). `SAVE_LIMIT` is
+  **1000 on every tier** — free, trial and pro alike — replacing the old
+  20-on-free / unlimited-above split. The client warns at 90% and interrupts
+  once at 95% (`mobile/services/saveQuota.ts`, thresholds are RATIOS so they
+  follow the server's number).
+  **This removes the main reason to upgrade.** The paid tiers are now
+  differentiated only by the daily AI quota and the Pro-gated features
+  (ask / tasks / recipe / workout / itinerary). Whatever pricing lands, it has
+  to stand on those alone — re-read the break-even study below with that in
+  mind, because it assumed saves were a lever.
+
+
 - [~] 🔴 👤 **RevenueCat.** Manages IAP entitlements, per-territory pricing and promo
   experiments across iOS/Android. **No quota code change needed** — `daily_limit_for()`
   already reads `app_metadata.tier`.

@@ -23,7 +23,7 @@ const { width: SCREEN_W } = Dimensions.get('window');
  * this system cannot have), and the CTA is square rather than a white pill.
  */
 
-type Figure = 'grid' | 'ask' | 'plan' | 'steps' | 'check' | 'save';
+type Figure = 'grid' | 'ask' | 'plan' | 'steps' | 'check' | 'share' | 'save';
 
 interface Step {
   eyebrow: string;
@@ -37,7 +37,7 @@ const STEPS: Step[] = [
     eyebrow: 'Welcome',
     title: 'A contact sheet\nfor everything you save.',
     description:
-      'You start with a 10-day full trial — unlimited saves and 30 AI actions a day, no card needed. After that you keep your whole library, with 3 AI actions a day and up to 20 saves. Pro removes the limits.',
+      'You start with a 10-day full trial — 30 AI actions a day, no card needed. After that you keep your whole library and 3 AI actions a day; Pro raises that. Every plan holds up to 1,000 saves.',
     figure: 'grid',
   },
   {
@@ -67,6 +67,21 @@ const STEPS: Step[] = [
     description:
       'Save a tutorial or lesson and turn it into an actionable checklist — so what the video teaches actually gets done.',
     figure: 'check',
+  },
+  {
+    /**
+     * ⚠️ THIS STEP EXISTS BECAUSE THE FEATURE IS INVISIBLE BY DESIGN (owner,
+     * 2026-09-11). Sharing to Findable saves without opening it — which is the
+     * whole point, and also means a new user gets no confirmation that anything
+     * happened. Nothing else in the app has that property; every other action
+     * shows its own result. Told once, up front, it reads as magic; discovered
+     * by accident it reads as a share that failed.
+     */
+    eyebrow: 'Sharing',
+    title: 'Share to Findable\nwithout leaving the app.',
+    description:
+      'Hit Share in Instagram, YouTube or LinkedIn and pick Findable. The save happens in the background — you stay exactly where you were, and it’s waiting in your library.',
+    figure: 'share',
   },
   {
     eyebrow: 'Ready',
@@ -110,6 +125,7 @@ const FIGURE_ICON: Record<Figure, string> = {
   plan: 'barbell',      // "Build Workout" on the reel screen
   steps: 'restaurant',  // "Get Recipe" on the reel screen
   check: 'checkbox',    // Slate tab
+  share: 'send',        // the system share sheet's own verb
   save: 'add',          // Save tab / centre FAB
 };
 

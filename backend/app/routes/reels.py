@@ -148,9 +148,13 @@ def save_reel(body: ReelSaveRequest,
         if saved >= ent.save_limit:
             raise HTTPException(
                 status_code=403,
+                # ⚠️ NO LONGER AN UPSELL. This used to end "a Pro subscription
+                # unlocks more", which was true when the cap was 20 on free and
+                # unlimited above it. Every tier now shares SAVE_LIMIT, so that
+                # sentence would sell something that does not exist.
                 detail=(
-                    f"Your free library is full ({ent.save_limit} saves). "
-                    "Delete a save to make room — or a Pro subscription unlocks more."
+                    f"Your library is full ({ent.save_limit} saves). "
+                    "Delete a save to make room."
                 ),
             )
 
