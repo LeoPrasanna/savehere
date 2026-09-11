@@ -48,6 +48,22 @@ services:
         value: "3"
       - key: AI_PRO_DAILY_LIMIT      # pro tier
         value: "20"
+      # ── Save caps — total saves per tier (backend/app/config.py).
+      #
+      # ⚠️ FREE IS TEMPORARILY 500, NOT THE 50 THE CODE DEFAULTS TO (owner,
+      # 2026-09-11, "option 1"). The real free cap is 50 and that is what
+      # config.py says. It is overridden here because NOTHING CHARGES YET:
+      # app/pro.tsx renders a paywall and the RevenueCat flow does not exist,
+      # so a free user hitting 50 today would be handed a 403 offering them a
+      # product they cannot buy. 500 keeps the limit machinery live and tested
+      # without putting up a wall with no door in it.
+      #
+      # 👤 DELETE THIS OVERRIDE THE DAY BILLING SHIPS — the cap reverts to
+      # config.py's 50 on its own. Tracked in TODO.md → Monetization.
+      - key: FREE_SAVE_LIMIT         # code default: 50
+        value: "500"
+      - key: PRO_SAVE_LIMIT          # trial + pro
+        value: "500"
       # ── Secrets — set in THIS service's dashboard (savehere-dev project) ──────
       - key: ANTHROPIC_API_KEY
         sync: false
@@ -97,6 +113,12 @@ services:
   #       value: "3"
   #     - key: AI_PRO_DAILY_LIMIT      # pro tier
   #       value: "20"
+  #     # See the note on the staging block: FREE_SAVE_LIMIT is an override that
+  #     # exists only until billing ships. PROD SHOULD NOT CARRY IT — prod going
+  #     # live implies a working purchase flow, which is exactly the condition
+  #     # that makes the real 50 correct.
+  #     - key: PRO_SAVE_LIMIT          # trial + pro
+  #       value: "500"
   #     - key: ANTHROPIC_API_KEY
   #       sync: false
   #     - key: DATABASE_URL          # SaveHere prod SESSION POOLER (:5432)

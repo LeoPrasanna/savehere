@@ -151,6 +151,14 @@ because a pause is reversible. A deletion would not have been.
   when it became 50/500. Keep them that way.
   The upsell is **tier-aware** in both places (server 403 and client alert):
   free is offered Pro, trial and pro are not, because they already hold 500.
+- [ ] 🔴 👤 **Remove the `FREE_SAVE_LIMIT=500` override in `render.yaml` when
+  billing ships.** The real free cap is 50 and `config.py` says so; staging
+  overrides it to 500 because **nothing charges yet** — `app/pro.tsx` renders a
+  paywall with no purchase flow behind it, so a free user hitting 50 today gets
+  a 403 offering a product they cannot buy. Deleting the override restores 50
+  with no code change. The prod block (still commented out) deliberately does
+  NOT carry it: prod going live implies a working checkout, which is the same
+  condition that makes 50 correct.
 
 
 
