@@ -11,6 +11,20 @@
  * a small phone does not get cramped targets and a tablet does not get
  * cartoonish ones. No device breakpoints, no model list — those go stale the
  * week a new size ships.
+ *
+ * ⚠️ `maxWidth` IS DERIVED FROM THE SLOT, NOT A CONSTANT — and the first
+ * version got this wrong in a way no phone could show. It returned a flat 560
+ * and the row carried `alignSelf: 'stretch'`, so on an iPad the row stretched,
+ * hit 560, and a stretched item that meets its max-width is laid out at the
+ * START of the cross axis. The bar sat flush LEFT on a 1024pt screen
+ * (owner, 2026-09-11) while looking perfectly centred on every phone, because
+ * a phone's available width is under 560 and the stretch simply filled it.
+ * Two bugs in one: the alignment, and a 560pt bar holding 390pt of content.
+ *
+ * Now the bar asks for exactly the width its slots need once they cap out, and
+ * `alignSelf: 'center'` does the centring. Below the cap that number equals the
+ * space available, so the bar still fills a phone edge to edge. One formula,
+ * centred everywhere, no special case for tablets.
  */
 
 /** Chrome the pill spends on itself: 6+6 padding, 1+1 border, 2pt inter-tab gaps. */
@@ -20,15 +34,17 @@ const ASK_CHROME = 6 + 6 + 1 + 1;
 
 export const MIN_SLOT = 42;
 export const MAX_SLOT = 58;
-/** Tablets: past this the bar stops growing and simply centres. */
-export const MAX_BAR = 560;
 
 export interface TabBarSize {
   /** Square side of one tab's touch target / active ring. */
   slot: number;
   /** Icon point size — kept proportional so a bigger slot isn't a bigger gap. */
   icon: number;
-  /** Width cap for the whole row, so this centres rather than stretches on iPad. */
+  /**
+   * What the row should cap at — slot-derived, so a wide screen gets a bar the
+   * size of its contents rather than a 560pt one holding 390pt of icons.
+   * Pair it with `alignSelf: 'center'`, never `'stretch'`: see the note above.
+   */
   maxWidth: number;
 }
 
@@ -38,7 +54,7 @@ export interface TabBarSize {
  *               the pill and the detached Ask capsule
  */
 export function tabBarSize(width: number, gutter: number): TabBarSize {
-  const usable = Math.min(width, MAX_BAR) - gutter - PILL_CHROME - ASK_CHROME;
+  const usable = width - gutter - PILL_CHROME - ASK_CHROME;
   // Six slots share it: five tabs in the pill, plus the detached Ask.
   const raw = Math.floor(usable / 6);
   const slot = Math.max(MIN_SLOT, Math.min(MAX_SLOT, raw));
@@ -46,6 +62,9 @@ export function tabBarSize(width: number, gutter: number): TabBarSize {
     slot,
     // 0.45 keeps the glyph the same visual weight it had at 42/19.
     icon: Math.round(slot * 0.45),
-    maxWidth: MAX_BAR,
+    // The width six of THESE slots actually need. On a phone this lands at (or
+    // just under) the space available and the bar fills it; on a tablet the
+    // slot has capped, so this is smaller than the screen and the bar centres.
+    maxWidth: slot * 6 + PILL_CHROME + ASK_CHROME,
   };
 }

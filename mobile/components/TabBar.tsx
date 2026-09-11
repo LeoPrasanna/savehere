@@ -275,7 +275,24 @@ const styles = themed(() => StyleSheet.create({
   // a stranded island on a 430pt Pro Max next to Apple Music's near-full-width
   // bar (owner, 2026-09-11). `maxWidth` is applied inline from tabBarSize so a
   // tablet centres instead of stretching into a runway.
-  row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, alignSelf: 'stretch' },
+  /**
+   * ⚠️ `alignSelf: 'center'`, NEVER `'stretch'`.
+   *
+   * This said `stretch` for a day, with a flat 560pt `maxWidth` applied inline.
+   * A stretched item that meets its max-width is laid out at the START of the
+   * cross axis, not centred — so on a 1024pt iPad the whole bar sat flush left
+   * while every phone looked perfect, because a phone's available width is
+   * below the cap and the stretch simply filled it. `width: '100%'` asks for
+   * the same growth `stretch` gave; `alignSelf` then actually centres what is
+   * left. maxWidth arrives inline from tabBarSize and is slot-derived.
+   */
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    alignSelf: 'center',
+    width: '100%',
+  },
   // flex:1 so the five tabs divide the stretched pill evenly — this is what
   // makes the touch targets grow with the screen rather than stay 42pt.
   tab: { flex: 1, alignItems: 'center', justifyContent: 'center' },
