@@ -148,9 +148,17 @@ def save_reel(body: ReelSaveRequest,
         if saved >= ent.save_limit:
             raise HTTPException(
                 status_code=403,
+                # ⚠️ THE UPSELL IS TIER-AWARE, and must stay that way. Pro
+                # carries its own (larger) cap, so telling a Pro user at 500
+                # that "Pro unlocks more" sells them what they already bought —
+                # the one message guaranteed to read as a bug. Free and trial
+                # get the upgrade line because for them it is simply true.
                 detail=(
-                    f"Your free library is full ({ent.save_limit} saves). "
-                    "Delete a save to make room — or a Pro subscription unlocks more."
+                    f"Your library is full ({ent.save_limit} saves). "
+                    + ("Delete a save to make room."
+                       if ent.tier == "pro"
+                       else f"Delete a save to make room — or Pro raises this to "
+                            f"{settings.PRO_SAVE_LIMIT}.")
                 ),
             )
 

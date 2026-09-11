@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import {
   View, Text, FlatList, ScrollView, StyleSheet, ActivityIndicator,
-  RefreshControl, useWindowDimensions, Platform,
+  RefreshControl, useWindowDimensions, Platform, Alert,
 } from 'react-native';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +12,7 @@ import { Pressable } from '../components/Pressable';
 import { Icon } from '../components/Icon';
 import { Landing } from '../components/Landing';
 import { Label, Body, Rule, GhostButton, Wordmark, EmptyState } from '../components/kit';
-import { hasEnteredLibrary, markEnteredLibrary } from '../services/sessionFlags';
+import { hasEnteredLibrary, markEnteredLibrary, claimSaveCeilingWarning } from '../services/sessionFlags';
 import { onUi, emitUi } from '../services/uiBus';
 import { applyEdits, markDeleted, unmarkDeleted } from '../services/libraryEdits';
 import { ASK_MIN_REELS } from '../constants/limits';
@@ -20,6 +20,8 @@ import { TAB_BAR_CLEARANCE } from '../components/TabBar';
 import { LinearGradient } from 'expo-linear-gradient';
 import { RollingTagline } from '../components/RollingTagline';
 import { useAuth } from '../contexts/AuthContext';
+import { getCachedUsage, onUsage } from '../services/usageCache';
+import { saveQuota } from '../services/saveQuota';
 import { Avatar } from '../components/Avatar';
 import { colors, spacing, font, radius, tracking, typeface, categoryMeta, CATEGORY_OPTIONS, GRID_GAP, columnsForWidth, themed, gradients, hazeLocations } from '../constants/theme';
 
@@ -43,6 +45,37 @@ const LIBRARY_CAPABILITIES = [
 ];
 
 export default function HomeScreen() {
+  // Seeded from the cache so the first paint already knows — a warning that
+  // appears a second late reads as a glitch, and this band is load-bearing
+  // layout (see the note where it renders).
+  const [usage, setUsage] = useState(getCachedUsage);
+  useEffect(() => onUsage(setUsage), []);
+  const quota = saveQuota(usage?.saves?.used, usage?.saves?.limit);
+
+  /**
+   * The last 5% gets said out loud, once per session (owner: a popup at 950).
+   *
+   * ⚠️ NOT at 900 as well — that one is the line in the band above, and an
+   * interruption repeated at two thresholds trains people to dismiss it before
+   * reading. This fires where the number has actually become a problem.
+   */
+  useEffect(() => {
+    if (quota.level !== 'critical' && quota.level !== 'full') return;
+    if (!claimSaveCeilingWarning()) return;
+    const title = quota.level === 'full' ? 'Your library is full' : 'You’re close to the save limit';
+    // ⚠️ ONLY THE FREE TIER IS UPSOLD, same rule as the server's 403. Pro has
+    // 500 because they bought it and TRIAL has 500 because the trial shows what
+    // paying feels like — telling either that "Pro holds 500" offers them the
+    // number they are already sitting on, which reads as a bug, not an offer.
+    const upsell = usage?.tier === 'free' ? ' Pro holds 500.' : '';
+    const body = quota.level === 'full'
+      ? `You’ve used all ${quota.limit} saves. Delete a few from your library and saving starts working again — nothing you’ve kept is locked.${upsell}`
+      : `${quota.used} of ${quota.limit} saves used, so there’s room for ${quota.remaining} more. Deleting anything you’re done with frees the space straight away.${upsell}`;
+    if (Platform.OS === 'web') window.alert(`${title}
+
+${body}`);
+    else Alert.alert(title, body);
+  }, [quota.level]);
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { profile, displayName } = useAuth();
@@ -359,13 +392,30 @@ export default function HomeScreen() {
           port of the deleted `backend/app/services/search.py`): search fires
           per keystroke, and the server it used to call is a free instance with
           a ~50 s cold start. Category bubbles still narrow the grid. */}
-      <RollingTagline
-        compact
-        shuffle
-        lines={LIBRARY_CAPABILITIES}
-        style={styles.capabilityRoll}
-        numberOfLines={1}
-      />
+      {/* ⚠️ THE QUOTA WARNING TAKES THIS SLOT, it does not sit above it. The
+          roll and the warning are the same 42px band by design: stacking them
+          would push the whole grid down by a row the moment someone crosses
+          900 saves, and a layout that shifts under you is a worse way to learn
+          about a limit than the sentence itself. The roll is a nice-to-have;
+          "you have room for 37 more" is not, so it wins the slot. */}
+      {quota.level === 'ok' ? (
+        <RollingTagline
+          compact
+          shuffle
+          lines={LIBRARY_CAPABILITIES}
+          style={styles.capabilityRoll}
+          numberOfLines={1}
+        />
+      ) : (
+        <View style={styles.capabilityRoll}>
+          <Text
+            style={[styles.quotaLine, quota.level !== 'warn' && styles.quotaLineHot]}
+            numberOfLines={1}
+          >
+            {quota.message}
+          </Text>
+        </View>
+      )}
       {/* ⚠️ A full-bleed <Rule/> used to sit here, directly under the roll's own
           inset bottom hairline — two rules, 1px apart, at different widths.
           Removed (owner, 2026-08-10); the roll keeps its own line and its 42px
@@ -634,5 +684,14 @@ const styles = themed(() => StyleSheet.create({
     borderBottomColor: colors.ghostLine,
     height: 42,
     marginBottom: spacing.sm,
+    justifyContent: 'center',
   },
+  // Same band, same weight as the roll it replaces — this is information, not
+  // an alarm. Only the last 5% turns the colour up.
+  quotaLine: {
+    fontFamily: typeface.body,
+    fontSize: font.sm,
+    color: colors.textSecondary,
+  },
+  quotaLineHot: { color: colors.danger },
 }));
