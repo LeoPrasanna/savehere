@@ -27,7 +27,10 @@ interface Props {
    * nests legally. Pass it explicitly only on a leaf control that is genuinely
    * never inside another pressable.
    */
-  accessibilityRole?: 'button' | 'link' | 'none';
+  accessibilityRole?: 'button' | 'link' | 'none' | 'switch';
+  /** Needed by 'switch' rows — a switch with no checked state is unreadable to a screen reader. */
+  accessibilityState?: { checked?: boolean; disabled?: boolean; selected?: boolean; expanded?: boolean };
+  accessibilityHint?: string;
 }
 
 // Animate the Pressable itself (single node) so layout styles — position, flex,
@@ -47,7 +50,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(RNPressable);
  */
 export function Pressable({
   children, onPress, onLongPress, onLayout, style, disabled, hitSlop,
-  accessibilityLabel, accessibilityRole,
+  accessibilityLabel, accessibilityRole, accessibilityState, accessibilityHint,
 }: Props) {
   const opacity = useRef(new Animated.Value(1)).current;
 
@@ -69,6 +72,8 @@ export function Pressable({
       hitSlop={hitSlop}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole={accessibilityRole}
+      accessibilityState={accessibilityState}
+      accessibilityHint={accessibilityHint}
       style={[style, { opacity }]}
     >
       {children}

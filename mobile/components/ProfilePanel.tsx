@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, Platform, ScrollView, Animated, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Modal, useWindowDimensions, Alert, Platform, ScrollView, Animated, ActivityIndicator, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { api, Reel, Usage, UsageLog } from '../services/api';
 import { getCachedUsage, refreshUsage, onUsage } from '../services/usageCache';
 import { resumesAtSentence } from '../services/quotaReset';
-import { shareKeyReady, ensureShareKey } from '../services/shareKey';
+import { shareKeyReady, ensureShareKey, clearShareKey } from '../services/shareKey';
 import { Pressable } from './Pressable';
 import { Icon } from './Icon';
 import { Label, Body, Title, Rule, GhostButton, FilledButton, Index } from './kit';
@@ -60,8 +60,15 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
   // null until the first read — "Silent share" with no verdict, rather than a
   // confident "off" that is merely uninitialised.
   const [shareArmed, setShareArmed] = useState<boolean | null>(null);
-  const [rearming, setRearming] = useState(false);
-  useEffect(() => { shareKeyReady().then(setShareArmed).catch(() => {}); }, []);
+  const [sharePending, setSharePending] = useState(false);
+  // ⚠️ RE-READ ON EVERY OPEN, not once on mount. This panel is mounted for the
+  // whole session and only hidden, so a one-shot effect showed whatever the
+  // state was the first time it ever opened — which is why the row appeared
+  // frozen even after a sign-out and back in (owner, 2026-09-11).
+  useEffect(() => {
+    if (!visible) return;
+    shareKeyReady().then(setShareArmed).catch(() => {});
+  }, [visible]);
   const [deleting, setDeleting] = useState(false);
   // Seeded from the login-time fetch (services/usageCache), so the stats row
   // and the tier badge are already correct on the panel's FIRST frame instead
@@ -420,30 +427,76 @@ export function ProfilePanel({ visible, onClose, reels, showAsk = true, total: t
             <Label wide style={styles.section}>Session</Label>
             <Rule />
             {/*
-              ⚠️ THE INVISIBLE SHARE'S ONLY VISIBLE SURFACE, and the reason it
-              is here at all: when arming fails, sharing silently falls back to
-              opening the app — which looks exactly like the bug the share
-              extension exists to fix, with nothing anywhere to tell the two
-              apart. The owner could not answer "is the key even on the device?"
-              and neither could I. Tapping re-arms it.
+              ⚠️ A REAL TOGGLE, NOT A RETRY BUTTON — and it shipped as the
+              wrong one. The first version only ever re-armed: tapping it while
+              it read "Silent share is on" re-minted the same key and changed
+              nothing on screen, so the owner could not tell whether the tap had
+              worked (2026-09-11). A row that reads "X is on" and responds to a
+              tap is a switch; anything else is a lie about the control.
+
+              It exists at all because the feature is invisible by design —
+              sharing saves without opening the app, so a failure to arm looks
+              exactly like the bug the share extension was built to fix, with
+              nothing anywhere to tell the two apart.
+
+              Turning it OFF is a genuine choice, not just a debugging aid: it
+              revokes the key locally AND on the server, and shares then fall
+              back to opening the app, where you see what you saved.
             */}
             {Platform.OS !== 'web' ? (
               <>
                 <Pressable
                   style={styles.row}
+                  disabled={sharePending}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: shareArmed === true, disabled: sharePending }}
+                  accessibilityLabel="Silent share"
+                  accessibilityHint={
+                    shareArmed
+                      ? 'Turns off saving in the background; shares will open the app instead'
+                      : 'Saves shared links in the background without opening the app'
+                  }
                   onPress={async () => {
-                    if (rearming) return;
-                    setRearming(true);
-                    setShareArmed(await ensureShareKey());
-                    setRearming(false);
+                    if (sharePending) return;
+                    const turningOn = !shareArmed;
+                    setSharePending(true);
+                    // Optimistic, because the server round-trip is the slow part
+                    // and a switch that does nothing for two seconds reads as
+                    // broken. Corrected below if the real answer differs.
+                    setShareArmed(turningOn);
+                    try {
+                      if (turningOn) {
+                        setShareArmed(await ensureShareKey());
+                      } else {
+                        await clearShareKey();
+                        setShareArmed(false);
+                      }
+                    } catch {
+                      // Never leave the switch showing a state we did not reach.
+                      setShareArmed(await shareKeyReady().catch(() => false));
+                    } finally {
+                      setSharePending(false);
+                    }
                   }}
                 >
-                  <Body tone="primary" style={styles.rowLabel}>
-                    {shareArmed === null ? 'Silent share' : shareArmed ? 'Silent share is on' : 'Silent share is off'}
-                  </Body>
-                  {rearming
+                  <View style={styles.rowLabelWrap}>
+                    <Body tone="primary" style={styles.rowLabel}>Silent share</Body>
+                    <Label>
+                      {shareArmed === null ? 'Checking…'
+                        : shareArmed ? 'Saves without opening the app'
+                        : 'Shares will open the app'}
+                    </Label>
+                  </View>
+                  {sharePending
                     ? <ActivityIndicator size="small" color={colors.textTertiary} />
-                    : <Icon name={shareArmed ? 'checkmark' : 'refresh'} size={15} color={colors.textTertiary} />}
+                    : <Switch
+                        value={shareArmed === true}
+                        onValueChange={() => {}}
+                        pointerEvents="none"
+                        trackColor={{ false: colors.ghostLine, true: colors.textPrimary }}
+                        thumbColor={colors.background}
+                        ios_backgroundColor={colors.ghostLine}
+                      />}
                 </Pressable>
                 <Rule />
               </>
@@ -571,6 +624,10 @@ const styles = themed(() => StyleSheet.create({
     gap: spacing.md,
   },
   rowLabel: { flex: 1, fontSize: font.md },
+  // The switch row carries a second line saying what the state MEANS. "On" and
+  // "off" are not self-explanatory for a feature whose whole point is that it
+  // leaves no trace.
+  rowLabelWrap: { flex: 1, gap: 2 },
 
   appearance: { paddingVertical: spacing.md, gap: spacing.md },
   schemeRow: { flexDirection: 'row', gap: spacing.lg },
