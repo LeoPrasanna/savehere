@@ -417,3 +417,69 @@ class TestAccountDeletionInteraction:
             assert db.query(TrialGrantDB).count() == 1   # the anti-abuse record stays
         finally:
             db.close()
+
+
+class TestAutoSummaryTier:
+    """⚠️ `auto_summary` and `can_ask` MUST stay on the same tier boundary.
+
+    Free saves get the cheap index pass (tags/category/title, no bullets). The
+    obvious objection is "then Ask reads an empty library" — it cannot, because
+    Ask is Pro-and-trial-only. If anyone ever gives free users Ask without also
+    giving them auto-summary, this is the test that fails.
+    """
+
+    def test_free_is_indexed_not_summarized(self, env):
+        _, Session = env
+        db = Session()
+        try:
+            entitlements_for(AuthUser(id="u-as", email="as@b.co"), db)
+        finally:
+            db.close()
+        _backdate_trial(Session, "u-as", days=11)
+        db = Session()
+        try:
+            ent = entitlements_for(AuthUser(id="u-as", email="as@b.co"), db)
+            assert ent.tier == "free"
+            assert ent.auto_summary is False
+            assert ent.can_ask is False
+        finally:
+            db.close()
+
+    def test_trial_and_pro_get_full_summaries(self, env):
+        _, Session = env
+        db = Session()
+        try:
+            trial = entitlements_for(AuthUser(id="u-as2", email="as2@b.co"), db)
+            pro = entitlements_for(
+                AuthUser(id="u-as3", email="as3@b.co", claims={"app_metadata": {"tier": "pro"}}), db)
+            for ent in (trial, pro):
+                assert ent.auto_summary is True
+                assert ent.can_ask is True
+        finally:
+            db.close()
+
+    def test_no_tier_can_ask_without_auto_summary(self, env):
+        """The invariant, stated once. A tier that can open Ask but only indexes
+        its saves would make Ask answer from titles and tags alone."""
+        _, Session = env
+        db = Session()
+        try:
+            entitlements_for(AuthUser(id="u-inv", email="inv@b.co"), db)
+        finally:
+            db.close()
+        _backdate_trial(Session, "u-inv", days=11)
+
+        db = Session()
+        try:
+            tiers = [
+                entitlements_for(AuthUser(id="u-inv2", email="inv2@b.co"), db),            # trial
+                entitlements_for(AuthUser(id="u-inv", email="inv@b.co"), db),              # free
+                entitlements_for(AuthUser(id="u-inv3", email="inv3@b.co",
+                                          claims={"app_metadata": {"tier": "pro"}}), db),  # pro
+            ]
+            for ent in tiers:
+                assert not (ent.can_ask and not ent.auto_summary), (
+                    f"{ent.tier} can open Ask but its saves are only indexed"
+                )
+        finally:
+            db.close()

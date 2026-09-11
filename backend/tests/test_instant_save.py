@@ -157,3 +157,81 @@ class TestInstantSave:
         assert r.status_code == 200
         reel = _get_reel(Session, r.json()["id"])
         assert reel.summary_status == "skipped"  # no AI spend on long-form
+
+
+# ── Tier-gated auto-summary ──────────────────────────────────────────────────
+#
+# Free saves take the cheap index pass: tags, category and a title, no bullets.
+# The end-to-end proof that it is wired to the TIER and not to something else.
+
+def _expire_trial(Session, user_id):
+    from app.database import ProfileDB
+    from datetime import datetime, timedelta
+    db = Session()
+    try:
+        p = db.query(ProfileDB).filter(ProfileDB.user_id == user_id).first()
+        if p is None:
+            p = ProfileDB(user_id=user_id, trial_extra_days=0, created_at=datetime.utcnow())
+            db.add(p)
+        p.trial_started_at = datetime.utcnow() - timedelta(days=60)
+        db.commit()
+    finally:
+        db.close()
+
+
+def test_free_tier_save_is_indexed_not_summarized(env, monkeypatch):
+    client, Session = env
+    calls = []
+    monkeypatch.setattr(reels_module.summarizer, "summarize",
+                        lambda **kw: calls.append("full") or dict(FAKE_AI))
+    monkeypatch.setattr(reels_module.summarizer, "index_only",
+                        lambda **kw: calls.append("index") or
+                        {"title": "t", "summary": [], "tags": ["a", "b"],
+                         "category": "tech", "low_content": False, "sensitive": False})
+
+    client.get("/api/account/usage")        # creates the profile
+    _expire_trial(Session, USER)
+    r = client.post("/api/reels/save", json={"url": "https://youtube.com/shorts/freeuser1"})
+    assert r.status_code == 200, r.text
+
+    reel = _get_reel(Session, r.json()["id"])
+    assert calls == ["index"], f"expected the cheap pass, got {calls}"
+    assert reel.summary == []
+    assert reel.tags == ["a", "b"]          # the library stays searchable
+    assert reel.category == "tech"          # and the category rail still works
+    # ⚠️ 'indexed', NOT 'skipped'. Both leave summary empty; the app tells the
+    # user two different things. "skipped" claims we read it and found nothing.
+    assert reel.summary_status == "indexed"
+
+
+def test_trial_tier_save_gets_the_full_summary(env):
+    client, Session = env
+    r = client.post("/api/reels/save", json={"url": "https://youtube.com/shorts/trialuser"})
+    assert r.status_code == 200, r.text
+    reel = _get_reel(Session, r.json()["id"])
+    assert reel.summary == FAKE_AI["summary"]
+    assert reel.summary_status == "ready"
+
+
+def test_summarize_now_runs_full_even_on_free(env, monkeypatch):
+    """The tier gates AUTOMATIC summaries. A summary the user asked for by name
+    — and was charged an AI action for — is always the full thing."""
+    client, Session = env
+    calls = []
+    monkeypatch.setattr(reels_module.summarizer, "summarize",
+                        lambda **kw: calls.append("full") or dict(FAKE_AI))
+    monkeypatch.setattr(reels_module.summarizer, "index_only",
+                        lambda **kw: calls.append("index") or
+                        {"title": "t", "summary": [], "tags": [], "category": "other",
+                         "low_content": False, "sensitive": False})
+
+    client.get("/api/account/usage")
+    _expire_trial(Session, USER)
+    rid = client.post("/api/reels/save", json={"url": "https://youtube.com/shorts/freeuser2"}).json()["id"]
+    assert calls == ["index"]
+
+    calls.clear()
+    r = client.post(f"/api/reels/{rid}/resummarize")
+    assert r.status_code == 200, r.text
+    assert calls == ["full"], f"a paid-for summary must be the full one, got {calls}"
+    assert _get_reel(Session, rid).summary == FAKE_AI["summary"]

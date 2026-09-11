@@ -187,7 +187,7 @@ def save_reel(body: ReelSaveRequest,
         db.commit()
         db.refresh(reel)
         if should_summarize:
-            _enqueue(_summarize_reel, reel.id)
+            _enqueue(_summarize_reel, reel.id, user=user)
         logger.info(f"[SAVE] success (cached) platform={reel.platform} id={reel.id}")
         return _to_response(reel)
 
@@ -434,7 +434,7 @@ def _extract_and_summarize(reel_id: str, user: AuthUser | None) -> None:
     # summary runs immediately afterwards.
     # ponytail: re-summarize and cache-hit saves get no pacing hint. Add a JSON
     # `meta` column on ReelDB + ExtractionCacheDB if that quality gap shows up.
-    _summarize_reel(reel_id, meta=meta)
+    _summarize_reel(reel_id, meta=meta, user=user)
 
 
 @router.post("/share-save", response_model=ReelResponse,
@@ -608,6 +608,11 @@ def summarize_now(reel_id: str, user: AuthUser = Depends(get_current_user), db: 
     # reel already 'ready' returned above without spending a unit).
     charge_ai_action(db, user, action="summary", label=reel.title or reel.url)
 
+    # ⚠️ NO `user=` HERE, AND THAT IS NOT AN OVERSIGHT. Passing the user would
+    # hand a free-tier reel the cheap index pass — but the user has just been
+    # charged an AI action for a summary, on a path they asked for by name. The
+    # tier gate exists for AUTOMATIC summaries on save; a paid-for one is
+    # always the full thing. Do not "fix" this by threading the user through.
     _summarize_reel(reel.id)        # own session; commits the result
     db.refresh(reel)                # pull the freshly-committed row into this session
     return _to_response(reel)
@@ -725,6 +730,11 @@ def client_metadata(reel_id: str, body: ClientMetadataRequest,
         db.refresh(reel)
         return _to_response(reel)
 
+    # ⚠️ NO `user=` HERE, AND THAT IS NOT AN OVERSIGHT. Passing the user would
+    # hand a free-tier reel the cheap index pass — but the user has just been
+    # charged an AI action for a summary, on a path they asked for by name. The
+    # tier gate exists for AUTOMATIC summaries on save; a paid-for one is
+    # always the full thing. Do not "fix" this by threading the user through.
     _summarize_reel(reel.id)        # own session; commits the result
     db.refresh(reel)
     return _to_response(reel)
@@ -1015,7 +1025,8 @@ def _to_response(reel: ReelDB) -> ReelResponse:
     )
 
 
-def _summarize_reel(reel_id: str, meta: dict | None = None) -> None:
+def _summarize_reel(reel_id: str, meta: dict | None = None,
+                    user: AuthUser | None = None) -> None:
     """Background worker: turn a saved reel's raw_text (or audio) into a summary,
     tags and category. Runs off the request path so saving feels instant. Opens
     its own DB session (the request's session is already closed). Fail-safe: any
@@ -1023,7 +1034,13 @@ def _summarize_reel(reel_id: str, meta: dict | None = None) -> None:
 
     `meta` carries structural signals about the parts of the video we cannot see
     (pacing, platform image description, audio track). Optional: callers that did
-    not just run an extraction pass nothing and the prompt simply omits them."""
+    not just run an extraction pass nothing and the prompt simply omits them.
+
+    `user` decides FULL SUMMARY vs INDEX-ONLY (see the note at the call site).
+    It is a parameter rather than a lookup from `reel.user_id` because the tier
+    lives in the JWT's app_metadata claim, not in our database — there is no way
+    to recover it from a row. `None` means "no request context" (the startup
+    recovery sweep) and takes the full path deliberately."""
     db = SessionLocal()
     try:
         reel = db.query(ReelDB).filter(ReelDB.id == reel_id).first()
@@ -1061,8 +1078,36 @@ def _summarize_reel(reel_id: str, meta: dict | None = None) -> None:
             logger.info(f"[SUMMARIZE] {reel_id} skipped — no extractable text")
             return
 
-        ai = summarizer.summarize(platform=reel.platform, title=reel.title or "",
-                                  text=text, meta=meta)
+        # ── Full summary, or just the index? ──────────────────────────────
+        #
+        # ⚠️ THE TIER DECIDES, AND IT IS THE SAME TIER THAT GATES ASK. Free
+        # saves get `index_only`: tags, category, a title and the sensitive
+        # flag — everything the LIBRARY needs (search, the category rail, the
+        # action-button gating) for a fraction of the tokens, because it reads
+        # 2000 chars instead of 8000.
+        #
+        # The objection this has to answer is "then Ask has nothing to read".
+        # It does not arise: `auto_summary` is False on exactly the tier where
+        # `can_ask` is False (entitlements.py keeps them together and says
+        # why), so no one who can open Ask ever has an unsummarized reel. The
+        # free user is not left stuck either — the reel screen offers a
+        # one-tap full summary for one of their three daily AI actions, which
+        # is the existing /resummarize path, unchanged.
+        #
+        # `user` is None for the startup recovery sweep, which re-runs orphaned
+        # pending rows with no request context. Defaulting to the FULL path
+        # there is deliberate: recovery is rare, and under-delivering on a
+        # paid user's reel is the worse of the two mistakes.
+        full = True
+        if user is not None:
+            try:
+                full = entitlements_for(user, db).auto_summary
+            except Exception as e:
+                # Never let a tier lookup decide whether a save gets processed.
+                logger.warning(f"[SUMMARIZE] {reel_id} tier lookup failed, using full: {e}")
+
+        run = summarizer.summarize if full else summarizer.index_only
+        ai = run(platform=reel.platform, title=reel.title or "", text=text, meta=meta)
         reel.summary = ai["summary"]
         reel.tags = ai["tags"]
         # Same latch as resummarize: model may set the flag, never clear it.
@@ -1072,7 +1117,15 @@ def _summarize_reel(reel_id: str, meta: dict | None = None) -> None:
         # Replace a weak extracted title with the AI one (LinkedIn "Day352:-" etc.).
         if _weak_title(reel.title) and ai.get("title"):
             reel.title = ai["title"]
-        reel.summary_status = "ready" if ai["summary"] else "skipped"
+        # ⚠️ "indexed" IS NOT "skipped". Both leave `summary` empty, and the app
+        # tells the user two completely different things about them: skipped
+        # means we read the reel and there was nothing in it, indexed means we
+        # deliberately did not write one yet and one tap will. Reporting the
+        # second as the first would be a confidently wrong message — the exact
+        # failure the readFailure work fixed on the client a day earlier.
+        reel.summary_status = (
+            ("ready" if ai["summary"] else "skipped") if full else "indexed"
+        )
         db.commit()
         logger.info(f"[SUMMARIZE] {reel_id} done — status={reel.summary_status}")
     except Exception as e:
