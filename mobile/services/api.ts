@@ -58,7 +58,14 @@ export interface Reel {
    *  already spent so no summary was attempted. Distinct from `failed` on
    *  purpose: `failed` is retryable now, this one only after the daily reset,
    *  so the UI must not offer a Try again button for it. */
-  summary_status?: 'pending' | 'ready' | 'skipped' | 'failed' | 'quota_exceeded';
+  /**
+   * ⚠️ 'indexed' AND 'skipped' BOTH LEAVE `summary` EMPTY AND MEAN OPPOSITE
+   * THINGS. 'skipped' = we read the reel and there was nothing in it.
+   * 'indexed' = we deliberately did not write one — free saves get tags and a
+   * category only, and one tap generates the full summary. Rendering the
+   * second as the first tells someone their reel is empty when it is not.
+   */
+  summary_status?: 'pending' | 'ready' | 'indexed' | 'skipped' | 'failed' | 'quota_exceeded';
   notes: string | null;
   summarize_count: number;
   tasks_count: number;

@@ -534,6 +534,28 @@ export default function ReelDetailScreen() {
                 : `${resumesAtSentence(usage?.resets_at)} Your saves are never rationed — only the AI actions are.`}
             </Text>
           </View>
+        ) : reel.summary_status === 'indexed' ? (
+          /* ⚠️ THIS BRANCH MUST SIT ABOVE THE readFailure ONE. An indexed reel
+             has an empty `summary` and a perfectly good title and thumbnail,
+             which is exactly the shape readFailure reads as "no caption" — so
+             without this the app would tell a free user their reel is empty
+             when we simply chose not to write the summary yet. Same class of
+             confidently-wrong message as the login-wall one, one day later.
+
+             Not a failure, so no alert icon and no apology: it is an offer. */
+          <View style={styles.emptySummary}>
+            <Icon name="sparkles" size={28} color={colors.textSecondary} style={{ marginBottom: spacing.xs }} />
+            <Text style={styles.emptyTitle}>Ready when you are</Text>
+            <Text style={styles.emptyHint}>
+              This one’s saved, tagged and searchable. Write the summary whenever
+              you want it — it’s not done automatically on your plan.
+            </Text>
+            <Pressable style={[styles.pill, { marginTop: spacing.sm }]} onPress={handleSummarizeNow} disabled={summarizing}>
+              {summarizing ? <ActivityIndicator size="small" color={colors.accent} /> : <Ionicons name="sparkles" size={13} color={colors.accent} />}
+              <Text style={styles.pillText}>{summarizing ? 'Summarizing…' : 'Summarize this one'}</Text>
+            </Pressable>
+            <Text style={styles.quotaNote}>Uses 1 AI action from your daily quota — your tier sets the cap.</Text>
+          </View>
         ) : (reel.summary_status === 'failed' || pendingStalled) ? (
           <View style={styles.emptySummary}>
             <Icon name="alert-circle" size={28} color={colors.danger} style={{ marginBottom: spacing.xs }} />

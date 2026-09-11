@@ -129,6 +129,12 @@ class Entitlements:
     # ads later). Trial keeps FULL access — it's the demo that converts. Gating on
     # tier (not the user-editable category) also closes the recategorize-to-unlock
     # hole entirely.
+    # ⚠️ TIED TO can_ask ON PURPOSE — see the note in routes/reels.py. A reel
+    # saved without `auto_summary` gets the cheap index pass (tags, category,
+    # title) and no bullets, and Ask is the only feature that reads bullets in
+    # bulk. Turning this off for a tier that CAN open Ask would make Ask answer
+    # from an empty library, which is the one way this change goes wrong.
+    auto_summary: bool = True
     can_ask: bool = True            # Ask-my-Library
     can_tasks: bool = True          # "Turn into Action" tasks (non-cooking reels)
     can_recipe: bool = True         # "Get Recipe" (cooking-category tasks)
@@ -168,6 +174,11 @@ def entitlements_for(user: AuthUser, db: Session, *, now: datetime | None = None
         ai_daily_limit=settings.AI_FREE_DAILY_LIMIT,
         save_limit=settings.FREE_SAVE_LIMIT,
         trial_ends_at=trial_ends,
+        # Free saves are INDEXED, not summarized — tags, category and a title,
+        # so the library stays searchable and navigable. Bullets cost the most
+        # and are read by Ask, which this tier cannot open anyway. One tap on a
+        # reel summarizes it in full for one of their three daily AI actions.
+        auto_summary=False,
         can_ask=False,
         can_tasks=False,
         can_recipe=False,
