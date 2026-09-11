@@ -83,7 +83,8 @@ class TestEffectiveTier:
         try:
             ent = entitlements_for(AuthUser(id="u-new", email="a@b.co"), db)
             assert ent.tier == "trial"
-            assert ent.save_limit == settings.SAVE_LIMIT
+            # The trial shows what paying feels like, so it gets the PRO cap.
+            assert ent.save_limit == settings.PRO_SAVE_LIMIT
             assert ent.ai_daily_limit == settings.AI_DAILY_LIMIT
             assert ent.trial_ends_at is not None
         finally:
@@ -103,7 +104,7 @@ class TestEffectiveTier:
             ent = entitlements_for(AuthUser(id="u-old", email="old@b.co"), db)
             assert ent.tier == "free"
             assert ent.ai_daily_limit == settings.AI_FREE_DAILY_LIMIT   # the trickle
-            assert ent.save_limit == settings.SAVE_LIMIT
+            assert ent.save_limit == settings.FREE_SAVE_LIMIT
         finally:
             db.close()
 
@@ -115,7 +116,7 @@ class TestEffectiveTier:
             ent = entitlements_for(pro, db)
             assert ent.tier == "pro"
             assert ent.ai_daily_limit == settings.AI_PRO_DAILY_LIMIT
-            assert ent.save_limit == settings.SAVE_LIMIT
+            assert ent.save_limit == settings.PRO_SAVE_LIMIT
             assert ent.trial_ends_at is None
             # pro never creates a profile row (no trial clock needed)
             assert db.query(ProfileDB).filter(ProfileDB.user_id == "u-pro").first() is None
@@ -187,29 +188,31 @@ class TestTrialContinuity:
 
 
 class TestSaveCap:
-    """⚠️ THE CAP IS THE SAME ON EVERY TIER NOW (owner, 2026-09-11) — 1000, not
-    20-on-free-and-unlimited-above. These tests shrink SAVE_LIMIT rather than
-    seeding a thousand rows: the mechanism is what is under test, and the number
-    itself is asserted once, below."""
+    """⚠️ EVERY TIER IS CAPPED NOW (owner, 2026-09-11): 50 free, 500 on trial and
+    pro. Previously free was 20 and everything above it was UNLIMITED. These
+    tests shrink the limits rather than seeding hundreds of rows — the mechanism
+    is what is under test, and the numbers are asserted once, below."""
 
-    def test_the_cap_is_one_thousand_on_every_tier(self, env):
+    def test_the_caps_are_fifty_free_and_five_hundred_paid(self, env):
         _, Session = env
-        assert settings.SAVE_LIMIT == 1000
+        assert settings.FREE_SAVE_LIMIT == 50
+        assert settings.PRO_SAVE_LIMIT == 500
         db = Session()
         try:
             trial = entitlements_for(AuthUser(id="u-t1", email="t1@b.co"), db)
             pro = entitlements_for(
                 AuthUser(id="u-p1", email="p1@b.co", claims={"app_metadata": {"tier": "pro"}}), db)
-            assert trial.save_limit == 1000
-            assert pro.save_limit == 1000
-            # No tier may be uncapped — that is the whole change.
+            # The trial shows what paying feels like — it gets the PAID cap.
+            assert trial.save_limit == 500
+            assert pro.save_limit == 500
+            # No tier may be uncapped: an unlimited promise cannot be priced.
             assert trial.save_limit is not None and pro.save_limit is not None
         finally:
             db.close()
 
     def test_expired_user_at_cap_cannot_save(self, env, monkeypatch):
         client, Session = env
-        monkeypatch.setattr(settings, "SAVE_LIMIT", 20)
+        monkeypatch.setattr(settings, "FREE_SAVE_LIMIT", 20)
         user = AuthUser(id="u-cap", email="cap@b.co")
         c = client(user)
         c.get("/api/account/usage")             # touch → create profile
@@ -218,12 +221,12 @@ class TestSaveCap:
         r = c.post("/api/reels/save", json={"url": "https://youtube.com/shorts/newone123"})
         assert r.status_code == 403
         assert "full" in r.json()["detail"]
-        # The upsell is gone with the free-only cap — Pro buys no extra room.
-        assert "Pro" not in r.json()["detail"]
+        # Free users DO get the upgrade line — for them it is simply true.
+        assert "Pro" in r.json()["detail"]
 
     def test_deleting_below_cap_reopens_saving(self, env, monkeypatch):
         client, Session = env
-        monkeypatch.setattr(settings, "SAVE_LIMIT", 20)
+        monkeypatch.setattr(settings, "FREE_SAVE_LIMIT", 20)
         from app.routes import reels as reels_module
         monkeypatch.setattr(reels_module, "SessionLocal", Session)
         monkeypatch.setattr(reels_module.extractor, "extract_info",
@@ -243,7 +246,7 @@ class TestSaveCap:
         """Was `test_trial_and_pro_users_uncapped`. They are not uncapped any
         more — that is the change, so the test asserts the opposite on purpose."""
         client, Session = env
-        monkeypatch.setattr(settings, "SAVE_LIMIT", 20)
+        monkeypatch.setattr(settings, "PRO_SAVE_LIMIT", 20)
         from app.routes import reels as reels_module
         monkeypatch.setattr(reels_module, "SessionLocal", Session)
         monkeypatch.setattr(reels_module.extractor, "extract_info",
@@ -258,6 +261,10 @@ class TestSaveCap:
         pro = AuthUser(id="u-pro2", email="p2@b.co", claims={"app_metadata": {"tier": "pro"}})
         _seed_reels(Session, "u-pro2", 25)
         assert client(pro).post("/api/reels/save", json={"url": "https://youtube.com/shorts/prook1"}).status_code == 403
+
+        # A Pro user at their own cap is NOT told to buy Pro.
+        pro_body = client(pro).post("/api/reels/save", json={"url": "https://youtube.com/shorts/prook2"}).json()
+        assert "Pro" not in pro_body["detail"]
 
         # Under the cap, both still save.
         under = AuthUser(id="u-under", email="un@b.co")
@@ -352,7 +359,7 @@ class TestUsageEndpoint:
         body = client(AuthUser(id="u-shape", email="s@b.co")).get("/api/account/usage").json()
         assert body["tier"] == "trial"
         assert body["trial_ends_at"] is not None
-        assert body["saves"] == {"used": 0, "limit": settings.SAVE_LIMIT}
+        assert body["saves"] == {"used": 0, "limit": settings.PRO_SAVE_LIMIT}
         assert body["limit"] == 10 and body["remaining"] == 10
 
     def test_expired_shape(self, env):
@@ -363,7 +370,7 @@ class TestUsageEndpoint:
         _seed_reels(Session, "u-shape2", 5)
         body = c.get("/api/account/usage").json()
         assert body["tier"] == "free"
-        assert body["saves"] == {"used": 5, "limit": settings.SAVE_LIMIT}
+        assert body["saves"] == {"used": 5, "limit": settings.FREE_SAVE_LIMIT}
         assert body["limit"] == 3
 
     def test_pro_shape(self, env):
@@ -372,7 +379,7 @@ class TestUsageEndpoint:
         body = client(pro).get("/api/account/usage").json()
         assert body["tier"] == "pro"
         assert body["trial_ends_at"] is None
-        assert body["saves"]["limit"] == settings.SAVE_LIMIT
+        assert body["saves"]["limit"] == settings.PRO_SAVE_LIMIT
 
     def test_library_counts_are_whole_library_distinct(self, env):
         """categories/platforms count DISTINCT values across the whole library —

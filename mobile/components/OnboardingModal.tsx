@@ -37,7 +37,7 @@ const STEPS: Step[] = [
     eyebrow: 'Welcome',
     title: 'A contact sheet\nfor everything you save.',
     description:
-      'You start with a 10-day full trial — 30 AI actions a day, no card needed. After that you keep your whole library and 3 AI actions a day; Pro raises that. Every plan holds up to 1,000 saves.',
+      'You start with a 10-day full trial — 500 saves and 30 AI actions a day, no card needed. After that you keep everything you saved, with 50 saves and 3 AI actions a day. Pro restores the full 500.',
     figure: 'grid',
   },
   {

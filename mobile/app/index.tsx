@@ -63,9 +63,14 @@ export default function HomeScreen() {
     if (quota.level !== 'critical' && quota.level !== 'full') return;
     if (!claimSaveCeilingWarning()) return;
     const title = quota.level === 'full' ? 'Your library is full' : 'You’re close to the save limit';
+    // ⚠️ ONLY THE FREE TIER IS UPSOLD, same rule as the server's 403. Pro has
+    // 500 because they bought it and TRIAL has 500 because the trial shows what
+    // paying feels like — telling either that "Pro holds 500" offers them the
+    // number they are already sitting on, which reads as a bug, not an offer.
+    const upsell = usage?.tier === 'free' ? ' Pro holds 500.' : '';
     const body = quota.level === 'full'
-      ? `You’ve used all ${quota.limit} saves. Delete a few from your library and saving starts working again — nothing you’ve kept is locked.`
-      : `${quota.used} of ${quota.limit} saves used, so there’s room for ${quota.remaining} more. Deleting anything you’re done with frees the space straight away.`;
+      ? `You’ve used all ${quota.limit} saves. Delete a few from your library and saving starts working again — nothing you’ve kept is locked.${upsell}`
+      : `${quota.used} of ${quota.limit} saves used, so there’s room for ${quota.remaining} more. Deleting anything you’re done with frees the space straight away.${upsell}`;
     if (Platform.OS === 'web') window.alert(`${title}
 
 ${body}`);

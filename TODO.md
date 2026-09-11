@@ -139,16 +139,20 @@ because a pause is reversible. A deletion would not have been.
 
 ## 🔴 Monetization — required before launch
 
-- [x] ⚠️ **Saves are no longer a paywall** (owner, 2026-09-11). `SAVE_LIMIT` is
-  **1000 on every tier** — free, trial and pro alike — replacing the old
-  20-on-free / unlimited-above split. The client warns at 90% and interrupts
-  once at 95% (`mobile/services/saveQuota.ts`, thresholds are RATIOS so they
-  follow the server's number).
-  **This removes the main reason to upgrade.** The paid tiers are now
-  differentiated only by the daily AI quota and the Pro-gated features
-  (ask / tasks / recipe / workout / itinerary). Whatever pricing lands, it has
-  to stand on those alone — re-read the break-even study below with that in
-  mind, because it assumed saves were a lever.
+- [x] **Save caps are per tier: 50 free, 500 trial/pro** (owner, 2026-09-11).
+  Replaces 20-on-free with **unlimited** above it — an unlimited storage promise
+  is one you cannot price and cannot budget for. Trial gets the PAID number on
+  purpose: a trial that quietly caps at the free number teaches the wrong thing
+  about the product. `FREE_SAVE_LIMIT` / `PRO_SAVE_LIMIT` in
+  `backend/app/config.py`, both env-overridable.
+  The client warns at 90% and interrupts once per session at 95%
+  (`mobile/services/saveQuota.ts`). ⚠️ **Thresholds are RATIOS, never literals** —
+  they were authored against a 1000 cap that lasted an hour and needed no change
+  when it became 50/500. Keep them that way.
+  The upsell is **tier-aware** in both places (server 403 and client alert):
+  free is offered Pro, trial and pro are not, because they already hold 500.
+
+
 
 
 - [~] 🔴 👤 **RevenueCat.** Manages IAP entitlements, per-territory pricing and promo

@@ -8,14 +8,15 @@ Three effective tiers:
          authenticated request + trial_extra_days). Unlimited saves,
          AI_DAILY_LIMIT per day.
   free   trial expired. Library stays fully usable (view/search/notes/delete);
-         AI_FREE_DAILY_LIMIT per day (a trickle, not zero — a dead app
-         uninstalls, a limited app upsells).
+         NEW saves capped at FREE_SAVE_LIMIT; AI_FREE_DAILY_LIMIT per day (a
+         trickle, not zero — a dead app uninstalls, a limited app upsells).
 
-⚠️ SAVE_LIMIT IS THE SAME ON ALL THREE (owner, 2026-09-11). It used to be 20 on
-free and unlimited on trial/pro, which made saves the main upgrade lever. It is
-now 1000 everywhere — a storage ceiling, not a paywall. `save_limit` stays
-`int | None` because the enforcement points already branch on None and an
-unlimited tier may come back; nothing sets None today.
+⚠️ EVERY TIER IS CAPPED (owner, 2026-09-11): 50 free, 500 on trial and pro. It
+used to be 20 on free and UNLIMITED above, so the paid tier's storage promise
+was "no limit" — a promise with no ceiling is one you cannot price and cannot
+budget for. Saves remain a real upgrade lever; a 10x difference is the lever.
+`save_limit` stays `int | None` because the enforcement points already branch on
+None and an unlimited tier may come back; nothing sets None today.
 
 The trial clock lives server-side (ProfileDB) so the client can't forge it, and
 is keyed to a hash of the normalized email (TrialGrantDB) so deleting the
@@ -118,8 +119,8 @@ PRO_FEATURE_DETAIL = (
 class Entitlements:
     tier: str                       # 'pro' | 'trial' | 'free' (effective)
     ai_daily_limit: int
-    # None = unlimited; gates NEW saves only. Every tier currently carries
-    # settings.SAVE_LIMIT — see the module docstring.
+    # None = unlimited; gates NEW saves only. FREE_SAVE_LIMIT on free,
+    # PRO_SAVE_LIMIT on trial and pro — see the module docstring.
     save_limit: int | None
     trial_ends_at: datetime | None  # UTC; None for pro
     # Feature gating (revised 2026-07-28): post-trial free keeps saves/library/
@@ -144,7 +145,7 @@ def entitlements_for(user: AuthUser, db: Session, *, now: datetime | None = None
         return Entitlements(
             tier="pro",
             ai_daily_limit=settings.AI_PRO_DAILY_LIMIT,
-            save_limit=settings.SAVE_LIMIT,
+            save_limit=settings.PRO_SAVE_LIMIT,
             trial_ends_at=None,
         )
 
@@ -157,14 +158,15 @@ def entitlements_for(user: AuthUser, db: Session, *, now: datetime | None = None
         return Entitlements(
             tier="trial",
             ai_daily_limit=settings.AI_DAILY_LIMIT,
-            save_limit=settings.SAVE_LIMIT,
+            # The trial shows what paying feels like — so it gets the PRO cap.
+            save_limit=settings.PRO_SAVE_LIMIT,
             trial_ends_at=trial_ends,
         )
 
     return Entitlements(
         tier="free",
         ai_daily_limit=settings.AI_FREE_DAILY_LIMIT,
-        save_limit=settings.SAVE_LIMIT,
+        save_limit=settings.FREE_SAVE_LIMIT,
         trial_ends_at=trial_ends,
         can_ask=False,
         can_tasks=False,

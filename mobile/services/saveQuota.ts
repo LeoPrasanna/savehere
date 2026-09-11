@@ -1,16 +1,22 @@
 /**
  * How close this library is to the save ceiling, and what to say about it.
  *
- * The cap is 1000 on EVERY tier (owner, 2026-09-11) — a storage ceiling, not a
- * paywall, so nothing here upsells. It used to be 20 on the post-trial free
- * tier and unlimited above it; `backend/app/config.py → SAVE_LIMIT` is the one
- * source of truth and the client is told the number rather than knowing it.
+ * The cap is per tier (owner, 2026-09-11): 50 free, 500 on trial and pro.
+ * `backend/app/config.py` holds both numbers and the client is TOLD its own
+ * rather than knowing any of them — a client that hardcodes a limit disagrees
+ * with the server the first time the server changes.
  *
- * ⚠️ THRESHOLDS ARE RATIOS, NOT THE LITERAL 900 AND 950. The owner asked for a
- * warning at 900 and a stronger one at 950, which is 90% and 95% of 1000 —
- * written as fractions so changing SAVE_LIMIT on the server moves both warnings
- * with it instead of stranding them. Hardcoding 900 against a limit of 200
- * would mean the user is refused a save having never been warned at all.
+ * ⚠️ THRESHOLDS ARE RATIOS, AND THAT IS WHAT SAVED THEM. They were written as
+ * 90%/95% while the cap was briefly 1000-for-everyone, so the owner's "warn at
+ * 900, interrupt at 950" landed as fractions. When the cap became 50/500 an
+ * hour later, nothing here needed touching: free warns at 45 and interrupts at
+ * 48, pro at 450 and 475. Hardcoded 900s would have meant a free user hitting a
+ * refused save having never once been warned.
+ *
+ * Nothing here upsells. At 48/50 that is genuinely useful information, but the
+ * band this renders into is one line on the library screen — the once-per-
+ * session alert is where Pro gets mentioned (app/index.tsx), and the server's
+ * own 403 says it too, tier-aware.
  */
 
 export const WARN_AT = 0.9;

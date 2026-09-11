@@ -81,18 +81,19 @@ class Settings:
     AI_PRO_DAILY_LIMIT: int = int(os.getenv("AI_PRO_DAILY_LIMIT", "20"))
     # Trial length in days, counted from the user's first authenticated request.
     TRIAL_DAYS: int = int(os.getenv("TRIAL_DAYS", "10"))
-    # Total saves allowed, ON EVERY TIER (owner, 2026-09-11). Previously this
-    # was 20 and applied to the post-trial free tier ONLY, with pro and trial
-    # unlimited. It is now one number for everybody: a storage ceiling, not a
-    # paywall.
+    # Total saves allowed, per tier (owner, 2026-09-11). Saves ARE a paywall
+    # again: 50 free, 500 on Pro. A brief 1000-for-everyone version existed for
+    # about an hour and was reverted because it left the paid tier with nothing
+    # to sell but the AI quota.
     #
-    # ⚠️ SAVES ARE NO LONGER A MONETIZATION LEVER. The free tier's 20-save cap
-    # was the main reason to upgrade; with 1000 for all, the paid tiers are
-    # differentiated only by the AI quota and the Pro-gated features
-    # (ask/tasks/recipe/workout/itinerary). See TODO.md → Monetization.
+    # Trial deliberately gets the PRO number — the trial exists to show what
+    # paying feels like, and a trial that quietly caps at the free number
+    # teaches the wrong thing about the product.
     #
     # The cap gates NEW saves only — existing saves are never locked, and
-    # view/search/delete stay open at any count.
-    SAVE_LIMIT: int = int(os.getenv("SAVE_LIMIT", "1000"))
+    # view/search/delete stay open at any count, including above the cap for
+    # anyone grandfathered in.
+    FREE_SAVE_LIMIT: int = int(os.getenv("FREE_SAVE_LIMIT", "50"))
+    PRO_SAVE_LIMIT: int = int(os.getenv("PRO_SAVE_LIMIT", "500"))
 
 settings = Settings()
