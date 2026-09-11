@@ -18,6 +18,7 @@ import { Confetti } from '../components/Confetti';
 import { TabBar } from '../components/TabBar';
 import { ProfilePanel } from '../components/ProfilePanel';
 import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { retryShareKeyIfNeeded } from '../services/shareKey';
 import { OnboardingModal } from '../components/OnboardingModal';
 import { WelcomeBack } from '../components/WelcomeBack';
 import { onUi, emitUi, useDismissOnBackground } from '../services/uiBus';
@@ -277,6 +278,11 @@ function Gate() {
       // The daily AI quota may have reset while the app was away, and every
       // "you're out of AI actions" message in the app reads from this cache.
       if (session) refreshUsage();
+      // ⚠️ AND RE-ARM THE INVISIBLE SHARE. Minting runs at launch, which is
+      // exactly when a cold Render instance is least likely to answer — and it
+      // used to fail silently and never try again, so the share fell back to
+      // opening the app for the rest of the session. A no-op once armed.
+      if (session) retryShareKeyIfNeeded();
     });
     // ⚠️ Optional call, not `sub.remove()`. react-native-web's AppState returns
     // UNDEFINED when `document.visibilityState` is unavailable (static render,
