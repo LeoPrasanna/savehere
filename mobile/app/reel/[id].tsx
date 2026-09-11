@@ -36,6 +36,13 @@ export default function ReelDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [summarizing, setSummarizing] = useState(false);
+  // Notes are only rendered on a summary-less reel (see the card below), but the
+  // state lives here unconditionally — hooks cannot be conditional, and this
+  // screen early-returns for loading/error above.
+  const [notes, setNotes] = useState('');
+  const [saveStatus, setSaveStatus] = useState<'' | 'saving' | 'saved'>('');
+  const [summarizingNotes, setSummarizingNotes] = useState(false);
+  const notesTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [taskList, setTaskList] = useState<TaskListResponse | null>(null);
   const [generatingTasks, setGeneratingTasks] = useState(false);
   // "Add to Follow Through" — no AI, no quota; just copies this save onto the
@@ -106,7 +113,7 @@ export default function ReelDetailScreen() {
     setLoading(true);
     setError('');
     api.getReel(id)
-      .then(data => setReel(data))
+      .then(data => { setReel(data); setNotes(data.notes ?? ''); })
       .catch(() => setError("Couldn't load this reel. Check your connection or that the server is running, then retry."))
       .finally(() => setLoading(false));
   }, [id]);
@@ -164,6 +171,54 @@ export default function ReelDetailScreen() {
   };
 
   // Run/retry the first summary (pending stuck or failed).
+  /**
+   * Debounced autosave. A note is worth keeping the moment it is typed — asking
+   * someone to find a Save button for text they already wrote is how notes get
+   * lost to a back-swipe.
+   */
+  const saveNotes = async (text: string) => {
+    setSaveStatus('saving');
+    try {
+      await api.updateNotes(id, text);
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus(''), 1600);
+    } catch {
+      setSaveStatus('');   // silent: the text is still in the box, nothing is lost
+    }
+  };
+
+  const handleNotesChange = (text: string) => {
+    setNotes(text);
+    if (notesTimer.current) clearTimeout(notesTimer.current);
+    notesTimer.current = setTimeout(() => saveNotes(text), 1000);
+  };
+
+  // Unmounting mid-debounce would drop the last edit — the one most likely to
+  // matter, because it is the one they just finished typing.
+  useEffect(() => () => { if (notesTimer.current) clearTimeout(notesTimer.current); }, []);
+
+  /**
+   * ⚠️ FLUSHES THE DEBOUNCE FIRST. Tapping this within a second of the last
+   * keystroke would otherwise summarize the note as it was BEFORE that
+   * keystroke — and the impatient tap right after typing is the common case,
+   * not the edge one.
+   */
+  const handleSummarizeFromNotes = async () => {
+    if (notesTimer.current) { clearTimeout(notesTimer.current); notesTimer.current = null; }
+    setSummarizingNotes(true);
+    try {
+      if (notes.trim()) await api.updateNotes(id, notes).catch(() => {});
+      const updated = await api.resummarize(id);
+      setReel(updated);
+      haptics.success();
+    } catch (e: any) {
+      haptics.error();
+      notify(e?.message || 'Couldn\'t summarize from those notes.');
+    } finally {
+      setSummarizingNotes(false);
+    }
+  };
+
   const handleSummarizeNow = async () => {
     setPendingStalled(false);
     setSummarizing(true);
@@ -586,26 +641,98 @@ export default function ReelDetailScreen() {
                 ? 'Nothing to summarize — this post has no caption'
                 : 'We couldn\'t read the text in this reel yet'}
             </Text>
+            {/* ⚠️ ALL THREE NOW POINT AT THE NOTES BOX BELOW, because as of
+                2026-09-11 there is one on a summary-less reel and it is the
+                documented way out — the backend's own 422s have said "paste the
+                post text into Notes" this whole time. A dead end that has
+                acquired an exit needs new copy, or the screen contradicts the
+                control sitting directly under it. */}
             <Text style={styles.emptyHint}>
               {why === 'walled'
-                ? 'This post is behind a login, so its text could not be read.'
-                /* Said plainly, because this is not a failure and the reader
-                   should not go looking for a fix that does not exist. We read
-                   the post; the words are burned into the video. */
+                ? 'This post is behind a login, so we couldn’t read its text. Paste it into Notes below and the app can work from that.'
+                /* Not a failure, and the reader should not go hunting for a fix
+                   to something that is not broken — but they can still describe
+                   it themselves, which beats a full stop. */
                 : why === 'no-caption'
-                ? 'We read this one fine — there just aren\'t any words in it. Everything is in the video itself, and the title above is the whole caption.'
-                : 'This reel uses on-screen text or visuals with no speech or description — we can\'t extract that yet. '}
+                ? 'We read this one fine — there just aren’t any words in it. Everything is in the video itself. Jot down what it showed in Notes below and the app can work from that.'
+                : 'This reel uses on-screen text or visuals with no speech or description — we can’t extract that yet. Type what it said into Notes below.'}
             </Text>
           </View>
         )}
       </View>
 
-      {/* ⚠️ TAGS AND "YOUR NOTES" WERE REMOVED HERE (owner, 2026-09-09) — do
-          not reinstate either without being asked. Tags are still generated and
-          still power search and the category rail; they are simply no longer
-          printed on this screen. The `notes` COLUMN and every saved note are
-          untouched server-side: this is a UI removal, deliberately reversible,
-          because dropping the column would not be. */}
+      {/* ── Notes — ONLY when there is no summary ──────────────────────────
+          ⚠️ TAGS STAY GONE (owner, 2026-09-09) — still generated, still driving
+          search and the category rail, simply not printed here.
+
+          Notes came BACK on 2026-09-11, but conditionally, and the condition is
+          the whole point. The removal was right for a reel that already has a
+          summary: a second text box under a finished card is clutter. It was
+          wrong for a reel that has none, because the backend has been telling
+          people to "paste the post text into Notes" from FOUR places
+          (routes/reels.py:528,604 and routes/workout.py:129,140) at a UI that
+          had not existed for two days. Those messages were instructions to
+          nowhere.
+
+          This is also the only route out of an unreadable save. `_usable_source`
+          in routes/workout.py falls back to `reel.notes` and never link-filters
+          it, precisely because "a note is something the user typed on purpose" —
+          so typed notes are what make Get Action Steps, Get Recipe, Build
+          Workout and the itinerary possible on a reel we could not read. */}
+      {reel.summary.length === 0 && !isSummarizing ? (
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardTitleRow}>
+              <Icon name="create" size={15} color={colors.accent} />
+              <Text style={styles.cardTitle}>Your Notes</Text>
+            </View>
+            {saveStatus === 'saving' && <Text style={styles.saveStatus}>Saving…</Text>}
+            {saveStatus === 'saved' && <Text style={[styles.saveStatus, { color: colors.success }]}>Saved ✓</Text>}
+          </View>
+          <Text style={styles.notesHint}>
+            We couldn’t read this one. Type or paste what it said and the app can
+            work from your words instead.
+          </Text>
+          <TextInput
+            style={styles.notesInput}
+            placeholder={`Paste the ${platform.label} post text here…`}
+            placeholderTextColor={colors.textSecondary}
+            value={notes}
+            onChangeText={handleNotesChange}
+            multiline
+            textAlignVertical="top"
+          />
+          {/*
+            ⚠️ CALLS /resummarize, NOT /summarize. Only resummarize joins
+            `raw_text` with `notes` (routes/reels.py:519) — /summarize reads
+            raw_text alone, so the button would spend an AI action and come back
+            with the same empty summary. The one difference that makes this
+            feature work at all.
+
+            Named for what it does rather than "Re-summarize", the header pill
+            the owner removed on 2026-09-10. That one fired on a reel nobody had
+            added anything to, so it could only ever repeat a failed extraction.
+            This one runs on words the user just typed.
+          */}
+          {notes.trim().length > 0 ? (
+            <Pressable
+              style={[styles.pill, { marginTop: spacing.sm, alignSelf: 'flex-start' }]}
+              onPress={handleSummarizeFromNotes}
+              disabled={summarizingNotes}
+            >
+              {summarizingNotes
+                ? <ActivityIndicator size="small" color={colors.accent} />
+                : <Icon name="sparkles" size={13} color={colors.accent} />}
+              <Text style={styles.pillText}>
+                {summarizingNotes ? 'Summarizing…' : 'Summarize from my notes'}
+              </Text>
+            </Pressable>
+          ) : null}
+          <Text style={styles.quotaNote}>
+            Notes save on their own. Summarizing uses 1 AI action from your daily quota.
+          </Text>
+        </View>
+      ) : null}
 
       {/* ── Add to Follow Through ────────────────────────
           Above the AI sections on purpose: it's free, instant, and works on
@@ -1113,6 +1240,26 @@ const styles = themed(() => StyleSheet.create({
   emptyEmoji: { fontSize: 30, marginBottom: spacing.xs },
   emptyTitle: { color: colors.textPrimary, fontSize: font.sm, fontWeight: '700', textAlign: 'center' },
   emptyHint: { color: colors.textSecondary, fontSize: font.xs, lineHeight: 18, textAlign: 'center' },
+  saveStatus: { color: colors.textSecondary, fontSize: font.xs },
+  notesHint: {
+    color: colors.textSecondary,
+    fontFamily: typeface.body,
+    fontSize: font.sm,
+    lineHeight: font.sm * 1.45,
+    marginBottom: spacing.sm,
+  },
+  notesInput: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    color: colors.textPrimary,
+    fontFamily: typeface.body,
+    fontSize: font.md,
+    padding: spacing.md,
+    minHeight: 96,
+    lineHeight: 22,
+  },
   quotaNote: { color: colors.textTertiary, fontSize: font.xs, lineHeight: 16, textAlign: 'center', marginTop: spacing.xs },
 
   bulletRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'flex-start' },

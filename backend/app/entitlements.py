@@ -10,6 +10,7 @@ Three effective tiers:
   free   trial expired. Library stays fully usable (view/search/notes/delete);
          NEW saves capped at FREE_SAVE_LIMIT; AI_FREE_DAILY_LIMIT per day (a
          trickle, not zero — a dead app uninstalls, a limited app upsells).
+         Saves still get a full automatic summary — see FREE_AUTO_SUMMARY.
 
 ⚠️ EVERY TIER IS CAPPED (owner, 2026-09-11): 50 free, 500 on trial and pro. It
 used to be 20 on free and UNLIMITED above, so the paid tier's storage promise
@@ -174,11 +175,12 @@ def entitlements_for(user: AuthUser, db: Session, *, now: datetime | None = None
         ai_daily_limit=settings.AI_FREE_DAILY_LIMIT,
         save_limit=settings.FREE_SAVE_LIMIT,
         trial_ends_at=trial_ends,
-        # Free saves are INDEXED, not summarized — tags, category and a title,
-        # so the library stays searchable and navigable. Bullets cost the most
-        # and are read by Ask, which this tier cannot open anyway. One tap on a
-        # reel summarizes it in full for one of their three daily AI actions.
-        auto_summary=False,
+        # ⚠️ TRUE BY DEFAULT — free saves get the full summary, same as every
+        # other tier. Gating this to `index_only` shipped and was reverted the
+        # same day (owner): the automatic summary is what the product is.
+        # Flip settings.FREE_AUTO_SUMMARY to re-gate; see the note in config.py
+        # for the cost argument that has not gone away.
+        auto_summary=settings.FREE_AUTO_SUMMARY,
         can_ask=False,
         can_tasks=False,
         can_recipe=False,

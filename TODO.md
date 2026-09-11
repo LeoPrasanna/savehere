@@ -188,25 +188,18 @@ because a pause is reversible. A deletion would not have been.
   **weekly** plans carry an offer at all. A plan without `introMonths` renders the plain
   renewal sentence, which is true for a plan with no offer — so the gap is safe, just
   incomplete. Needed before App Store Connect setup.
-- [x] **Free auto-summary gating — DONE 2026-09-11.** The 2026-07-24 cost study
-  put break-even at **~4.2% conversion gated vs ~7.8% ungated**; typical freemium
-  conversion is 2–5%, so ungated was likely never profitable.
-  Free saves now take `summarizer.index_only` — tags, category, title and the
-  sensitive flag, over **2000 chars instead of 8000** and **350 output tokens
-  instead of 1500**. The library stays searchable and the category rail keeps
-  working; only the bullets are withheld, and one tap generates them for one of
-  the three daily AI actions.
-  ⚠️ **`auto_summary` and `can_ask` are the same tier boundary and must stay
-  that way.** Ask reads `summary`, so a tier that can open Ask but only indexes
-  its saves would answer from an empty library. `test_no_tier_can_ask_without_
-  auto_summary` asserts the invariant.
-- [ ] **Free→Pro upgrade leaves the old free-era reels indexed.** They carry
-  title + tags, which Ask's payload already includes, so it degrades rather than
-  breaks — but a brand-new Pro user asking about something they saved last month
-  gets a thinner answer than the feature promises. Options: backfill on upgrade
-  (N Claude calls, unbounded), backfill lazily when Ask selects one, or leave it
-  and let the reel screen's one-tap handle it. Not decided; not a blocker while
-  nothing charges.
+- [~] **Free auto-summary gating — built, then REVERTED the same day (owner).**
+  The 2026-07-24 cost study still stands: break-even at **~4.2% conversion
+  gated vs ~7.8% ungated**, against a 2–5% freemium norm — so ungated is likely
+  never profitable and this will have to be revisited before launch.
+  It is now a switch, not a decision: `FREE_AUTO_SUMMARY` (default **true** =
+  every tier gets the full summary). Set it false and free saves take
+  `summarizer.index_only` — tags, category, title, over 2000 chars instead of
+  8000 and 350 output tokens instead of 1500. Both positions are covered by
+  tests, so turning it on is config, not a rebuild.
+  ⚠️ If it is ever re-enabled, `auto_summary` and `can_ask` must stay on the
+  same tier boundary — Ask reads `summary`, so a tier that can open Ask but
+  only indexes its saves would answer from an empty library.
 - [ ] **Regional (PPP) pricing** — three storefront buckets, not 175 hand-tuned prices.
 - [~] **Tiers — mechanics built, billing pending.** Server-side entitlements
   (`app/entitlements.py`) work; the purchase flow does not exist.

@@ -96,4 +96,18 @@ class Settings:
     FREE_SAVE_LIMIT: int = int(os.getenv("FREE_SAVE_LIMIT", "50"))
     PRO_SAVE_LIMIT: int = int(os.getenv("PRO_SAVE_LIMIT", "500"))
 
+    # Does the FREE tier get a full AI summary automatically on save?
+    #
+    # ⚠️ DEFAULT TRUE — i.e. everyone gets one, which is the behaviour this app
+    # has always had. Tier-gating it shipped on 2026-09-11 and the owner
+    # reverted it the same day: an automatic summary is what the product IS,
+    # and a free tier that only indexes is a different, worse product.
+    #
+    # The machinery is kept rather than deleted because the argument for gating
+    # is a cost argument, not a design one, and it has not gone away: the
+    # 2026-07-24 study puts break-even at ~4.2% conversion gated vs ~7.8%
+    # ungated, against a 2-5% freemium norm (TODO.md → Monetization). Set this
+    # to "false" to re-gate; `summarizer.index_only` and its tests are intact.
+    FREE_AUTO_SUMMARY: bool = os.getenv("FREE_AUTO_SUMMARY", "true").lower() not in ("0", "false", "no")
+
 settings = Settings()
