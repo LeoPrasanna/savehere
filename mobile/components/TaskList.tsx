@@ -89,7 +89,11 @@ const TaskRow = memo(function TaskRow({
           multiline
           placeholder={`Edit ${noun}…`}
           placeholderTextColor={colors.textSecondary}
+          /* Same dead-handler bug as app/ask.tsx — a multiline input needs
+             `submitBehavior` or the return key just adds a newline and this
+             never runs. Editing a task had no keyboard confirm at all. */
           onSubmitEditing={() => onSaveEdit(task, editText)}
+          submitBehavior="blurAndSubmit"
         />
       ) : (
         <Pressable style={styles.taskText} onPress={() => onToggle(task)} scaleTo={0.99}>

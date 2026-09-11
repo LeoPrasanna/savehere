@@ -220,7 +220,16 @@ export default function AskScreen() {
                 onChangeText={t => { setQ(t); setError(''); }}
                 onFocus={() => setFocused(true)}
                 onBlur={() => setFocused(false)}
+                /* ⚠️ `submitBehavior` IS REQUIRED ON A MULTILINE INPUT. React
+                   Native's own docs: for multiline, `undefined` defaults to
+                   'newline' — the return key inserts a line break and
+                   `onSubmitEditing` NEVER FIRES. The handler above looked wired
+                   and was dead, so the keyboard's Search key did nothing and
+                   the send button was the only way through (owner, 2026-09-11).
+                   Single-line inputs default to 'blurAndSubmit' and need none
+                   of this, which is why the other four in the app are fine. */
                 onSubmitEditing={() => ask(q)}
+                submitBehavior="blurAndSubmit"
                 returnKeyType="search"
                 multiline
                 editable={!loading}

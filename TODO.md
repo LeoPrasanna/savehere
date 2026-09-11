@@ -82,6 +82,16 @@ because a pause is reversible. A deletion would not have been.
   `https://ymclmbmmwtczspnmccsy.supabase.co/auth/v1/callback`, client ID + secret into
   Supabase → Auth → Providers → Google, and `savehere://auth/callback` under Auth →
   URL Configuration. **Cost: none** at any volume this app will see.
+  - [ ] 👤 **Set "App name" to Findable on that same screen** (owner report, 2026-09-11:
+    the Google account chooser reads "continue to `<project-ref>.supabase.co`"). The
+    heading follows **App name**; the small print under it is the *authorized domain*,
+    which is Supabase's because the OAuth callback is. Free, and no logo — see the
+    verification trap above. Removing the domain line entirely needs one of:
+    (a) a Supabase **Custom Domain** add-on (paid, ~$10/mo, gives `auth.findable.app`),
+    or (b) **native** Google sign-in (`@react-native-google-signin/google-signin` +
+    `signInWithIdToken`, no browser at all, mirroring what Apple already does). (b) is a
+    new native module → a new build + iOS/Android/Web client IDs, so it rides along with
+    the next native build rather than forcing one. Not worth either for a string today.
 - [~] 🔴 **Sign in with Apple.** Code done (`expo-apple-authentication` +
   `signInWithIdToken`, iOS-only, see `services/oauth.ts`). **NO Services ID and NO `.p8`
   key** — the native ID-token flow needs neither, which also removes the 6-month secret
